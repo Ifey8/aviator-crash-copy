@@ -8,6 +8,7 @@ import './index.scss';
 import './mobile-overrides.scss';
 import App from './app';
 import { Provider } from './context';
+import { AuthProvider } from './auth/AuthProvider';
 import { bootstrapTelegram } from './telegram-bootstrap';
 
 const renderApp = () => {
@@ -15,10 +16,12 @@ const renderApp = () => {
 		<BrowserRouter>
 			<Routes>
 				<Route path="*" element={
-					<Provider>
-						<App />
-						<ToastContainer position="top-center" theme="dark" />
-					</Provider>
+					<AuthProvider>
+						<Provider>
+							<App />
+							<ToastContainer position="top-center" theme="dark" />
+						</Provider>
+					</AuthProvider>
 				} />
 			</Routes>
 		</BrowserRouter>

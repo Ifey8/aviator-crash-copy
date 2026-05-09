@@ -1,5 +1,7 @@
 import { Router } from "express";
 import { authWithTelegram, authDevGuest } from "../auth/session";
+import { registerWithPassword, loginWithPassword, profileFromUserName } from "../auth/password";
+import { verifyToken } from "../auth/jwt";
 import { config } from "../config";
 
 export const authRouter = Router();
@@ -16,4 +18,32 @@ authRouter.post("/guest", async (req, res) => {
   const name: string | undefined = req.body?.name;
   const result = await authDevGuest(name);
   res.json({ status: true, ...result });
+});
+
+// ---------- Username / password ----------
+
+authRouter.post("/register", async (req, res) => {
+  const { userName, password, phone } = req.body || {};
+  const r = await registerWithPassword({ userName, password, phone });
+  if (!r.ok) return res.status(400).json({ status: false, message: r.reason });
+  res.json({ status: true, ...r.result });
+});
+
+authRouter.post("/login", async (req, res) => {
+  const { userName, password } = req.body || {};
+  const r = await loginWithPassword({ userName, password });
+  if (!r.ok) return res.status(401).json({ status: false, message: r.reason });
+  res.json({ status: true, ...r.result });
+});
+
+/** Current user profile from Bearer token — used by frontend after page reload. */
+authRouter.get("/me", async (req, res) => {
+  const auth = req.header("authorization") || "";
+  const token = auth.replace(/^Bearer\s+/i, "").trim();
+  if (!token) return res.status(401).json({ status: false });
+  const payload = verifyToken(token);
+  if (!payload) return res.status(401).json({ status: false });
+  const profile = await profileFromUserName(payload.userName);
+  if (!profile) return res.status(401).json({ status: false });
+  res.json({ status: true, ...profile });
 });

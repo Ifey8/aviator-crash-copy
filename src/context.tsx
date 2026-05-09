@@ -54,7 +54,11 @@ let newState;
 let newBetState;
 
 export const Provider = ({ children }: any) => {
-  const token = new URLSearchParams(useLocation().search).get("cert");
+  // Token sources, in order: URL ?cert= (Telegram bootstrap), localStorage
+  // (set by AuthProvider after a password login).
+  const token =
+    new URLSearchParams(useLocation().search).get("cert") ||
+    (typeof window !== "undefined" ? localStorage.getItem("aviator_token") : null);
   const [state, setState] = React.useState<ContextDataType>(sharedInitState);
   const [userInfo, setUserInfo] = React.useState<UserType>(init_userInfo);
   const [msgData, setMsgData] = React.useState<MsgUserType[]>([]);
