@@ -116,12 +116,13 @@ export const GameCanvas: React.FC = () => {
         ctx.lineTo(padX, H - padBottom);
         ctx.closePath();
         const grad = ctx.createLinearGradient(0, H - padBottom, 0, 0);
-        grad.addColorStop(0, "rgba(255, 84, 104, 0.0)");
-        grad.addColorStop(1, "rgba(255, 84, 104, 0.35)");
+        grad.addColorStop(0, "rgba(255, 153, 51, 0.0)");
+        grad.addColorStop(0.6, "rgba(255, 153, 51, 0.22)");
+        grad.addColorStop(1, "rgba(255, 200, 87, 0.42)");
         ctx.fillStyle = grad;
         ctx.fill();
 
-        // Stroke the curve
+        // Stroke the curve — gold-saffron with glow
         ctx.beginPath();
         ctx.moveTo(padX, H - padBottom);
         for (let i = 1; i <= SAMPLES; i++) {
@@ -132,10 +133,13 @@ export const GameCanvas: React.FC = () => {
           const yk = H - padBottom - Math.min((mk - 1) / 4, 1) * (H - padBottom - 28);
           ctx.lineTo(xk, yk);
         }
-        ctx.strokeStyle = "rgba(255, 84, 104, 0.9)";
-        ctx.lineWidth = 2;
-        ctx.shadowColor = "rgba(255, 84, 104, 0.7)";
-        ctx.shadowBlur = 12;
+        const lineGrad = ctx.createLinearGradient(padX, H - padBottom, targetX, targetY);
+        lineGrad.addColorStop(0, "rgba(255, 153, 51, 0.85)");
+        lineGrad.addColorStop(1, "rgba(255, 200, 87, 1)");
+        ctx.strokeStyle = lineGrad;
+        ctx.lineWidth = 2.4;
+        ctx.shadowColor = "rgba(255, 200, 87, 0.85)";
+        ctx.shadowBlur = 14;
         ctx.stroke();
         ctx.shadowBlur = 0;
 
