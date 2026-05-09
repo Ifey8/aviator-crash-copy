@@ -40,13 +40,24 @@ export const GameCanvas: React.FC = () => {
   const phaseStartRef = React.useRef<number>(Date.now());
   const phaseRef = React.useRef<string>(GameState || "BET");
   const lastCrashRef = React.useRef<number>(1.0);
+  const lastPhaseRef = React.useRef<string>(GameState || "BET");
 
   React.useEffect(() => {
     phaseRef.current = GameState;
-    if (GameState === "PLAYING" || GameState === "BET") {
-      phaseStartRef.current = Date.now() - (time || 0);
-    } else if (GameState === "GAMEEND") {
-      lastCrashRef.current = Number(currentNum) || 1.0;
+    const transition = GameState !== lastPhaseRef.current;
+
+    // Re-anchor phase start ONLY on actual phase transitions.
+    // Previously this ran on every gameState tick (~100ms), constantly
+    // resetting the start time so the local interpolation never advanced.
+    // Also: server sends `time` in SECONDS — convert to ms.
+    if (transition) {
+      if (GameState === "PLAYING" || GameState === "BET") {
+        phaseStartRef.current = Date.now() - (time || 0) * 1000;
+      }
+      lastPhaseRef.current = GameState;
+    }
+    if (GameState === "GAMEEND") {
+      lastCrashRef.current = Number(currentNum) || lastCrashRef.current;
     }
   }, [GameState, time, currentNum]);
 
@@ -86,12 +97,18 @@ export const GameCanvas: React.FC = () => {
       const padX = 32;
       const padBottom = 28;
       const padTop = 36;
-      const T_MAX = 6; // seconds across full width
-      const M_MAX = 5; // multiplier across full height
+      const T_MAX = 8; // seconds before x saturates at right edge
+      const M_MAX = 20; // multiplier before y saturates at top edge (log-mapped)
+      const LOG_MAX = Math.log(M_MAX);
 
       const xAt = (t: number) => padX + Math.min(t / T_MAX, 1) * (W - padX * 2);
-      const yAt = (m: number) =>
-        H - padBottom - Math.min((m - 1) / (M_MAX - 1), 1) * (H - padBottom - padTop);
+      // Logarithmic y so 2x already pushes 23% up, 5x at 54%, 10x at 77%.
+      // Linear scaling made the early climb (1.0–2.0x) look flat.
+      const yAt = (m: number) => {
+        if (m <= 1) return H - padBottom;
+        const k = Math.min(Math.log(m) / LOG_MAX, 1);
+        return H - padBottom - k * (H - padBottom - padTop);
+      };
 
       if (phase === "PLAYING") {
         const elapsed = (Date.now() - phaseStartRef.current) / 1000;

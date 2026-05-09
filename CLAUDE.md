@@ -93,6 +93,28 @@ Connects to frontend via Socket.IO at `REACT_APP_API_URL`. See `aviator-back/REA
 
 **Provably fair**: HMAC-SHA256(serverSeed, clientSeedPool + ":" + nonce) → first 13 hex → uint52 → distribution → crash point.
 
+### 🔒 Server-authoritative — clients cannot cheat
+- **Crash point** is committed by the server BEFORE the round begins
+  (`buildRoundSeed` in `engine.ts`). The serverSeed hash is published in
+  advance via `upcomingSeedHash` (verifiable after the round when the seed
+  is revealed). The frontend NEVER decides when the plane crashes.
+- **Multiplier ticker** is driven by a server `setInterval`. The frontend
+  runs the SAME polynomial locally only for visual smoothness between
+  ticks — it cannot push the multiplier past the server's value.
+- **Cashout** validation in `engine.cashOut()`:
+  ```ts
+  if (this.phase !== "PLAYING") return { ok: false }
+  const at = Math.min(endTarget || this.multiplier, this.multiplier);
+  if (at < 1.01) return { ok: false }
+  ```
+  The server clamps `endTarget` to its OWN `this.multiplier`, so a client
+  lying about endTarget gets capped to whatever the server has actually
+  ticked. Cashout requests after the server has crashed are rejected
+  because the phase has already flipped to GAMEEND.
+- **Balance** lives in MongoDB, mutated only by `engine.placeBet()` and
+  `engine.cashOut()`. Client-side optimistic deduct is corrected by the
+  next `myInfo` emit if it ever drifts.
+
 ---
 
 ## 📱 Mobile Notes (post-2026-05-09 refactor)

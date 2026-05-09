@@ -46,49 +46,44 @@ export const FxLayer: React.FC = () => {
     }, it.ttl + 200);
   }, []);
 
-  // ---- 1) Listen to "success" socket events for bet-placed feedback ----
+  // ---- 1) Listen to "success" socket events: drives bet & my-cashout fx ----
+  // The myInfo handler in context.tsx only syncs balance/userType/userName
+  // back to standalone userInfo state (intentionally — to preserve local
+  // bet input). So we cannot rely on userInfo.f.cashouted for detection.
+  // Instead the server's "success" message carries the signal directly:
+  //   "Bet placed"        → BurstSuccess
+  //   "Cashed out @ 1.72x" → my parachute drop
   React.useEffect(() => {
     const sock = (ctx as any).socket;
     if (!sock) return;
     const onSuccess = (msg: string) => {
       if (typeof msg !== "string") return;
       if (/bet\s*placed/i.test(msg)) {
-        push({ kind: "success", x: 0.5, y: 0.78, ttl: 600 });
+        push({ kind: "success", x: 0.5, y: 0.82, ttl: 600 });
+        return;
       }
-      // (cash-out animation is driven by myInfo balance change instead so
-      //  we don't double-fire here)
+      const m = msg.match(/cashed?\s*out\s*@\s*([\d.]+)/i);
+      if (m) {
+        const mult = Number(m[1]);
+        push({
+          kind: "para-mine",
+          x: 0.5,
+          y: 0.45,
+          variant: Math.floor(Math.random() * VARIANT_COUNT),
+          payout: `${mult.toFixed(2)}x`,
+          ttl: 4000,
+        });
+      }
     };
     sock.on("success", onSuccess);
     return () => sock.off("success", onSuccess);
   }, [ctx, push]);
 
-  // ---- 2) Detect *my* cashout via userInfo state ----
-  const userInfo = ctx.userInfo;
-  const myCashedRef = React.useRef({ f: false, s: false });
-  React.useEffect(() => {
-    for (const side of ["f", "s"] as const) {
-      const cashed = !!userInfo?.[side]?.cashouted;
-      if (cashed && !myCashedRef.current[side]) {
-        const cash = Number(userInfo[side].cashAmount || 0);
-        const x = side === "f" ? 0.42 : 0.58;
-        push({
-          kind: "para-mine",
-          x,
-          y: 0.55,
-          variant: side === "f" ? 0 : 1,
-          payout: `+${cash.toFixed(2)}`,
-          ttl: 4000,
-        });
-      }
-      myCashedRef.current[side] = cashed;
-    }
-  }, [userInfo, push]);
-
-  // ---- 3) Detect *other players* cashouts via bettedUsers diff ----
+  // ---- 2) Detect *other players* cashouts via bettedUsers diff ----
   const bettedUsers = ctx.bettedUsers as any[];
+  const myName = ctx.userInfo?.userName;
   React.useEffect(() => {
     const prev = lastBetsRef.current || [];
-    const myName = userInfo?.userName;
     if (!Array.isArray(bettedUsers)) return;
 
     // Map prev cashed status by userName+betAmount key
@@ -114,7 +109,7 @@ export const FxLayer: React.FC = () => {
       }
     }
     lastBetsRef.current = bettedUsers.slice();
-  }, [bettedUsers, userInfo, push]);
+  }, [bettedUsers, myName, push]);
 
   // ---- 4) Crash burst on phase transition to GAMEEND ----
   const phase = ctx.GameState;
@@ -159,7 +154,7 @@ export const FxLayer: React.FC = () => {
         if (it.kind === "crash") {
           return (
             <div key={it.id} className="fx-crash" style={style}>
-              <BurstCrash size={220} />
+              <BurstCrash size={130} />
             </div>
           );
         }
