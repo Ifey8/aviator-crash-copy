@@ -350,9 +350,13 @@
   &:active { background: rgba(255, 200, 87, 0.20); }
 }
 
-/* -------- History bar -------- */
+/* -------- History bar --------
+   flex: 0 0 auto so the bar doesn't get squished by the flex algorithm
+   when content overflows in AUTO mode. (Default flex-shrink: 1 made
+   the chips' row shrink from ~31 → 15px, hiding half each chip.) */
 .history-bar-mobile {
   display: flex;
+  flex: 0 0 auto;
   gap: 6px;
   overflow-x: auto;
   overflow-y: hidden;
@@ -373,14 +377,21 @@
 }
 
 /* -------- Game canvas --------
-   Flex-grows to fill the viewport so there's no empty band at the bottom
-   on tall screens. min-height keeps the plane area readable on short
-   phones. When the bet card grows (Auto mode), canvas shrinks to absorb
-   — acceptable tradeoff to keep the layout fitting the whole screen. */
+   Flex-grow:1 → fills any empty space so there's no slack band at the
+   bottom of the viewport.
+   Flex-shrink:0 → does NOT shrink when the bet card grows (Auto mode).
+   This combo means: the canvas absorbs ALL slack in BET mode but stays
+   anchored when AUTO is clicked — the card grows downward into the
+   sheet's flex space instead, matching the user's expected "push down"
+   feel. */
 .game-canvas-wrap {
   position: relative;
   flex: 1 1 auto;
-  min-height: 280px;
+  /* min-height is the actual anchor: keeps canvas large enough that BET mode
+     fills the viewport with no slack, AND prevents shrink in AUTO mode (so
+     the plane doesn't shift up; sheet shrinks instead). 48vh covers ~812px
+     viewports cleanly. */
+  min-height: 48vh;
   background:
     radial-gradient(ellipse at 30% 78%, rgba(255, 153, 51, 0.18) 0%, transparent 60%),
     radial-gradient(ellipse at 80% 20%, rgba(255, 200, 87, 0.10) 0%, transparent 55%),
@@ -487,11 +498,14 @@
   will-change: transform, opacity;
 }
 
-/* -------- Bet cards -------- */
+/* -------- Bet cards --------
+   flex-shrink: 0 keeps the card from being squished when total content
+   exceeds viewport (AUTO mode). Sheet shrinks instead. */
 .bet-cards-grid {
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: 8px;
+  flex: 0 0 auto;
 }
 
 .bet-card {
@@ -806,9 +820,10 @@
 }
 
 /* -------- Bets list (other players) --------
-   Default 14vh, but flex-shrink: 1 so it gracefully shrinks when the bet
-   card grows (e.g., Auto mode adds the target row). Internal scroll on
-   .bets-list-scroll absorbs row count changes regardless of outer height. */
+   Default 14vh; flex-shrink:1 so when the bet card grows (Auto mode adds
+   the target row) the sheet shrinks down to its min-height instead of the
+   canvas shrinking. Internal scroll on .bets-list-scroll absorbs row
+   count changes regardless of outer height. */
 .bets-list-sheet {
   background: var(--bg-1);
   border: 1px solid var(--border);
@@ -816,7 +831,7 @@
   display: flex;
   flex-direction: column;
   flex: 0 1 14vh;
-  min-height: 80px;
+  min-height: 60px;
   max-height: 14vh;
   overflow: hidden;
   padding-bottom: var(--safe-bottom);
