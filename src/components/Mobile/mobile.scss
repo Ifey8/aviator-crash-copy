@@ -672,12 +672,15 @@
     animation: cta-pulse 1s ease infinite;
     text-shadow: 0 1px 0 rgba(255, 230, 160, 0.6);
   }
-  &.cta-cancel {
-    background: linear-gradient(180deg, #ff8a9c 0%, #ff5468 50%, #c12244 100%);
-    box-shadow:
-      0 1px 0 rgba(255,255,255,0.3) inset,
-      0 -2px 0 #5a0815 inset,
-      0 4px 12px rgba(255, 84, 104, 0.35);
+  &.cta-waiting {
+    background: linear-gradient(180deg, rgba(255, 200, 87, 0.20) 0%, rgba(255, 153, 51, 0.06) 100%);
+    border: 1px dashed rgba(255, 200, 87, 0.50);
+    color: #ffe9a8;
+    cursor: default;
+    opacity: 0.85;
+    box-shadow: none;
+    text-shadow: none;
+    .cta-line-1 { letter-spacing: 0.18em; }
   }
   &.cta-won {
     background: linear-gradient(180deg, #FFE3A1 0%, var(--crash-gold) 50%, #d99000 100%);

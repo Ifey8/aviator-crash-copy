@@ -51,14 +51,6 @@ export const BetCard: React.FC<Props> = ({ side }) => {
     ctx.updateUserBetState({ [`${side}betted`]: true } as any);
   };
 
-  const cancelBet = () => {
-    ctx.updateUserBetState(
-      { [`${side}betState`]: false, [`${side}betted`]: false } as any,
-    );
-    // Cancelling a placed auto bet also stops the auto loop.
-    if (sideInfo.auto) stopAuto();
-  };
-
   const cashOut = () => {
     callCashOut(Number((ctx.currentTarget as any) || 0), side);
   };
@@ -85,9 +77,13 @@ export const BetCard: React.FC<Props> = ({ side }) => {
       </button>
     );
   } else if (betted && !cashouted) {
+    // Server already accepted the bet — no client-side cancel. Once placed,
+    // the bet is locked until cashout (during PLAYING) or crash (settle).
+    // Showing a CANCEL button here was misleading because cancelBet only
+    // touched local state; the server-side wager + balance deduction stayed.
     cta = (
-      <button className="bet-cta cta-cancel" onClick={cancelBet}>
-        <span className="cta-line-1">CANCEL</span>
+      <button className="bet-cta cta-waiting" disabled>
+        <span className="cta-line-1">BET PLACED</span>
         <span className="cta-line-2">{amount.toFixed(2)} INR</span>
       </button>
     );
