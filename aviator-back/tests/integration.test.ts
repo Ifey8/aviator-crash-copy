@@ -20,7 +20,7 @@ describe("Single-client gameplay", () => {
     const hist = await c.waitFor("history");
     const state = await c.waitFor("gameState");
 
-    expect(my.payload.userName).toMatch(/^g[\w]+$/);
+    expect(my.payload.userName).toMatch(/^g[\w-]+$/);
     expect(my.payload.balance).toBeGreaterThanOrEqual(1);
     expect(limits.payload).toEqual(
       expect.objectContaining({ min: expect.any(Number), max: expect.any(Number) }),

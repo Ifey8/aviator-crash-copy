@@ -228,9 +228,11 @@ export const Plane: React.FC<PlaneProps> = ({
       </g>
 
       {/* ----------- PROPELLER (spins via CSS) ----------- */}
+      {/* transform-box: view-box → coords interpreted in SVG viewBox space.
+          transform-origin (98,42) is the propeller hub center. */}
       <g
         className={`plane-prop ${isStatic ? "" : "spin"}`}
-        style={{ transformOrigin: "98px 42px", transformBox: "fill-box" }}
+        style={{ transformOrigin: "98px 42px", transformBox: "view-box" as any }}
       >
         <g opacity="0.95">
           <ellipse
