@@ -4,7 +4,9 @@ services:
     container_name: aviator-mongo
     restart: unless-stopped
     ports:
-      - "27017:27017"
+      # Only the LEFT side (host port) needs changing if 27017 is taken.
+      # The container always listens on 27017 internally.
+      - "${MONGO_PORT:-27017}:27017"
     volumes:
       - mongo_data:/data/db
     healthcheck:
@@ -21,7 +23,11 @@ services:
       mongo:
         condition: service_healthy
     environment:
-      PORT: 5000
+      # Left side of port mapping = host port (override via env).
+      # PORT inside the container stays at the configured value;
+      # `mongodb://mongo:27017/aviator` is internal docker-network DNS,
+      # not affected by host port remapping.
+      PORT: ${API_PORT:-5000}
       MONGO_URI: mongodb://mongo:27017/aviator
       JWT_SECRET: ${JWT_SECRET:-dev-secret-change-me}
       TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN:-}
@@ -34,7 +40,7 @@ services:
       SETTLE_DURATION_MS: 3000
       HOUSE_EDGE: 0.03
     ports:
-      - "5000:5000"
+      - "${API_PORT:-5000}:${API_PORT:-5000}"
 
 volumes:
   mongo_data:
