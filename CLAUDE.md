@@ -250,17 +250,30 @@ Original mascot SVG generated via Claude Design from a custom prompt asking for 
 
 ## 🧪 How to Run Locally
 
-```powershell
-# Backend
-cd aviator-back
-docker compose up -d --build      # mongo + api on :5000
-curl http://localhost:5000/health
+**Port scheme** — all in the unprivileged 188xx range, identical local & prod:
 
-# Frontend (this repo root)
-echo "REACT_APP_API_URL=http://localhost:5000" > .env
+| Service  | Port  | Mnemonic               |
+|----------|-------|------------------------|
+| Frontend | 18803 | last 02 ≈ original 3000 |
+| Backend  | 18805 | last 02 ≈ original 5000 |
+| MongoDB  | 18827 | last 02 ≈ original 27017 |
+
+```powershell
+# Backend (defaults to 188xx; override via env if needed)
+cd aviator-back
+docker compose up -d --build      # mongo on :18827, api on :18805
+curl http://localhost:18805/health
+
+# Frontend
+echo "REACT_APP_API_URL=http://localhost:18805" > .env
 npm install --legacy-peer-deps    # CRA peer-dep workaround
 npm run build                     # production build to ./build
-npx serve -s build -l 3000        # or `npm start` for dev
+npx serve -s build -l 18803       # or `npm start` for dev (CRA uses 3000 by default)
+```
+
+**Override ports** (if 188xx is also taken):
+```powershell
+API_PORT=20000 MONGO_PORT=20001 docker compose up -d --build
 ```
 
 For Telegram bot testing: set `TELEGRAM_BOT_TOKEN` in `aviator-back/.env`, expose frontend via ngrok, set `TELEGRAM_WEBAPP_URL`, restart api, `/start` your bot.
