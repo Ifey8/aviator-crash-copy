@@ -145,7 +145,21 @@ export const Provider = ({ children }: any) => {
       }
     });
 
-    return () => sharedUnityContext.removeAllEventListeners();
+    // Fallback: Unity component is gated on unityState, so without an explicit
+    // mount it never finishes loading. After 6s, dismiss the spinner and let
+    // the plane fallback render. (If Unity does load, "loaded" fires anyway.)
+    const fallbackTimer = setTimeout(() => {
+      setUnity((prev) =>
+        prev.unityLoading
+          ? prev
+          : { currentProgress: 100, unityLoading: true, unityState: false },
+      );
+    }, 6000);
+
+    return () => {
+      clearTimeout(fallbackTimer);
+      sharedUnityContext.removeAllEventListeners();
+    };
   }, []);
 
   React.useEffect(() => {
@@ -185,6 +199,15 @@ export const Provider = ({ children }: any) => {
       attrs.userInfo.userType = user.userType;
       attrs.userInfo.userName = user.userName;
       update(attrs);
+      // Keep the standalone userInfo state in sync — Header reads from this.
+      setUserInfo((prev) => ({
+        ...prev,
+        balance: user.balance,
+        userType: user.userType,
+        userName: user.userName,
+        avatar: (user as any).avatar ?? prev.avatar,
+        token: (user as any).token ?? prev.token,
+      }));
     });
 
     socket.on("history", (history: any) => {
@@ -277,6 +300,13 @@ export const Provider = ({ children }: any) => {
       }
       update(attrs);
       setUserBetState(betStatus);
+      // Sync standalone userInfo so Header sees the post-round balance.
+      setUserInfo((prev) => ({
+        ...prev,
+        balance: user.balance,
+        userType: user.userType,
+        userName: user.userName,
+      }));
     });
 
     socket.on("getBetLimits", (betAmounts: { max: number; min: number }) => {

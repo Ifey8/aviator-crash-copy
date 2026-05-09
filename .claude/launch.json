@@ -1,0 +1,11 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "frontend",
+      "runtimeExecutable": "npx",
+      "runtimeArgs": ["--yes", "serve", "-s", "build", "-l", "3000"],
+      "port": 3000
+    }
+  ]
+}
