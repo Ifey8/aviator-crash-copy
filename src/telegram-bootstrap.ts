@@ -6,26 +6,13 @@
  * Outside Telegram (plain browser), do nothing — backend issues a dev guest
  * when token is missing (controlled by ALLOW_DEV_AUTH).
  */
-declare global {
-  interface Window {
-    Telegram?: {
-      WebApp?: {
-        initData?: string;
-        ready?: () => void;
-        expand?: () => void;
-        themeParams?: Record<string, string>;
-      };
-    };
-  }
-}
-
 const apiBase = process.env.REACT_APP_API_URL || "http://localhost:5000";
 
 export const bootstrapTelegram = async (): Promise<void> => {
   const url = new URL(window.location.href);
   if (url.searchParams.get("cert")) return;
 
-  const tg = window.Telegram?.WebApp;
+  const tg = (window as any).Telegram?.WebApp;
   if (!tg || !tg.initData) return;
 
   try {
