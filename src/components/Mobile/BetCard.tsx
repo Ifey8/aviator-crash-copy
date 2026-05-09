@@ -29,28 +29,25 @@ export const BetCard: React.FC<Props> = ({ side }) => {
   const setSafeAmount = (v: number) =>
     setAmount(Math.max(minBet, Math.min(maxBet, +v.toFixed(2))));
 
-  // Direct socket emission — bypasses the older state-watcher path that
-  // could drop the auto flag during React batching.
   const placeBet = () => {
     if (phase !== "BET") return;
     if (amount > userInfo.balance) return;
     const isAuto = mode === "auto";
     const target = isAuto ? autoTarget : 2;
+    const newSide = { ...sideInfo, betAmount: amount, target, auto: isAuto };
 
-    // Mirror to legacy state so the auto-repeat handler in context.tsx
-    // (which fires on finishGame for auto mode) still works.
-    ctx.update({
-      userInfo: {
-        ...userInfo,
-        [side]: { ...sideInfo, betAmount: amount, target, auto: isAuto },
-      },
-    });
+    // Both userInfo containers must reflect the new auto/target — the
+    // BetCard reads the *standalone* userInfo (for the AUTO ON pill, the
+    // CTA label, etc.), while the BET-phase auto-repeat handler in
+    // context.tsx also reads it via setUserInfo's prev callback. Without
+    // updating both, the auto loop silently never re-fires.
+    ctx.update({ userInfo: { ...userInfo, [side]: newSide } });
+    ctx.updateUserInfo({ [side]: newSide } as any);
 
-    // Emit directly — most reliable path.
     const sock = (ctx as any).socket;
     sock?.emit("playBet", { betAmount: amount, target, type: side, auto: isAuto });
 
-    // Optimistic UI flags.
+    // Optimistic UI flag — server's myBetState/myInfo will confirm.
     ctx.updateUserBetState({ [`${side}betted`]: true } as any);
   };
 
@@ -58,11 +55,23 @@ export const BetCard: React.FC<Props> = ({ side }) => {
     ctx.updateUserBetState(
       { [`${side}betState`]: false, [`${side}betted`]: false } as any,
     );
+    // Cancelling a placed auto bet also stops the auto loop.
+    if (sideInfo.auto) stopAuto();
   };
 
   const cashOut = () => {
     callCashOut(Number((ctx.currentTarget as any) || 0), side);
   };
+
+  const stopAuto = () => {
+    // Flip auto off in BOTH containers (state.userInfo and standalone
+    // userInfo) — the BET-phase auto-repeat reads the standalone one.
+    const newSide = { ...sideInfo, auto: false };
+    ctx.update({ userInfo: { ...userInfo, [side]: newSide } });
+    ctx.updateUserInfo({ [side]: newSide } as any);
+  };
+
+  const autoOn = !!sideInfo.auto;
 
   // ---- CTA selection ----
   let cta: React.ReactNode;
@@ -210,6 +219,14 @@ export const BetCard: React.FC<Props> = ({ side }) => {
       )}
 
       <div className="bet-cta-row">{cta}</div>
+
+      {autoOn && (
+        <button className="auto-on-pill" onClick={stopAuto} type="button">
+          <span className="dot" />
+          AUTO ON · @{(sideInfo.target || autoTarget).toFixed(2)}x
+          <span className="stop-x">✕ Stop</span>
+        </button>
+      )}
     </div>
   );
 };

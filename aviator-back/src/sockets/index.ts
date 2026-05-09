@@ -62,7 +62,16 @@ export const initSockets = (io: Server): void => {
   });
   engine.on("tick", () => broadcastGameState(io));
   engine.on("betPlaced", () => broadcastBets(io));
-  engine.on("cashOut", () => broadcastBets(io));
+  engine.on("cashOut", (p: PlayerState, idx: BetIndex) => {
+    broadcastBets(io);
+    // Send success + fresh myInfo to the player whose side just cashed out.
+    // Crucial for AUTO cash-outs: those fire from engine.tick(), not from a
+    // socket request, so without this the client never knows it succeeded.
+    const sock = sessionByUser.get(p.userName);
+    if (!sock) return;
+    sock.emit("myInfo", userToFrontend(p));
+    sock.emit("success", `Cashed out @ ${p[idx].cashOutAt.toFixed(2)}x`);
+  });
   engine.on(
     "roundEnded",
     ({ previousHand, history }: { previousHand: PlayerState[]; history: number[] }) => {

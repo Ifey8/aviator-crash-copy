@@ -350,15 +350,39 @@ export const Provider = ({ children }: any) => {
     let lastSeenPhase: string | null = null;
     socket.on("gameState", (gs: GameStatusType) => {
       if (gs?.GameState === "BET" && lastSeenPhase !== "BET") {
-        setUserInfo((prev) => ({
-          ...prev,
-          f: { ...prev.f, betted: false, cashouted: false, cashAmount: 0 },
-          s: { ...prev.s, betted: false, cashouted: false, cashAmount: 0 },
-        }));
+        // Reset stale cashout/betted UI state from previous round
+        setUserInfo((prev) => {
+          const next = {
+            ...prev,
+            f: { ...prev.f, betted: false, cashouted: false, cashAmount: 0 },
+            s: { ...prev.s, betted: false, cashouted: false, cashAmount: 0 },
+          };
+
+          // Auto-repeat: for any side with auto=true, re-emit playBet for
+          // the new round. This is the canonical auto-bet loop — the legacy
+          // finishGame handler had a `!user.f.betted` guard that was never
+          // satisfied (server sends pre-settle state where betted=true) so
+          // it never fired. Doing it here, on the BET-phase tick, is
+          // simple and reliable.
+          for (const side of ["f", "s"] as const) {
+            const info = prev[side];
+            if (info.auto && info.betAmount > 0 && info.target > 1) {
+              if (next.balance >= info.betAmount) {
+                socket.emit("playBet", {
+                  betAmount: info.betAmount,
+                  target: info.target,
+                  type: side,
+                  auto: true,
+                });
+              }
+            }
+          }
+          return next;
+        });
         setUserBetState((prev) => ({
-          fbetState: prev.fbetState, // preserve auto-repeat intent
+          fbetState: false,
           fbetted: false,
-          sbetState: prev.sbetState,
+          sbetState: false,
           sbetted: false,
         }));
       }

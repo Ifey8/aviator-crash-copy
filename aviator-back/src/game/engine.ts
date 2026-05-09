@@ -114,7 +114,10 @@ export class GameEngine extends EventEmitter {
     p.balance = +(p.balance + side.cashAmount).toFixed(2);
 
     UserModel.updateOne({ userName }, { $set: { balance: p.balance } }).catch(() => {});
-    this.emit("cashOut", p);
+    // Emit with side index so the socket layer can send success + myInfo
+    // to the right player (especially important for engine-driven auto-cashout
+    // where the user did not initiate the request from a socket handler).
+    this.emit("cashOut", p, index);
     return { ok: true };
   }
 
