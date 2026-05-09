@@ -100,19 +100,18 @@ export const GameCanvas: React.FC = () => {
       const padTop = 30;
 
       // ---- Trajectory math ----------------------------------------------
-      // Concave-UP arc — like a real plane taxi/take-off:
-      //   slow climb across most of the screen, then accelerating rise
-      //   into the top-right corner. The curve hugs the bottom early and
-      //   shoots up late.
+      // Concave-DOWN arc — sharp lift-off, then leveling cruise:
+      //   plane rises steeply at the start, gaining altitude fast, then
+      //   the climb slows as it approaches the top while x catches up.
       //
       //   progress(m) = (m-1)/(M_PEAK-1)   ∈ [0..1] (clamped)
-      //   x_norm = progress^0.45   (x leads — fast horizontal travel early)
-      //   y_norm = progress^1.4    (y trails — slow rise early, sharp at end)
+      //   y_norm = progress^0.4   (y leads — fast vertical climb early)
+      //   x_norm = progress^0.65  (x trails — picks up later)
       //
-      // At m=2:   progress=0.111 → x≈39%  y≈ 5% (plane near runway, far right)
-      // At m=4:   progress=0.333 → x≈61%  y≈22%
-      // At m=6:   progress=0.555 → x≈76%  y≈44%
-      // At m=8:   progress=0.778 → x≈89%  y≈70%
+      // At m=2:   progress=0.111 → x≈24%  y≈42%   (plane already half up, ~quarter across)
+      // At m=4:   progress=0.333 → x≈48%  y≈64%
+      // At m=6:   progress=0.555 → x≈67%  y≈78%
+      // At m=8:   progress=0.778 → x≈85%  y≈90%
       // At m=10 (M_PEAK): both 100% — plane reaches top-right corner.
       // For m>M_PEAK the plane "cruises" at the corner with bob+speed
       // lines so it never feels frozen.
@@ -120,9 +119,9 @@ export const GameCanvas: React.FC = () => {
       const progressOf = (m: number) =>
         Math.min(Math.max((m - 1) / (M_PEAK - 1), 0), 1);
       const xAtM = (m: number) =>
-        padX + Math.pow(progressOf(m), 0.45) * (W - padX * 2);
+        padX + Math.pow(progressOf(m), 0.65) * (W - padX * 2);
       const yAtM = (m: number) =>
-        H - padBottom - Math.pow(progressOf(m), 1.4) * (H - padBottom - padTop);
+        H - padBottom - Math.pow(progressOf(m), 0.4) * (H - padBottom - padTop);
 
       if (phase === "PLAYING") {
         const elapsed = (Date.now() - phaseStartRef.current) / 1000;
