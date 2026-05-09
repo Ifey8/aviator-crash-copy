@@ -2,9 +2,11 @@ import React from "react";
 import { MobileApp } from "./components/Mobile/MobileApp";
 import { AuthScreen } from "./components/Mobile/AuthScreen";
 import { AdminApp } from "./components/Admin/AdminApp";
+import { MockPayPage } from "./components/Mobile/MockPayPage";
 import { useAuth } from "./auth/AuthProvider";
 import "./components/Mobile/auth.scss";
 import "./components/Admin/admin.scss";
+import "./components/Mobile/recharge.scss";
 import "./components/Mobile/luxe.scss"; // theme override — must load LAST
 
 function App() {
@@ -14,6 +16,14 @@ function App() {
     const isTg = !!(window as any).Telegram?.WebApp?.initData;
     document.documentElement.dataset.platform = isTg ? "telegram" : "web";
   }, []);
+
+  // /mock-pay is the dev provider's "fake bank" page. Renders without auth
+  // (the orderId in the query string is the unforgeable token, mirroring
+  // how a real provider page works — anyone with the link can pay).
+  const path = typeof window !== "undefined" ? window.location.pathname : "/";
+  if (path === "/mock-pay" || path.startsWith("/mock-pay")) {
+    return <MockPayPage />;
+  }
 
   // First-paint flash protection: if a token is in localStorage we're
   // validating it via /me; show a tiny shell, not the AuthScreen.
@@ -33,7 +43,6 @@ function App() {
 
   // Route: /admin → AdminApp (admin role required)
   // Anything else → MobileApp
-  const path = typeof window !== "undefined" ? window.location.pathname : "/";
   if (path.startsWith("/admin")) {
     if (!user.isAdmin) {
       return (

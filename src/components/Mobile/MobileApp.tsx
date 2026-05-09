@@ -6,7 +6,9 @@ import { GameCanvas } from "./GameCanvas";
 import { BetCard } from "./BetCard";
 import { BetsListSheet } from "./BetsListSheet";
 import { CoinFxLayer } from "./CoinFxLayer";
+import { RechargeSheet } from "./RechargeSheet";
 import "./mobile.scss";
+import "./recharge.scss";
 // luxe.scss is imported from src/app.tsx as the LAST stylesheet so its
 // theme overrides win the cascade. Don't re-import here — webpack dedup
 // would lock in the earliest position and let auth.scss override luxe.
@@ -34,6 +36,7 @@ export const MobileApp: React.FC = () => {
   useTelegramTheme();
   const { rechargeState, errorBackend, platformLoading } = React.useContext(Context);
   const [, setMenuOpen] = React.useState(false);
+  const [rechargeOpen, setRechargeOpen] = React.useState(false);
 
   return (
     <div className="mobile-app">
@@ -42,7 +45,10 @@ export const MobileApp: React.FC = () => {
         <span /><span /><span /><span /><span />
         <span /><span /><span /><span /><span />
       </div>
-      <MobileHeader onOpenMenu={() => setMenuOpen(true)} />
+      <MobileHeader
+        onOpenMenu={() => setMenuOpen(true)}
+        onRecharge={() => setRechargeOpen(true)}
+      />
       <main className="mobile-main">
         <HistoryBar />
         <GameCanvas />
@@ -57,13 +63,18 @@ export const MobileApp: React.FC = () => {
           Spans across header + canvas, so it lives outside <main>. */}
       <CoinFxLayer />
 
+      <RechargeSheet open={rechargeOpen} onClose={() => setRechargeOpen(false)} />
+
       {rechargeState && (
         <div className="mobile-modal-overlay">
           <div className="mobile-modal">
             <h3>Insufficient balance</h3>
             <p>You need at least 1 to play. Top up to continue.</p>
-            <button className="modal-cta" onClick={() => window.location.reload()}>
-              Reload
+            <button
+              className="modal-cta"
+              onClick={() => setRechargeOpen(true)}
+            >
+              Top up
             </button>
           </div>
         </div>

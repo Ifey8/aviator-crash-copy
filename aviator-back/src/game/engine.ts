@@ -64,6 +64,28 @@ export class GameEngine extends EventEmitter {
     return this.players.get(userName);
   }
 
+  /**
+   * Credit `amount` to a user's balance (for recharge / admin grant).
+   * Updates in-memory PlayerState if they're online AND persists to Mongo.
+   * Returns the new balance, or null if the user does not exist in Mongo.
+   *
+   * IMPORTANT: caller is responsible for idempotency (checking
+   * RechargeOrder.status before invoking this), since we do not record
+   * the source of credit here.
+   */
+  async creditBalance(userName: string, amount: number): Promise<number | null> {
+    if (amount <= 0) return null;
+    const updated = await UserModel.findOneAndUpdate(
+      { userName },
+      { $inc: { balance: amount } },
+      { new: true },
+    );
+    if (!updated) return null;
+    const p = this.players.get(userName);
+    if (p) p.balance = updated.balance;
+    return updated.balance;
+  }
+
   // ------- Bet handling -------
 
   async placeBet(

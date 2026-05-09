@@ -44,7 +44,12 @@ const useDisplayBalance = (real: number): number => {
   return display;
 };
 
-export const MobileHeader: React.FC<{ onOpenMenu: () => void }> = ({ onOpenMenu }) => {
+interface HeaderProps {
+  onOpenMenu: () => void;
+  onRecharge?: () => void;
+}
+
+export const MobileHeader: React.FC<HeaderProps> = ({ onOpenMenu, onRecharge }) => {
   const { userInfo, errorBackend } = React.useContext(Context);
   const balanceServer = Number(userInfo?.balance || 0);
   const balance = useDisplayBalance(balanceServer);
@@ -63,6 +68,15 @@ export const MobileHeader: React.FC<{ onOpenMenu: () => void }> = ({ onOpenMenu 
           <span className="balance-amount">{balance.toFixed(2)}</span>
           <span className="balance-currency">{currency}</span>
         </div>
+        {onRecharge && (
+          <button
+            className="mobile-header-recharge"
+            onClick={onRecharge}
+            aria-label="Top up balance"
+          >
+            + ADD
+          </button>
+        )}
         <button className="mobile-header-menu" onClick={onOpenMenu} aria-label="menu">
           <svg width="20" height="20" viewBox="0 0 20 20">
             <circle cx="4" cy="10" r="1.5" fill="currentColor" />

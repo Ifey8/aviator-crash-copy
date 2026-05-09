@@ -1,0 +1,299 @@
+import React from "react";
+import Context from "../../context";
+import { config } from "../../config";
+
+/**
+ * RechargeSheet — bottom sheet for topping up balance via a payment provider.
+ *
+ * Step machine:
+ *   picker   → user picks amount + provider
+ *   creating → POSTing /api/recharge/create
+ *   pending  → order open at provider; we poll /status + listen on socket
+ *   success  → order paid (+balance credited server-side via myInfo)
+ *   failed   → cancelled / expired / failed
+ *
+ * Two channels close the loop after the user pays:
+ *   1. Socket "rechargeUpdate" event — pushed by backend the moment the
+ *      provider's webhook fires. Instant feedback if the user is online.
+ *   2. Polling /api/recharge/status every 2s as a fallback (also lets us
+ *      detect expiry without waiting for the provider).
+ *
+ * On dev (mock provider) the paymentUrl points to /mock-pay where a fake
+ * PAY button hits POST /api/recharge/mock-pay/:orderId and the same socket
+ * event fires.
+ */
+
+const PRESETS = [100, 500, 1000, 2000, 5000];
+
+type Step = "picker" | "creating" | "pending" | "success" | "failed";
+
+interface OrderData {
+  orderId: string;
+  amount: number;
+  paymentUrl: string;
+  status: string;
+  expiresAt: string;
+  paidAt?: string;
+}
+
+interface Props {
+  open: boolean;
+  onClose: () => void;
+}
+
+const TOKEN_KEY = "aviator_token";
+const apiBase = config.api;
+
+const authHeaders = (): Record<string, string> => {
+  const t = localStorage.getItem(TOKEN_KEY);
+  return t ? { Authorization: `Bearer ${t}` } : {};
+};
+
+export const RechargeSheet: React.FC<Props> = ({ open, onClose }) => {
+  const ctx = React.useContext(Context);
+  const sock = (ctx as any).socket;
+
+  const [step, setStep] = React.useState<Step>("picker");
+  const [amount, setAmount] = React.useState<number>(500);
+  const [customInput, setCustomInput] = React.useState("");
+  const [order, setOrder] = React.useState<OrderData | null>(null);
+  const [error, setError] = React.useState<string | null>(null);
+
+  // Reset on close so re-opening starts clean.
+  React.useEffect(() => {
+    if (!open) {
+      setStep("picker");
+      setOrder(null);
+      setError(null);
+      setCustomInput("");
+    }
+  }, [open]);
+
+  // Channel 1: socket push from backend
+  React.useEffect(() => {
+    if (!sock || !order) return;
+    const onUpdate = (msg: { orderId: string; status: string }) => {
+      if (msg.orderId !== order.orderId) return;
+      if (msg.status === "paid") setStep("success");
+      else if (msg.status === "failed" || msg.status === "expired" || msg.status === "cancelled") setStep("failed");
+      setOrder((o) => (o ? { ...o, status: msg.status } : null));
+    };
+    sock.on("rechargeUpdate", onUpdate);
+    return () => sock.off("rechargeUpdate", onUpdate);
+  }, [sock, order]);
+
+  // Channel 2: polling fallback
+  React.useEffect(() => {
+    if (step !== "pending" || !order) return;
+    let cancelled = false;
+    const tick = async () => {
+      try {
+        const res = await fetch(`${apiBase}/recharge/status/${order.orderId}`, {
+          headers: authHeaders(),
+        });
+        const json = await res.json();
+        if (cancelled) return;
+        if (json.status && json.data) {
+          const s = json.data.status;
+          setOrder((o) => (o ? { ...o, status: s } : null));
+          if (s === "paid") setStep("success");
+          else if (s !== "pending") setStep("failed");
+        }
+      } catch {
+        /* ignore network blips, next tick will retry */
+      }
+    };
+    const iv = setInterval(tick, 2000);
+    return () => {
+      cancelled = true;
+      clearInterval(iv);
+    };
+  }, [step, order]);
+
+  const handleConfirm = async (): Promise<void> => {
+    if (amount <= 0) {
+      setError("Enter a valid amount");
+      return;
+    }
+    setStep("creating");
+    setError(null);
+    try {
+      const res = await fetch(`${apiBase}/recharge/create`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", ...authHeaders() },
+        body: JSON.stringify({ amount }),
+      });
+      const json = await res.json();
+      if (!json.status) {
+        setError(json.message || "Failed to create order");
+        setStep("picker");
+        return;
+      }
+      const o: OrderData = {
+        orderId: json.data.orderId,
+        amount: json.data.amount,
+        paymentUrl: json.data.paymentUrl,
+        status: json.data.status,
+        expiresAt: json.data.expiresAt,
+      };
+      setOrder(o);
+      setStep("pending");
+      // Auto-open the provider's payment URL in a new tab.
+      window.open(o.paymentUrl, "_blank", "noopener,noreferrer");
+    } catch {
+      setError("Network error — please try again");
+      setStep("picker");
+    }
+  };
+
+  const handleCancel = async (): Promise<void> => {
+    if (order && order.status === "pending") {
+      try {
+        await fetch(`${apiBase}/recharge/cancel/${order.orderId}`, {
+          method: "POST",
+          headers: authHeaders(),
+        });
+      } catch {/* best-effort */}
+    }
+    onClose();
+  };
+
+  if (!open) return null;
+
+  return (
+    <div className="rs-backdrop" onClick={onClose}>
+      <div className="rs-sheet" onClick={(e) => e.stopPropagation()}>
+        <div className="rs-handle" />
+        <button className="rs-close" onClick={onClose} aria-label="close">×</button>
+
+        {step === "picker" && (
+          <div className="rs-picker">
+            <h3 className="rs-title">Top up balance</h3>
+            <p className="rs-sub">Choose an amount to add to your wallet.</p>
+            <div className="rs-presets">
+              {PRESETS.map((p) => (
+                <button
+                  key={p}
+                  className={`rs-chip ${amount === p && !customInput ? "active" : ""}`}
+                  onClick={() => {
+                    setAmount(p);
+                    setCustomInput("");
+                  }}
+                >
+                  ₹{p.toLocaleString("en-IN")}
+                </button>
+              ))}
+            </div>
+            <div className="rs-custom-row">
+              <span className="rs-rs">₹</span>
+              <input
+                type="number"
+                placeholder="Custom amount"
+                value={customInput}
+                inputMode="numeric"
+                onChange={(e) => {
+                  setCustomInput(e.target.value);
+                  const v = Number(e.target.value);
+                  if (v > 0) setAmount(v);
+                }}
+                className="rs-custom"
+              />
+            </div>
+            <button className="rs-cta" onClick={handleConfirm}>
+              Continue · ₹{amount.toLocaleString("en-IN")}
+            </button>
+            {error && <div className="rs-error">{error}</div>}
+            <p className="rs-fine">
+              Minimum ₹100 · Maximum ₹50,000 · Funds usually arrive within 1 minute.
+            </p>
+          </div>
+        )}
+
+        {step === "creating" && (
+          <div className="rs-loader">
+            <div className="rs-spinner" />
+            <p>Creating order…</p>
+          </div>
+        )}
+
+        {step === "pending" && order && (
+          <div className="rs-pending">
+            <h3 className="rs-title">Awaiting payment</h3>
+            <div className="rs-amount-big">₹{order.amount.toLocaleString("en-IN")}</div>
+            <a
+              href={order.paymentUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="rs-cta"
+            >
+              Open payment page
+            </a>
+            <p className="rs-hint">
+              If the payment page didn't open, tap the button above.
+            </p>
+            <ExpiryCountdown
+              expiresAt={order.expiresAt}
+              onExpire={() => setStep("failed")}
+            />
+            <button className="rs-link" onClick={handleCancel}>
+              Cancel order
+            </button>
+          </div>
+        )}
+
+        {step === "success" && order && (
+          <div className="rs-success">
+            <div className="rs-check">✓</div>
+            <h3 className="rs-title">Recharge complete</h3>
+            <p className="rs-sub">+₹{order.amount.toLocaleString("en-IN")} added to your balance</p>
+            <button className="rs-cta" onClick={onClose}>Done</button>
+          </div>
+        )}
+
+        {step === "failed" && (
+          <div className="rs-failed">
+            <div className="rs-x">×</div>
+            <h3 className="rs-title">Payment unsuccessful</h3>
+            <p className="rs-sub">
+              {order?.status === "expired" ? "The order expired." :
+               order?.status === "cancelled" ? "Order was cancelled." :
+               "Provider reported a failure."}
+            </p>
+            <button className="rs-cta" onClick={() => { setStep("picker"); setOrder(null); }}>
+              Try again
+            </button>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+};
+
+const ExpiryCountdown: React.FC<{ expiresAt: string; onExpire: () => void }> = ({
+  expiresAt,
+  onExpire,
+}) => {
+  const [now, setNow] = React.useState(Date.now());
+  React.useEffect(() => {
+    const iv = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(iv);
+  }, []);
+  const target = new Date(expiresAt).getTime();
+  const remaining = Math.max(0, target - now);
+  const fired = React.useRef(false);
+  React.useEffect(() => {
+    if (remaining === 0 && !fired.current) {
+      fired.current = true;
+      onExpire();
+    }
+  }, [remaining, onExpire]);
+  const m = Math.floor(remaining / 60000);
+  const s = Math.floor((remaining % 60000) / 1000);
+  return (
+    <div className="rs-countdown">
+      Expires in <span>{m}:{s.toString().padStart(2, "0")}</span>
+    </div>
+  );
+};
+
+export default RechargeSheet;

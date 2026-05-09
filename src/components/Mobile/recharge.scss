@@ -1,0 +1,451 @@
+/* ============================================================
+   Recharge bottom sheet — luxe gold/maroon palette to match the
+   game's Rajasthani Royal Treasury theme.
+   ============================================================ */
+
+.rs-backdrop {
+  position: fixed;
+  inset: 0;
+  background: radial-gradient(
+      ellipse at 50% 60%,
+      rgba(75, 12, 18, 0.55) 0%,
+      rgba(8, 5, 10, 0.85) 70%
+    );
+  backdrop-filter: blur(6px);
+  z-index: 100;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  animation: rs-fade-in 220ms ease-out;
+}
+
+@keyframes rs-fade-in {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+
+.rs-sheet {
+  position: relative;
+  width: 100%;
+  max-width: 480px;
+  background:
+    linear-gradient(180deg, #1f0d12 0%, #100509 100%);
+  border-top: 2px solid rgba(255, 200, 87, 0.55);
+  border-radius: 22px 22px 0 0;
+  box-shadow:
+    0 -16px 60px rgba(0, 0, 0, 0.55),
+    0 -2px 0 rgba(255, 200, 87, 0.18) inset;
+  padding: 22px 22px 32px;
+  color: #fff5dc;
+  animation: rs-slide-up 320ms cubic-bezier(.22,.95,.36,1);
+  max-height: 88vh;
+  overflow-y: auto;
+}
+
+@keyframes rs-slide-up {
+  from { transform: translateY(100%); }
+  to   { transform: translateY(0); }
+}
+
+.rs-handle {
+  width: 38px;
+  height: 4px;
+  border-radius: 2px;
+  background: rgba(255, 200, 87, 0.35);
+  margin: -8px auto 14px;
+}
+
+.rs-close {
+  position: absolute;
+  top: 10px;
+  right: 14px;
+  width: 32px;
+  height: 32px;
+  border: 0;
+  background: rgba(255, 245, 220, 0.06);
+  color: #fff5dc;
+  border-radius: 50%;
+  font-size: 22px;
+  line-height: 1;
+  cursor: pointer;
+  &:hover { background: rgba(255, 245, 220, 0.12); }
+}
+
+.rs-title {
+  margin: 0 0 4px;
+  font-family: "Cinzel", serif;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  font-size: 19px;
+  color: #ffd86b;
+  text-shadow: 0 0 12px rgba(255, 153, 51, 0.3);
+}
+
+.rs-sub {
+  margin: 0 0 18px;
+  color: rgba(255, 245, 220, 0.6);
+  font-size: 13px;
+}
+
+.rs-presets {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
+  margin-bottom: 10px;
+}
+
+.rs-chip {
+  background: rgba(255, 200, 87, 0.05);
+  border: 1px solid rgba(255, 200, 87, 0.22);
+  color: #fff5dc;
+  border-radius: 10px;
+  padding: 12px 6px;
+  font-size: 14px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  cursor: pointer;
+  transition: all 120ms;
+  &:hover {
+    background: rgba(255, 200, 87, 0.10);
+    border-color: rgba(255, 200, 87, 0.4);
+  }
+  &.active {
+    background:
+      linear-gradient(180deg, rgba(255, 200, 87, 0.22) 0%, rgba(255, 153, 51, 0.14) 100%);
+    border-color: #ffc857;
+    color: #ffe9a8;
+    box-shadow:
+      0 0 0 2px rgba(255, 200, 87, 0.18),
+      0 6px 18px rgba(255, 153, 51, 0.18);
+  }
+}
+
+.rs-custom-row {
+  position: relative;
+  margin-bottom: 18px;
+}
+
+.rs-rs {
+  position: absolute;
+  left: 14px;
+  top: 50%;
+  transform: translateY(-50%);
+  color: #ffc857;
+  font-weight: 800;
+  font-size: 15px;
+}
+
+.rs-custom {
+  width: 100%;
+  background: rgba(255, 245, 220, 0.04);
+  border: 1px solid rgba(255, 200, 87, 0.22);
+  border-radius: 10px;
+  color: #fff5dc;
+  font-size: 15px;
+  font-weight: 600;
+  padding: 12px 12px 12px 30px;
+  outline: none;
+  &:focus {
+    border-color: #ffc857;
+    box-shadow: 0 0 0 2px rgba(255, 200, 87, 0.18);
+  }
+  /* hide number spinner */
+  &::-webkit-outer-spin-button, &::-webkit-inner-spin-button {
+    -webkit-appearance: none; margin: 0;
+  }
+  -moz-appearance: textfield;
+}
+
+.rs-cta {
+  display: block;
+  width: 100%;
+  padding: 14px 16px;
+  background:
+    linear-gradient(180deg, #ffe38a 0%, #ffb940 45%, #d99000 100%);
+  color: #3a1a04;
+  font-family: "Cinzel", serif;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  font-size: 14px;
+  border: 0;
+  border-radius: 12px;
+  cursor: pointer;
+  text-align: center;
+  text-decoration: none;
+  box-shadow:
+    0 6px 18px rgba(255, 153, 51, 0.32),
+    inset 0 1px 0 rgba(255, 255, 255, 0.45);
+  transition: transform 120ms;
+  &:hover { transform: translateY(-1px); }
+  &:active { transform: translateY(1px); }
+  &:disabled { opacity: 0.6; cursor: not-allowed; }
+}
+
+.rs-link {
+  display: block;
+  margin: 14px auto 0;
+  background: none;
+  border: 0;
+  color: rgba(255, 245, 220, 0.55);
+  font-size: 12px;
+  letter-spacing: 0.06em;
+  cursor: pointer;
+  &:hover { color: #ffc857; }
+}
+
+.rs-error {
+  margin-top: 10px;
+  padding: 10px 12px;
+  background: rgba(193, 34, 68, 0.12);
+  border: 1px solid rgba(193, 34, 68, 0.35);
+  border-radius: 8px;
+  color: #ff9aa8;
+  font-size: 12px;
+}
+
+.rs-fine {
+  margin: 14px 0 0;
+  color: rgba(255, 245, 220, 0.4);
+  font-size: 11px;
+  text-align: center;
+  line-height: 1.5;
+}
+
+/* ---- pending state ---- */
+.rs-pending {
+  text-align: center;
+}
+
+.rs-amount-big {
+  margin: 12px 0 18px;
+  font-family: "Cinzel", serif;
+  font-weight: 900;
+  font-size: 44px;
+  color: #ffe9a8;
+  text-shadow:
+    0 0 18px rgba(255, 200, 87, 0.45),
+    0 4px 14px rgba(255, 153, 51, 0.4);
+  letter-spacing: 0.04em;
+}
+
+.rs-hint {
+  margin: 12px 0 0;
+  color: rgba(255, 245, 220, 0.55);
+  font-size: 12px;
+}
+
+.rs-countdown {
+  margin: 16px 0 4px;
+  font-size: 12px;
+  color: rgba(255, 245, 220, 0.5);
+  letter-spacing: 0.08em;
+  span {
+    color: #ffd86b;
+    font-weight: 700;
+    font-variant-numeric: tabular-nums;
+  }
+}
+
+/* ---- creating spinner ---- */
+.rs-loader {
+  text-align: center;
+  padding: 40px 0 20px;
+  color: rgba(255, 245, 220, 0.6);
+  font-size: 13px;
+}
+
+.rs-spinner {
+  width: 36px; height: 36px;
+  margin: 0 auto 14px;
+  border-radius: 50%;
+  border: 3px solid rgba(255, 200, 87, 0.18);
+  border-top-color: #ffc857;
+  animation: rs-spin 800ms linear infinite;
+}
+
+@keyframes rs-spin {
+  to { transform: rotate(360deg); }
+}
+
+/* ---- success ---- */
+.rs-success, .rs-failed {
+  text-align: center;
+  padding: 8px 0;
+}
+
+.rs-check {
+  width: 64px; height: 64px;
+  margin: 0 auto 18px;
+  border-radius: 50%;
+  background: linear-gradient(180deg, #7CF7B5 0%, #2ECC71 100%);
+  color: #04331a;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 36px;
+  font-weight: 900;
+  box-shadow: 0 0 24px rgba(46, 204, 113, 0.55);
+  animation: rs-pop 600ms cubic-bezier(.18,1.35,.4,1);
+}
+
+.rs-x {
+  width: 64px; height: 64px;
+  margin: 0 auto 18px;
+  border-radius: 50%;
+  background: linear-gradient(180deg, #ff8a9a 0%, #c12244 100%);
+  color: #fff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 36px;
+  font-weight: 900;
+  box-shadow: 0 0 22px rgba(193, 34, 68, 0.5);
+  animation: rs-pop 500ms cubic-bezier(.18,1.35,.4,1);
+}
+
+@keyframes rs-pop {
+  0%   { transform: scale(0.4); opacity: 0; }
+  70%  { transform: scale(1.12); }
+  100% { transform: scale(1); opacity: 1; }
+}
+
+/* ============================================================
+   Header recharge button (small "+" CTA next to balance).
+   ============================================================ */
+.mobile-header-recharge {
+  background:
+    linear-gradient(180deg, #ffe38a 0%, #ffb940 45%, #d99000 100%);
+  color: #3a1a04;
+  border: 0;
+  border-radius: 8px;
+  padding: 5px 10px;
+  font-family: "Cinzel", serif;
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  cursor: pointer;
+  margin-left: 4px;
+  white-space: nowrap;
+  box-shadow:
+    0 2px 8px rgba(255, 153, 51, 0.35),
+    inset 0 1px 0 rgba(255, 255, 255, 0.45);
+  &:hover { transform: translateY(-1px); }
+  &:active { transform: translateY(1px); }
+}
+
+/* ============================================================
+   MockPayPage — fake provider screen for dev only.
+   ============================================================ */
+.mock-pay {
+  min-height: 100vh;
+  background: linear-gradient(160deg, #0e1830 0%, #0a0e1d 50%, #1a0710 100%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  font-family: -apple-system, "SF Pro Text", system-ui, sans-serif;
+}
+
+.mock-pay-card {
+  width: 100%;
+  max-width: 420px;
+  background: linear-gradient(180deg, #1c0e16 0%, #100408 100%);
+  border-top: 3px solid #ffc857;
+  border-radius: 14px;
+  padding: 28px 24px 32px;
+  color: #fff5dc;
+  text-align: center;
+  box-shadow: 0 20px 60px rgba(0,0,0,0.5);
+}
+
+.mock-pay-bank {
+  font-size: 10px;
+  letter-spacing: 0.18em;
+  color: #ffc857;
+  font-weight: 800;
+  margin-bottom: 6px;
+}
+
+.mock-pay-card h2 {
+  margin: 0 0 22px;
+  font-family: "Cinzel", serif;
+  font-weight: 700;
+  font-size: 18px;
+  color: rgba(255, 245, 220, 0.85);
+}
+
+.mock-pay-amount {
+  font-family: "Cinzel", serif;
+  font-weight: 900;
+  font-size: 52px;
+  color: #ffe9a8;
+  margin: 0 0 22px;
+  letter-spacing: 0.03em;
+  text-shadow: 0 0 20px rgba(255, 200, 87, 0.4);
+}
+
+.mock-pay-meta {
+  background: rgba(255, 245, 220, 0.04);
+  border: 1px solid rgba(255, 200, 87, 0.18);
+  border-radius: 10px;
+  padding: 12px 14px;
+  margin-bottom: 22px;
+  font-size: 12px;
+  > div {
+    display: flex; justify-content: space-between;
+    padding: 4px 0;
+    span { color: rgba(255, 245, 220, 0.55); }
+    b { color: #fff5dc; font-weight: 700; }
+  }
+}
+
+.mock-pay-btn {
+  width: 100%;
+  padding: 14px 16px;
+  background: linear-gradient(180deg, #7CF7B5 0%, #2ECC71 60%, #1E8449 100%);
+  color: #032615;
+  border: 0;
+  border-radius: 10px;
+  font-weight: 800;
+  font-size: 15px;
+  letter-spacing: 0.06em;
+  cursor: pointer;
+  box-shadow:
+    0 6px 18px rgba(46, 204, 113, 0.35),
+    inset 0 1px 0 rgba(255, 255, 255, 0.4);
+  &:disabled { opacity: 0.6; cursor: not-allowed; }
+  &:hover:not(:disabled) { transform: translateY(-1px); }
+}
+
+.mock-pay-success {
+  padding: 20px 0;
+}
+
+.mock-pay-check {
+  width: 56px; height: 56px;
+  margin: 0 auto 14px;
+  border-radius: 50%;
+  background: linear-gradient(180deg, #7CF7B5, #2ECC71);
+  color: #04331a;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 30px; font-weight: 900;
+  box-shadow: 0 0 22px rgba(46, 204, 113, 0.5);
+}
+
+.mock-pay-success p {
+  margin: 6px 0;
+  font-weight: 700;
+}
+
+.mock-pay-error {
+  margin-top: 10px;
+  color: #ff9aa8;
+  font-size: 12px;
+}
+
+.mock-pay-fine {
+  margin: 18px 0 0;
+  color: rgba(255, 245, 220, 0.4);
+  font-size: 11px;
+  line-height: 1.5;
+}

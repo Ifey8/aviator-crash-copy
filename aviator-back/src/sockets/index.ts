@@ -43,8 +43,39 @@ const announcePhase = (io: Server) => {
   }
 };
 
+/**
+ * Active socket per logged-in user. Module-scope so other modules
+ * (e.g. recharge route after webhook) can push events to a specific user
+ * without going through the socket layer's connection state.
+ */
+const sessionByUser = new Map<string, Socket>();
+
+/** Send a one-off event to a specific user; no-op if they're disconnected. */
+export const pushToUser = (
+  userName: string,
+  event: string,
+  payload: unknown,
+): boolean => {
+  const sock = sessionByUser.get(userName);
+  if (!sock) return false;
+  sock.emit(event, payload);
+  return true;
+};
+
+/**
+ * After balance changes outside the engine (recharge credit, admin grant,
+ * etc), push a fresh myInfo so the client sees the new balance immediately.
+ * Returns true if the user was online.
+ */
+export const pushUserMyInfo = (userName: string): boolean => {
+  const sock = sessionByUser.get(userName);
+  if (!sock) return false;
+  const p = engine.getPlayer(userName);
+  if (p) sock.emit("myInfo", userToFrontend(p));
+  return true;
+};
+
 export const initSockets = (io: Server): void => {
-  const sessionByUser = new Map<string, Socket>();
 
   // Wire engine events to broadcasts
   engine.on("phaseChange", () => {

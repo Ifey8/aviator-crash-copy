@@ -9,6 +9,7 @@ import { initSockets } from "./sockets";
 import { authRouter } from "./routes/auth";
 import { userRouter } from "./routes/user";
 import { adminRouter } from "./routes/admin";
+import { rechargeRouter } from "./routes/recharge";
 import { startTelegramBot } from "./bot/telegram";
 
 const app = express();
@@ -27,6 +28,7 @@ app.get("/health", (_req, res) =>
 
 app.use("/api/auth", authRouter);
 app.use("/api/admin", adminRouter);
+app.use("/api/recharge", rechargeRouter);
 app.use("/api", userRouter);
 
 const server = http.createServer(app);
