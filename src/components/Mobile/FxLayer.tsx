@@ -94,14 +94,20 @@ export const FxLayer: React.FC = () => {
       if (b.userName === myName) continue;
       const wasCashed = prevMap.get(key(b)) ?? false;
       if (b.cashouted && !wasCashed) {
-        // pseudo-random horizontal placement, biased away from center
-        const r = (Math.sin(successCountRef.current++) * 4 + 3) % 1;
-        const x = 0.08 + Math.abs(r) * 0.84;
+        // Anchor to the plane's current position (with small scatter so multiple
+        // simultaneous cashouts don't stack). Previously this was a random
+        // mid-canvas spawn which made parachutes look like they were dropping
+        // from the screen top — visually wrong since the parachute story is
+        // "the player jumped FROM the plane". planeTracker.flying is true
+        // throughout PLAYING; if the round just ended (rare race) we still
+        // anchor to wherever the plane was last drawn.
+        const jitterX = (Math.random() - 0.5) * 0.08; // ±4% canvas width
+        const jitterY = (Math.random() - 0.5) * 0.04; // ±2% canvas height
         push({
           kind: "para-other",
-          x,
-          y: 0.32 + (Math.random() * 0.25),
-          variant: successCountRef.current % VARIANT_COUNT,
+          x: clamp(planeTracker.x + jitterX, 0.04, 0.96),
+          y: clamp(planeTracker.y + jitterY, 0.04, 0.85),
+          variant: successCountRef.current++ % VARIANT_COUNT,
           label: maskName(b.userName),
           payout: `${(b.cashOutAt || 0).toFixed(2)}x`,
           ttl: 3500,
@@ -162,3 +168,6 @@ const maskName = (n?: string): string => {
   if (n.length <= 4) return n[0] + "***";
   return n.slice(0, 2) + "***" + n.slice(-1);
 };
+
+const clamp = (v: number, lo: number, hi: number): number =>
+  Math.max(lo, Math.min(hi, v));

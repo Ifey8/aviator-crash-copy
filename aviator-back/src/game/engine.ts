@@ -18,6 +18,7 @@ import {
 import { UserModel } from "../db/models/User";
 import { RoundModel } from "../db/models/Round";
 import { BetModel } from "../db/models/Bet";
+import { bots } from "./bots";
 
 const TICK_MS = 100;
 
@@ -163,6 +164,10 @@ export class GameEngine extends EventEmitter {
     this.seed = buildRoundSeed(sd.serverSeed, clientPool, this.roundId, config.houseEdge);
     this.nextSeed = newServerSeed();
 
+    // Schedule bot players to join during this BET phase. They appear in
+    // bettedUsersSnapshot, broadcast via the bot event handlers in sockets/.
+    bots.beginRound(this.players.size, config.betDurationMs);
+
     this.emit("phaseChange", this.statusSnapshot());
 
     setTimeout(() => this.beginPlayingPhase(), config.betDurationMs);
@@ -191,6 +196,11 @@ export class GameEngine extends EventEmitter {
       }
     }
 
+    // Bot cashouts. Each bot has a pre-set target; if reached + willCashOut,
+    // bots.tick() flips it to cashouted and emits botCashout — sockets/index.ts
+    // hooks that to broadcast bettedUserInfo so all clients animate parachutes.
+    bots.tick(this.multiplier);
+
     if (this.multiplier >= this.seed.crashPoint) {
       this.endRound();
       return;
@@ -203,6 +213,7 @@ export class GameEngine extends EventEmitter {
     this.ticker = null;
     this.multiplier = +this.seed.crashPoint.toFixed(2);
     this.phase = "GAMEEND";
+    bots.endRound();
     this.emit("phaseChange", this.statusSnapshot());
 
     const previousHand: PlayerState[] = [];
@@ -281,6 +292,8 @@ export class GameEngine extends EventEmitter {
         }
       }
     }
+    // Append bot bets so the bets list / FxLayer cashout-detection sees them.
+    for (const b of bots.snapshot()) out.push(b);
     return out;
   }
 }

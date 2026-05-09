@@ -1,5 +1,6 @@
 import { Server, Socket } from "socket.io";
 import { engine } from "../game/engine";
+import { bots } from "../game/bots";
 import { config } from "../config";
 import { authFromToken, authDevGuest } from "../auth/session";
 import { PlayerState, BetIndex } from "../game/types";
@@ -93,6 +94,10 @@ export const initSockets = (io: Server): void => {
   });
   engine.on("tick", () => broadcastGameState(io));
   engine.on("betPlaced", () => broadcastBets(io));
+  // Bots — virtual players. Treat their join + cashout exactly like real bets
+  // so the existing FxLayer parachute logic + bet list re-render automatically.
+  bots.on("botJoined", () => broadcastBets(io));
+  bots.on("botCashout", () => broadcastBets(io));
   engine.on("cashOut", (p: PlayerState, idx: BetIndex) => {
     broadcastBets(io);
     // Send success + fresh myInfo to the player whose side just cashed out.
