@@ -101,13 +101,12 @@ export class BotManager extends EventEmitter {
   }
 
   /** Called when engine enters BET phase. */
-  beginRound(realPlayerCount: number, betDurationMs: number): void {
+  beginRound(_realPlayerCount: number, betDurationMs: number): void {
     this.clearTimers();
     this.bots.clear();
-    const targetCount =
-      realPlayerCount < 1 ? 9 + Math.floor(Math.random() * 5) :  // 9-13 alone
-      realPlayerCount < 3 ? 6 + Math.floor(Math.random() * 4) :  // 6-9 with 1-2
-      3 + Math.floor(Math.random() * 3);                          // 3-5 with 3+
+    // Always 5-15 bots regardless of real player count — the room should
+    // feel busy even with many real players.
+    const targetCount = 5 + Math.floor(Math.random() * 11); // [5, 15]
     for (let i = 0; i < targetCount; i++) {
       // Stagger joins so the bet list grows over the BET phase, not all at once.
       const delay = Math.random() * (betDurationMs - 400);
