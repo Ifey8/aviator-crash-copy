@@ -372,11 +372,15 @@
   font-variant-numeric: tabular-nums;
 }
 
-/* -------- Game canvas -------- */
+/* -------- Game canvas --------
+   Locked height so the card below has a stable TOP. When the bet card
+   grows (e.g., user clicks Auto), the growth happens DOWNWARD into the
+   bets-list-sheet's flex space — canvas stays put, plane never jumps. */
 .game-canvas-wrap {
   position: relative;
-  flex: 1 1 auto;
-  min-height: 200px;
+  flex: 0 0 auto;
+  height: 320px;
+  min-height: 280px;
   background:
     radial-gradient(ellipse at 30% 78%, rgba(255, 153, 51, 0.18) 0%, transparent 60%),
     radial-gradient(ellipse at 80% 20%, rgba(255, 200, 87, 0.10) 0%, transparent 55%),
@@ -739,13 +743,6 @@
   }
 }
 
-/* Collapsed: still occupies full height (so the card's tab/CTA Y stays
-   constant when toggling Bet ↔ Auto), but invisible + non-interactive. */
-.auto-target-row.collapsed {
-  visibility: hidden;
-  pointer-events: none;
-}
-
 /* Auto-mode card gets a subtle gold-dashed outline so users can see at a
    glance that the bet button will trigger an auto-bet round. */
 .bet-card.auto-mode {
@@ -806,19 +803,17 @@
 }
 
 /* -------- Bets list (other players) --------
-   Locked to fixed height so adding rows (real or bot bets) does NOT push
-   the bet card up out of the player's tap zone. Internal scroll absorbs
-   row count changes. Halved from 28vh → 14vh so the game canvas + plane
-   get more vertical space (was too cramped). */
+   Default 14vh, but flex-shrink: 1 so it gracefully shrinks when the bet
+   card grows (e.g., Auto mode adds the target row). Internal scroll on
+   .bets-list-scroll absorbs row count changes regardless of outer height. */
 .bets-list-sheet {
   background: var(--bg-1);
   border: 1px solid var(--border);
   border-radius: 12px;
   display: flex;
   flex-direction: column;
-  flex: 0 0 14vh;
-  height: 14vh;
-  min-height: 110px;
+  flex: 0 1 14vh;
+  min-height: 80px;
   max-height: 14vh;
   overflow: hidden;
   padding-bottom: var(--safe-bottom);

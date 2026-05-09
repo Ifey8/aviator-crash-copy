@@ -182,47 +182,41 @@ export const BetCard: React.FC<Props> = ({ side }) => {
         ))}
       </div>
 
-      {/* Always rendered (with .collapsed in non-auto mode) so the card's
-          height — and therefore the CTA's Y position + tab-row position —
-          stay STABLE when the user toggles between Bet / Auto. Without this,
-          clicking Auto shifted the card top up by ~70px and the user lost
-          their tap target. */}
-      <div className={`auto-target-row ${mode !== "auto" ? "collapsed" : ""}`}>
-        <div className="auto-target-caption">Auto cashout target</div>
-        <div className="amount-stepper compact">
-          <button
-            className="step-btn"
-            onClick={() => setAutoTarget(Math.max(1.01, +(autoTarget - 0.1).toFixed(2)))}
-            disabled={betted}
-            aria-label="decrease target"
-            tabIndex={mode === "auto" ? 0 : -1}
-          >
-            −
-          </button>
-          <input
-            className="amount-input compact"
-            type="text"
-            inputMode="decimal"
-            value={`${autoTarget.toFixed(2)}x`}
-            onChange={(e) => {
-              const v = parseFloat(e.target.value.replace(/[^\d.]/g, ""));
-              if (!isNaN(v)) setAutoTarget(Math.max(1.01, v));
-            }}
-            disabled={betted}
-            aria-label="auto cashout target"
-            tabIndex={mode === "auto" ? 0 : -1}
-          />
-          <button
-            className="step-btn"
-            onClick={() => setAutoTarget(+(autoTarget + 0.1).toFixed(2))}
-            disabled={betted}
-            aria-label="increase target"
-            tabIndex={mode === "auto" ? 0 : -1}
-          >
-            +
-          </button>
+      {mode === "auto" && (
+        <div className="auto-target-row">
+          <div className="auto-target-caption">Auto cashout target</div>
+          <div className="amount-stepper compact">
+            <button
+              className="step-btn"
+              onClick={() => setAutoTarget(Math.max(1.01, +(autoTarget - 0.1).toFixed(2)))}
+              disabled={betted}
+              aria-label="decrease target"
+            >
+              −
+            </button>
+            <input
+              className="amount-input compact"
+              type="text"
+              inputMode="decimal"
+              value={`${autoTarget.toFixed(2)}x`}
+              onChange={(e) => {
+                const v = parseFloat(e.target.value.replace(/[^\d.]/g, ""));
+                if (!isNaN(v)) setAutoTarget(Math.max(1.01, v));
+              }}
+              disabled={betted}
+              aria-label="auto cashout target"
+            />
+            <button
+              className="step-btn"
+              onClick={() => setAutoTarget(+(autoTarget + 0.1).toFixed(2))}
+              disabled={betted}
+              aria-label="increase target"
+            >
+              +
+            </button>
+          </div>
         </div>
-      </div>
+      )}
 
       <div className="bet-cta-row">{cta}</div>
 
