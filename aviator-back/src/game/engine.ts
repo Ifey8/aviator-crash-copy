@@ -47,6 +47,13 @@ export class GameEngine extends EventEmitter {
   async start(): Promise<void> {
     const last = await RoundModel.findOne().sort({ roundId: -1 }).lean();
     this.roundId = last ? last.roundId + 1 : 1;
+    // Restore the last N crash points so new users (and post-restart
+    // sessions) see populated history chips instead of an empty bar.
+    const recent = await RoundModel.find()
+      .sort({ roundId: -1 })
+      .limit(config.historyLength)
+      .lean();
+    this.history = recent.map((r) => r.crashPoint).filter((x): x is number => typeof x === "number");
     this.beginBetPhase();
   }
 
