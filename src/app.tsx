@@ -5,6 +5,7 @@ import { AdminApp } from "./components/Admin/AdminApp";
 import { useAuth } from "./auth/AuthProvider";
 import "./components/Mobile/auth.scss";
 import "./components/Admin/admin.scss";
+import "./components/Mobile/luxe.scss"; // theme override — must load LAST
 
 function App() {
   const { user, hydrating } = useAuth();

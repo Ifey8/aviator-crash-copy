@@ -1,11 +1,8 @@
 import React from "react";
 import Context from "../../context";
 
-const colorFor = (m: number): string => {
-  if (m < 2) return "var(--crash-blue)";
-  if (m < 10) return "var(--crash-purple)";
-  return "var(--crash-gold)";
-};
+const tierFor = (m: number): "low" | "mid" | "high" =>
+  m < 2 ? "low" : m < 10 ? "mid" : "high";
 
 export const HistoryBar: React.FC = () => {
   const { history } = React.useContext(Context);
@@ -16,7 +13,7 @@ export const HistoryBar: React.FC = () => {
         <span
           key={`${i}-${m}`}
           className="history-chip"
-          style={{ color: colorFor(m), borderColor: colorFor(m) }}
+          data-tier={tierFor(m)}
           role="listitem"
         >
           {m.toFixed(2)}x

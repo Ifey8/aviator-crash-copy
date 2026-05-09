@@ -6,6 +6,7 @@ import { GameCanvas } from "./GameCanvas";
 import { BetCard } from "./BetCard";
 import { BetsListSheet } from "./BetsListSheet";
 import "./mobile.scss";
+import "./luxe.scss";
 
 const useTelegramTheme = () => {
   React.useEffect(() => {
@@ -33,6 +34,11 @@ export const MobileApp: React.FC = () => {
 
   return (
     <div className="mobile-app">
+      {/* Ambient drifting gold dust — pure CSS, 10 specks, behind everything. */}
+      <div className="luxe-dust" aria-hidden="true">
+        <span /><span /><span /><span /><span />
+        <span /><span /><span /><span /><span />
+      </div>
       <MobileHeader onOpenMenu={() => setMenuOpen(true)} />
       <main className="mobile-main">
         <HistoryBar />

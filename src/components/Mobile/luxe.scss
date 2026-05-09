@@ -1,0 +1,832 @@
+/* ===================================================================
+   THEME · "Rajasthani Royal Treasury"
+   ===================================================================
+   Loaded AFTER mobile.scss so it overrides without rewriting.
+   Aesthetic vision: dark maroon-velvet rooms, Mughal gold filigree,
+   Diwali lamp ambience. Cinzel display + tabular sans for numbers.
+   =================================================================== */
+
+:root {
+  /* --- Velvet base --- */
+  --bg-velvet-1: #1a0710;
+  --bg-velvet-2: #2a0e16;
+  --bg-velvet-3: #3d1019;
+  --bg-onyx:    #08050a;
+
+  /* --- Gold spectrum (highlight → midtone → engrave shadow) --- */
+  --gold-pale:    #fff5d4;
+  --gold-bright:  #fbd667;
+  --gold-rich:    #d4a83f;
+  --gold-deep:    #9c7019;
+  --gold-ember:   #6b4a0e;
+  --gold-ash:     #3a2807;
+
+  /* --- Jewels --- */
+  --ruby:        #c81a3a;
+  --ruby-deep:   #5a0610;
+  --emerald:     #2a8a5c;
+
+  /* --- Inks (text on backgrounds) --- */
+  --ink-onGold:  #2a1408;
+  --ink-cream:   #fff5dc;
+  --ink-cream-2: rgba(255, 245, 220, 0.78);
+  --ink-cream-3: rgba(255, 245, 220, 0.45);
+
+  /* Override mobile.scss tokens used by existing components */
+  --bg-0: var(--bg-onyx);
+  --bg-1: var(--bg-velvet-1);
+  --bg-2: var(--bg-velvet-2);
+  --bg-3: var(--bg-velvet-3);
+  --border: rgba(212, 168, 63, 0.18);
+  --text-light: var(--ink-cream);
+  --text-muted: var(--ink-cream-2);
+  --text-dim:   var(--ink-cream-3);
+  --crash-gold: var(--gold-rich);
+  --crash-gold-deep: var(--gold-deep);
+  --crash-saffron: var(--gold-bright);
+  --crash-marigold: var(--gold-bright);
+  --crash-red: var(--ruby);
+  --crash-red-deep: var(--ruby-deep);
+  --crash-green: var(--gold-bright);    /* re-channel "win green" → gold */
+  --crash-green-deep: var(--gold-deep);
+
+  /* Type scale */
+  --font-display: "Cinzel", "Cormorant Garamond", "Times New Roman", serif;
+  --font-flourish: "Cormorant Garamond", "Cinzel", serif;
+  --font-body: -apple-system, BlinkMacSystemFont, "SF Pro Text", system-ui,
+    "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+}
+
+/* ===================================================================
+   App shell — onyx background with Diwali-lamp glow corners
+   =================================================================== */
+
+.mobile-app {
+  font-family: var(--font-body);
+  background:
+    radial-gradient(ellipse 80% 60% at 50% -10%, rgba(212, 168, 63, 0.16), transparent 70%),
+    radial-gradient(ellipse 60% 40% at 0% 100%,  rgba(200, 26, 58, 0.08),  transparent 60%),
+    radial-gradient(ellipse 60% 40% at 100% 100%, rgba(212, 168, 63, 0.06), transparent 60%),
+    linear-gradient(180deg, var(--bg-velvet-1) 0%, var(--bg-onyx) 60%, var(--bg-onyx) 100%);
+  /* Subtle vellum noise for that slightly aged gold-leaf feel */
+  &::before {
+    content: "";
+    position: fixed;
+    inset: 0;
+    pointer-events: none;
+    z-index: 1;
+    background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='160' height='160'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='2' seed='3'/><feColorMatrix values='0 0 0 0 0.83  0 0 0 0 0.66  0 0 0 0 0.25  0 0 0 0.06 0'/></filter><rect width='100%25' height='100%25' filter='url(%23n)'/></svg>");
+    opacity: 0.55;
+    mix-blend-mode: screen;
+  }
+}
+
+/* ===================================================================
+   Header — velvet bar with engraved gold divider
+   =================================================================== */
+
+.mobile-header {
+  background:
+    linear-gradient(180deg, rgba(255, 245, 220, 0.04), transparent 40%),
+    linear-gradient(180deg, var(--bg-velvet-2), var(--bg-velvet-1));
+  border-bottom: none;
+  position: relative;
+  height: 50px;
+  padding: 8px 12px;
+  z-index: 10;
+
+  /* Gold filament + engraved shadow at the bottom edge */
+  &::after {
+    content: "";
+    position: absolute;
+    left: 12px; right: 12px; bottom: 0;
+    height: 1px;
+    background: linear-gradient(90deg,
+      transparent 0%,
+      var(--gold-deep) 18%,
+      var(--gold-rich) 35%,
+      var(--gold-bright) 50%,
+      var(--gold-rich) 65%,
+      var(--gold-deep) 82%,
+      transparent 100%);
+    box-shadow: 0 1px 0 rgba(0, 0, 0, 0.4);
+  }
+}
+
+.mobile-header-name {
+  font-family: var(--font-display);
+  font-weight: 900;
+  font-size: 14px;
+  letter-spacing: 0.22em;
+  background: linear-gradient(180deg,
+    var(--gold-pale) 0%,
+    var(--gold-bright) 35%,
+    var(--gold-rich) 70%,
+    var(--gold-deep) 100%);
+  -webkit-background-clip: text;
+          background-clip: text;
+  color: transparent;
+  filter: drop-shadow(0 1px 0 rgba(0, 0, 0, 0.6));
+}
+
+.mobile-header-balance {
+  background:
+    linear-gradient(180deg, rgba(212, 168, 63, 0.18), rgba(156, 112, 25, 0.08));
+  border: 1px solid var(--gold-deep);
+  border-radius: 10px;
+  padding: 5px 10px 5px 28px;
+  position: relative;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 245, 212, 0.18),
+    0 0 12px rgba(212, 168, 63, 0.16);
+
+  /* Gold coin on the left (pure CSS — concentric circles) */
+  &::before {
+    content: "₹";
+    position: absolute;
+    left: 6px;
+    top: 50%;
+    transform: translateY(-50%);
+    width: 18px;
+    height: 18px;
+    border-radius: 50%;
+    background:
+      radial-gradient(circle at 35% 30%, var(--gold-pale) 0%, var(--gold-bright) 30%, var(--gold-rich) 70%, var(--gold-deep) 100%);
+    box-shadow:
+      inset 0 1px 0 rgba(255, 245, 212, 0.7),
+      inset 0 -1px 0 rgba(58, 40, 7, 0.5),
+      0 0 6px rgba(212, 168, 63, 0.5);
+    color: var(--ink-onGold);
+    font-size: 11px;
+    font-weight: 900;
+    text-align: center;
+    line-height: 18px;
+    text-shadow: 0 1px 0 rgba(255, 245, 212, 0.4);
+  }
+
+  .balance-amount {
+    font-family: var(--font-body);
+    font-weight: 800;
+    font-variant-numeric: tabular-nums;
+    color: var(--gold-pale);
+    text-shadow:
+      0 0 6px rgba(251, 214, 103, 0.5),
+      0 1px 0 rgba(0, 0, 0, 0.45);
+  }
+  .balance-currency {
+    color: var(--gold-bright);
+    font-weight: 700;
+    letter-spacing: 0.08em;
+  }
+}
+
+.mobile-header-menu {
+  background:
+    linear-gradient(180deg, rgba(212, 168, 63, 0.16), rgba(156, 112, 25, 0.06));
+  border: 1px solid var(--gold-deep);
+  color: var(--gold-bright);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 245, 212, 0.20),
+    0 0 8px rgba(212, 168, 63, 0.12);
+}
+
+/* ===================================================================
+   History bar — coin medallion chips
+   =================================================================== */
+
+.history-chip {
+  font-family: var(--font-body);
+  font-variant-numeric: tabular-nums;
+  font-weight: 700;
+  border-radius: 999px;
+  padding: 3px 9px;
+  background: rgba(212, 168, 63, 0.05);
+  border: 1px solid var(--gold-ember);
+  color: var(--gold-bright) !important;
+}
+
+.history-chip[data-tier="low"] {
+  border-color: rgba(212, 168, 63, 0.40);
+  color: var(--gold-bright) !important;
+  background: rgba(212, 168, 63, 0.04);
+}
+.history-chip[data-tier="mid"] {
+  border-color: var(--gold-rich);
+  color: var(--gold-pale) !important;
+  background: linear-gradient(180deg, rgba(212, 168, 63, 0.18), rgba(156, 112, 25, 0.08));
+  box-shadow: 0 0 8px rgba(212, 168, 63, 0.18);
+}
+.history-chip[data-tier="high"] {
+  border-color: var(--gold-pale);
+  color: var(--ink-onGold) !important;
+  background:
+    linear-gradient(180deg, var(--gold-pale) 0%, var(--gold-bright) 40%, var(--gold-rich) 100%);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.55),
+    inset 0 -1px 0 rgba(58, 40, 7, 0.4),
+    0 0 14px rgba(251, 214, 103, 0.55);
+  font-weight: 900;
+}
+
+/* ===================================================================
+   Game canvas — onyx night sky with star-glow corners
+   =================================================================== */
+
+.game-canvas-wrap {
+  background:
+    radial-gradient(ellipse 60% 50% at 25% 80%, rgba(255, 153, 51, 0.20), transparent 60%),
+    radial-gradient(ellipse 50% 40% at 80% 18%, rgba(212, 168, 63, 0.12), transparent 70%),
+    linear-gradient(180deg, #0a0509 0%, #06030a 100%);
+  border: 1px solid var(--gold-ember);
+  box-shadow:
+    inset 0 0 0 1px rgba(212, 168, 63, 0.10),
+    0 8px 32px rgba(0, 0, 0, 0.6);
+  border-radius: 16px;
+  position: relative;
+  overflow: hidden;
+
+  /* Decorative gold corners — Mughal-arch hint, drawn with two thin pieces */
+  &::before, &::after {
+    content: "";
+    position: absolute;
+    width: 28px; height: 28px;
+    pointer-events: none;
+    z-index: 5;
+  }
+  &::before {
+    top: 6px; left: 6px;
+    border-top: 1.5px solid var(--gold-rich);
+    border-left: 1.5px solid var(--gold-rich);
+    border-top-left-radius: 14px;
+    box-shadow: -1px -1px 0 0 rgba(58, 40, 7, 0.6);
+  }
+  &::after {
+    top: 6px; right: 6px;
+    border-top: 1.5px solid var(--gold-rich);
+    border-right: 1.5px solid var(--gold-rich);
+    border-top-right-radius: 14px;
+    box-shadow: 1px -1px 0 0 rgba(58, 40, 7, 0.6);
+  }
+}
+
+.game-canvas-multiplier {
+  font-family: var(--font-display);
+  font-weight: 900;
+  font-style: normal;
+  letter-spacing: 0.02em;
+  background: linear-gradient(180deg,
+    var(--gold-pale) 0%,
+    var(--gold-bright) 45%,
+    var(--gold-rich) 78%,
+    var(--gold-deep) 100%);
+  -webkit-background-clip: text;
+          background-clip: text;
+  color: transparent;
+  filter:
+    drop-shadow(0 0 28px rgba(251, 214, 103, 0.45))
+    drop-shadow(0 0 14px rgba(212, 168, 63, 0.5))
+    drop-shadow(0 2px 0 rgba(0, 0, 0, 0.45));
+  text-shadow: none;
+  font-size: clamp(56px, 16vw, 110px);
+
+  .x-suffix {
+    font-style: italic;
+    font-weight: 700;
+    margin-left: 4px;
+    opacity: 0.95;
+  }
+}
+
+/* GAMEEND red multiplier — keep crash-red but ruby-tinted */
+.game-canvas-wrap.phase-end .game-canvas-multiplier {
+  background: linear-gradient(180deg, #ff8a9c 0%, #c81a3a 50%, #5a0610 100%);
+  -webkit-background-clip: text;
+          background-clip: text;
+}
+
+.game-canvas-flew {
+  font-family: var(--font-display);
+  font-weight: 900;
+  letter-spacing: 0.32em;
+  font-size: 14px;
+  color: var(--ruby);
+  text-shadow: 0 0 16px rgba(200, 26, 58, 0.6);
+}
+
+.game-canvas-status {
+  font-family: var(--font-display);
+  font-weight: 700;
+  letter-spacing: 0.28em;
+  color: rgba(255, 245, 220, 0.55);
+  font-size: 10px;
+}
+
+.game-canvas-countdown {
+  background: rgba(212, 168, 63, 0.08);
+}
+.game-canvas-countdown-bar {
+  background: linear-gradient(90deg,
+    var(--gold-deep), var(--gold-rich), var(--gold-pale), var(--gold-rich), var(--gold-deep));
+}
+
+.game-canvas-plane {
+  filter:
+    drop-shadow(0 4px 12px rgba(212, 168, 63, 0.65))
+    drop-shadow(0 0 18px rgba(251, 214, 103, 0.45));
+}
+
+/* ===================================================================
+   Bet cards — maroon velvet with gold filigree corners
+   =================================================================== */
+
+.bet-card {
+  background:
+    /* corner filigree, top-left + top-right via inline SVG */
+    url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='32' height='32' viewBox='0 0 32 32'><g fill='none' stroke='%23d4a83f' stroke-width='1.1' stroke-linecap='round' stroke-linejoin='round' opacity='0.7'><path d='M1 1 L11 1 M1 1 L1 11'/><path d='M5 1 Q7 5 5 7 Q3 5 5 1'/><circle cx='5' cy='7.5' r='0.8' fill='%23d4a83f'/></g></svg>") top 6px left 6px no-repeat,
+    url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='32' height='32' viewBox='0 0 32 32'><g fill='none' stroke='%23d4a83f' stroke-width='1.1' stroke-linecap='round' stroke-linejoin='round' opacity='0.7' transform='scale(-1,1) translate(-32,0)'><path d='M1 1 L11 1 M1 1 L1 11'/><path d='M5 1 Q7 5 5 7 Q3 5 5 1'/><circle cx='5' cy='7.5' r='0.8' fill='%23d4a83f'/></g></svg>") top 6px right 6px no-repeat,
+    linear-gradient(180deg, var(--bg-velvet-2), var(--bg-velvet-1));
+  border: 1px solid var(--gold-ember);
+  border-radius: 14px;
+  box-shadow:
+    inset 0 1px 0 rgba(212, 168, 63, 0.18),
+    inset 0 0 0 1px rgba(212, 168, 63, 0.05),
+    0 6px 20px rgba(0, 0, 0, 0.5);
+  padding: 12px 10px 10px;
+  z-index: 2;
+}
+
+.bet-card.auto-mode {
+  border-color: var(--gold-rich);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 245, 212, 0.25),
+    inset 0 0 0 1px rgba(212, 168, 63, 0.18),
+    0 0 22px rgba(251, 214, 103, 0.18),
+    0 6px 20px rgba(0, 0, 0, 0.5);
+}
+
+.bet-card-tabs {
+  background: rgba(8, 5, 10, 0.6);
+  border: 1px solid var(--gold-ember);
+
+  .tab {
+    color: rgba(255, 245, 220, 0.55);
+    font-family: var(--font-display);
+    font-weight: 700;
+    letter-spacing: 0.10em;
+    text-transform: uppercase;
+    font-size: 10px;
+    &.active {
+      background: linear-gradient(180deg, var(--gold-bright), var(--gold-deep));
+      color: var(--ink-onGold);
+      text-shadow: 0 1px 0 rgba(255, 245, 212, 0.5);
+    }
+  }
+}
+
+/* ===================================================================
+   Stepper + amount input — engraved gold ring
+   =================================================================== */
+
+.amount-stepper {
+  background: rgba(8, 5, 10, 0.7);
+  border: 1px solid var(--gold-ember);
+  border-radius: 999px;
+  box-shadow:
+    inset 0 0 0 1px rgba(212, 168, 63, 0.10),
+    inset 0 1px 0 rgba(0, 0, 0, 0.4);
+
+  .step-btn {
+    background: linear-gradient(180deg, rgba(212, 168, 63, 0.16), rgba(156, 112, 25, 0.04));
+    color: var(--gold-bright);
+    border-right: 1px solid var(--gold-ember);
+    &:last-child { border-right: none; border-left: 1px solid var(--gold-ember); }
+    &:active { background: linear-gradient(180deg, var(--gold-rich), var(--gold-deep)); color: var(--ink-onGold); }
+  }
+
+  .amount-input {
+    color: var(--gold-pale);
+    font-family: var(--font-body);
+    font-variant-numeric: tabular-nums;
+    text-shadow: 0 0 6px rgba(251, 214, 103, 0.30);
+    &.main { font-size: 19px; font-weight: 800; }
+  }
+}
+
+/* ===================================================================
+   Quick amounts — coin-tile chips
+   =================================================================== */
+
+.quick-amount-btn {
+  background: linear-gradient(180deg, rgba(212, 168, 63, 0.12), rgba(58, 40, 7, 0.30));
+  border: 1px solid var(--gold-ember);
+  color: var(--gold-bright);
+  font-family: var(--font-body);
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.02em;
+  &:active:not(:disabled) {
+    background: linear-gradient(180deg, var(--gold-rich), var(--gold-deep));
+    color: var(--ink-onGold);
+  }
+}
+
+/* ===================================================================
+   AUTO target row — engraved gold panel
+   =================================================================== */
+
+.auto-target-row {
+  background: linear-gradient(180deg, rgba(58, 40, 7, 0.6), rgba(8, 5, 10, 0.85));
+  border: 1px dashed var(--gold-rich);
+  .auto-target-caption {
+    font-family: var(--font-display);
+    font-weight: 700;
+    color: var(--gold-bright);
+    letter-spacing: 0.16em;
+  }
+  .amount-stepper .amount-input { color: var(--gold-bright); font-weight: 800; }
+}
+
+/* ===================================================================
+   CTAs — molten gold metallic with engraved text
+   =================================================================== */
+
+.bet-cta {
+  font-family: var(--font-display);
+  letter-spacing: 0.18em;
+  font-weight: 900;
+  text-transform: uppercase;
+  border-radius: 12px;
+  position: relative;
+  overflow: hidden;
+  isolation: isolate;
+  border-width: 1.5px;
+  min-height: 52px;
+
+  .cta-line-1 { font-size: 15px; }
+  .cta-line-2 {
+    font-family: var(--font-body);
+    font-weight: 700;
+    letter-spacing: 0.06em;
+    font-variant-numeric: tabular-nums;
+    margin-top: 2px;
+    opacity: 0.92;
+  }
+
+  /* Engraved sheen sweep on hover/idle (cycle every 5s for ambient luxe) */
+  &::after {
+    content: "";
+    position: absolute;
+    top: 0; left: -120%;
+    width: 35%; height: 100%;
+    background: linear-gradient(110deg,
+      transparent 0%,
+      rgba(255, 245, 212, 0.45) 45%,
+      transparent 90%);
+    transform: skewX(-18deg);
+    pointer-events: none;
+    animation: luxe-sheen 5s ease-in-out infinite;
+    animation-delay: var(--sheen-delay, 0s);
+  }
+}
+.bet-card:nth-child(2) .bet-cta { --sheen-delay: 2.5s; }
+
+@keyframes luxe-sheen {
+  0%, 78%, 100% { left: -120%; }
+  88%           { left: 220%;  }
+}
+
+/* BET (and AUTO BET) — gold metallic */
+.bet-cta.cta-bet,
+.bet-cta.cta-bet-auto {
+  background:
+    /* engraved bevel base */
+    linear-gradient(180deg,
+      var(--gold-pale)   0%,
+      var(--gold-bright) 22%,
+      var(--gold-rich)   55%,
+      var(--gold-deep)   95%,
+      var(--gold-ember)  100%);
+  color: var(--ink-onGold);
+  border-color: var(--gold-ember);
+  text-shadow: 0 1px 0 rgba(255, 245, 212, 0.55), 0 -1px 0 rgba(58, 40, 7, 0.4);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 245, 220, 0.7),
+    inset 0 -2px 0 rgba(58, 40, 7, 0.55),
+    0 4px 14px rgba(212, 168, 63, 0.45),
+    0 0 0 1px rgba(212, 168, 63, 0.30);
+}
+.bet-cta.cta-bet-auto {
+  /* Auto bet picks up a ruby crown — a sharp accent line at the top */
+  border-top: 2px solid var(--ruby);
+}
+
+/* CASH OUT — bright fire-gold, pulsing */
+.bet-cta.cta-cashout {
+  background:
+    linear-gradient(180deg,
+      var(--gold-pale)   0%,
+      #ffe89b           20%,
+      var(--gold-bright) 55%,
+      var(--gold-rich)  85%,
+      var(--gold-deep) 100%);
+  color: var(--ink-onGold);
+  border-color: var(--gold-pale);
+  text-shadow: 0 1px 0 rgba(255, 250, 220, 0.6);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 250, 220, 0.85),
+    inset 0 -2px 0 rgba(107, 74, 14, 0.55),
+    0 4px 18px rgba(251, 214, 103, 0.65),
+    0 0 24px rgba(255, 232, 155, 0.5);
+  animation: luxe-cta-pulse 1.4s ease-in-out infinite;
+}
+@keyframes luxe-cta-pulse {
+  0%, 100% { box-shadow:
+    inset 0 1px 0 rgba(255, 250, 220, 0.85),
+    inset 0 -2px 0 rgba(107, 74, 14, 0.55),
+    0 4px 18px rgba(251, 214, 103, 0.50),
+    0 0 18px rgba(255, 232, 155, 0.40); }
+  50%      { box-shadow:
+    inset 0 1px 0 rgba(255, 250, 220, 0.95),
+    inset 0 -2px 0 rgba(107, 74, 14, 0.55),
+    0 4px 22px rgba(251, 214, 103, 0.85),
+    0 0 32px rgba(255, 232, 155, 0.75); }
+}
+
+/* CANCEL — ruby cabochon */
+.bet-cta.cta-cancel {
+  background: linear-gradient(180deg, #f06479 0%, var(--ruby) 50%, var(--ruby-deep) 100%);
+  border-color: var(--ruby-deep);
+  color: var(--ink-cream);
+  text-shadow: 0 1px 0 rgba(0, 0, 0, 0.45);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 200, 210, 0.45),
+    inset 0 -2px 0 rgba(90, 6, 16, 0.5),
+    0 4px 14px rgba(200, 26, 58, 0.35);
+}
+
+/* CASHED OUT — won, locked-in gold trophy */
+.bet-cta.cta-won {
+  background:
+    linear-gradient(180deg,
+      var(--gold-pale)   0%,
+      var(--gold-bright) 30%,
+      var(--gold-rich)   70%,
+      var(--gold-deep)  100%);
+  color: var(--ink-onGold);
+  border-color: var(--gold-pale);
+  text-shadow: 0 1px 0 rgba(255, 250, 220, 0.6);
+}
+
+/* ===================================================================
+   AUTO ON pill — ruby cabochon set in gold
+   =================================================================== */
+
+.auto-on-pill {
+  background:
+    linear-gradient(180deg, rgba(212, 168, 63, 0.18), rgba(58, 40, 7, 0.4));
+  border: 1px solid var(--gold-rich);
+  color: var(--gold-bright);
+  font-family: var(--font-display);
+  font-weight: 700;
+  letter-spacing: 0.18em;
+  font-size: 10px;
+  text-transform: uppercase;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 245, 212, 0.18),
+    0 0 10px rgba(212, 168, 63, 0.20);
+
+  .dot {
+    background: var(--ruby);
+    box-shadow:
+      0 0 0 1.5px var(--gold-pale),
+      0 0 6px rgba(200, 26, 58, 0.7);
+  }
+  .stop-x {
+    color: var(--ruby);
+    font-family: var(--font-body);
+    letter-spacing: 0.08em;
+  }
+}
+
+/* ===================================================================
+   Bets list — gold-bordered ledger
+   =================================================================== */
+
+.bets-list-sheet {
+  background: linear-gradient(180deg, var(--bg-velvet-2), var(--bg-velvet-1));
+  border: 1px solid var(--gold-ember);
+  box-shadow:
+    inset 0 1px 0 rgba(212, 168, 63, 0.12),
+    0 6px 20px rgba(0, 0, 0, 0.4);
+}
+
+.bets-list-tabs .bets-tab {
+  font-family: var(--font-display);
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: rgba(255, 245, 220, 0.55);
+  &.active {
+    color: var(--gold-pale);
+    border-bottom-color: var(--gold-rich);
+  }
+  .bets-tab-count {
+    background: var(--gold-deep);
+    color: var(--ink-onGold);
+    font-family: var(--font-body);
+    font-weight: 800;
+  }
+}
+
+.bets-list-header {
+  color: var(--gold-deep);
+  font-weight: 800;
+  letter-spacing: 0.14em;
+}
+
+.bets-row {
+  font-variant-numeric: tabular-nums;
+  &.cashed {
+    background: linear-gradient(90deg, rgba(212, 168, 63, 0.10), transparent 70%);
+  }
+  .bets-row-user { color: var(--gold-pale); font-weight: 700; }
+  .bets-row-bet, .bets-row-cash { color: var(--ink-cream-2); }
+  .bets-row-mult { font-weight: 800; }
+}
+
+.bets-list-empty {
+  color: var(--gold-deep);
+  font-family: var(--font-flourish);
+  font-style: italic;
+  font-size: 13px;
+}
+
+/* ===================================================================
+   AuthScreen — burgundy chamber with gold filigree
+   =================================================================== */
+
+.auth-screen {
+  background:
+    radial-gradient(ellipse 70% 60% at 50% 20%, rgba(212, 168, 63, 0.12), transparent 70%),
+    radial-gradient(ellipse 50% 40% at 50% 100%, rgba(200, 26, 58, 0.10), transparent 65%),
+    linear-gradient(180deg, var(--bg-velvet-2) 0%, var(--bg-onyx) 100%);
+}
+.auth-card {
+  background:
+    /* same corner ornaments */
+    url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='40' height='40' viewBox='0 0 40 40'><g fill='none' stroke='%23d4a83f' stroke-width='1.2' stroke-linecap='round' stroke-linejoin='round'><path d='M2 2 L14 2 M2 2 L2 14'/><path d='M6 2 Q9 7 6 10 Q3 7 6 2'/><circle cx='6' cy='11' r='1' fill='%23d4a83f'/></g></svg>") top 8px left 8px no-repeat,
+    url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='40' height='40' viewBox='0 0 40 40'><g fill='none' stroke='%23d4a83f' stroke-width='1.2' stroke-linecap='round' stroke-linejoin='round' transform='scale(-1,1) translate(-40,0)'><path d='M2 2 L14 2 M2 2 L2 14'/><path d='M6 2 Q9 7 6 10 Q3 7 6 2'/><circle cx='6' cy='11' r='1' fill='%23d4a83f'/></g></svg>") top 8px right 8px no-repeat,
+    url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='40' height='40' viewBox='0 0 40 40'><g fill='none' stroke='%23d4a83f' stroke-width='1.2' stroke-linecap='round' stroke-linejoin='round' transform='scale(1,-1) translate(0,-40)'><path d='M2 2 L14 2 M2 2 L2 14'/><path d='M6 2 Q9 7 6 10 Q3 7 6 2'/><circle cx='6' cy='11' r='1' fill='%23d4a83f'/></g></svg>") bottom 8px left 8px no-repeat,
+    url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='40' height='40' viewBox='0 0 40 40'><g fill='none' stroke='%23d4a83f' stroke-width='1.2' stroke-linecap='round' stroke-linejoin='round' transform='scale(-1,-1) translate(-40,-40)'><path d='M2 2 L14 2 M2 2 L2 14'/><path d='M6 2 Q9 7 6 10 Q3 7 6 2'/><circle cx='6' cy='11' r='1' fill='%23d4a83f'/></g></svg>") bottom 8px right 8px no-repeat,
+    linear-gradient(180deg, rgba(42, 14, 22, 0.92) 0%, rgba(26, 7, 16, 0.92) 100%);
+  border: 1px solid var(--gold-ember);
+  box-shadow:
+    inset 0 1px 0 rgba(212, 168, 63, 0.20),
+    inset 0 0 0 1px rgba(212, 168, 63, 0.06),
+    0 30px 80px rgba(0, 0, 0, 0.6);
+  padding: 28px 22px;
+}
+
+.auth-brand h1 {
+  font-family: var(--font-display);
+  font-weight: 900;
+  letter-spacing: 0.30em;
+  font-size: 24px;
+  background: linear-gradient(180deg, var(--gold-pale), var(--gold-bright) 50%, var(--gold-rich));
+  -webkit-background-clip: text;
+          background-clip: text;
+  color: transparent;
+  filter: drop-shadow(0 2px 0 rgba(0, 0, 0, 0.4));
+}
+.auth-brand .auth-tag {
+  font-family: var(--font-flourish);
+  font-style: italic;
+  font-weight: 600;
+  letter-spacing: 0.18em;
+  font-size: 10px;
+  color: var(--gold-rich);
+  text-transform: uppercase;
+}
+
+.auth-tabs {
+  background: rgba(8, 5, 10, 0.7);
+  .auth-tab {
+    font-family: var(--font-display);
+    letter-spacing: 0.14em;
+    font-weight: 700;
+    text-transform: uppercase;
+    font-size: 10px;
+    &.active { background: linear-gradient(180deg, var(--gold-bright), var(--gold-deep)); color: var(--ink-onGold); text-shadow: 0 1px 0 rgba(255,245,212,0.5); }
+  }
+}
+
+.auth-field {
+  span {
+    font-family: var(--font-display);
+    color: var(--gold-rich);
+    letter-spacing: 0.16em;
+  }
+  input {
+    background: rgba(8, 5, 10, 0.7);
+    border: 1px solid var(--gold-ember);
+    color: var(--gold-pale);
+    font-family: var(--font-body);
+    font-size: 15px;
+    &:focus { border-color: var(--gold-rich); box-shadow: 0 0 0 3px rgba(212, 168, 63, 0.18); }
+  }
+}
+
+.auth-submit {
+  font-family: var(--font-display);
+  font-weight: 900;
+  letter-spacing: 0.20em;
+  font-size: 13px;
+  text-transform: uppercase;
+  background: linear-gradient(180deg,
+    var(--gold-pale) 0%,
+    var(--gold-bright) 30%,
+    var(--gold-rich) 70%,
+    var(--gold-deep) 100%);
+  color: var(--ink-onGold);
+  border: 1px solid var(--gold-pale);
+  text-shadow: 0 1px 0 rgba(255, 245, 212, 0.55);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 245, 212, 0.7),
+    inset 0 -2px 0 rgba(58, 40, 7, 0.6),
+    0 6px 18px rgba(212, 168, 63, 0.45);
+}
+
+.auth-footer {
+  font-family: var(--font-flourish);
+  font-style: italic;
+  font-size: 13px;
+  color: var(--ink-cream-2);
+  button { color: var(--gold-bright); font-family: var(--font-display); letter-spacing: 0.06em; }
+}
+
+.auth-error {
+  font-family: var(--font-body);
+  background: rgba(200, 26, 58, 0.12);
+  border-color: var(--ruby);
+  color: #ff8a9c;
+}
+
+/* ===================================================================
+   Modals
+   =================================================================== */
+
+.mobile-modal {
+  background: linear-gradient(180deg, var(--bg-velvet-2), var(--bg-velvet-1));
+  border: 1px solid var(--gold-rich);
+  h3 { font-family: var(--font-display); letter-spacing: 0.16em; color: var(--gold-pale); }
+  p  { color: var(--ink-cream-2); }
+  .modal-cta { background: linear-gradient(180deg, var(--gold-bright), var(--gold-deep)); color: var(--ink-onGold); }
+}
+
+.connection-toast {
+  background: linear-gradient(180deg, var(--ruby), var(--ruby-deep));
+  border: 1px solid var(--gold-rich);
+  color: var(--gold-pale);
+}
+
+/* ===================================================================
+   Ambient gold dust — slow drifting particles behind everything
+   =================================================================== */
+
+@keyframes luxe-dust {
+  0%   { transform: translate3d(0, -10vh, 0); opacity: 0; }
+  10%  { opacity: 1; }
+  90%  { opacity: 1; }
+  100% { transform: translate3d(8vw, 110vh, 0); opacity: 0; }
+}
+.luxe-dust {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 1;
+  overflow: hidden;
+}
+.luxe-dust span {
+  position: absolute;
+  width: 2px; height: 2px;
+  background: var(--gold-bright);
+  border-radius: 50%;
+  box-shadow: 0 0 6px rgba(251, 214, 103, 0.8), 0 0 12px rgba(212, 168, 63, 0.4);
+  animation: luxe-dust 18s linear infinite;
+}
+.luxe-dust span:nth-child(1)  { left:  4%; animation-delay:  0s;  animation-duration: 22s; }
+.luxe-dust span:nth-child(2)  { left: 12%; animation-delay:  3s;  animation-duration: 19s; }
+.luxe-dust span:nth-child(3)  { left: 21%; animation-delay:  7s;  animation-duration: 25s; width: 1.5px; height: 1.5px; }
+.luxe-dust span:nth-child(4)  { left: 34%; animation-delay: 11s;  animation-duration: 17s; }
+.luxe-dust span:nth-child(5)  { left: 45%; animation-delay: 14s;  animation-duration: 21s; width: 3px; height: 3px; }
+.luxe-dust span:nth-child(6)  { left: 58%; animation-delay:  1s;  animation-duration: 24s; }
+.luxe-dust span:nth-child(7)  { left: 67%; animation-delay:  9s;  animation-duration: 16s; width: 1.5px; height: 1.5px; }
+.luxe-dust span:nth-child(8)  { left: 76%; animation-delay:  5s;  animation-duration: 23s; }
+.luxe-dust span:nth-child(9)  { left: 85%; animation-delay: 13s;  animation-duration: 18s; }
+.luxe-dust span:nth-child(10) { left: 93%; animation-delay: 16s;  animation-duration: 20s; width: 2.5px; height: 2.5px; }
+
+@media (prefers-reduced-motion: reduce) {
+  .luxe-dust { display: none; }
+  .bet-cta::after { animation: none; }
+  .bet-cta.cta-cashout { animation: none; }
+}
