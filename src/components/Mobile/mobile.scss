@@ -739,6 +739,13 @@
   }
 }
 
+/* Collapsed: still occupies full height (so the card's tab/CTA Y stays
+   constant when toggling Bet ↔ Auto), but invisible + non-interactive. */
+.auto-target-row.collapsed {
+  visibility: hidden;
+  pointer-events: none;
+}
+
 /* Auto-mode card gets a subtle gold-dashed outline so users can see at a
    glance that the bet button will trigger an auto-bet round. */
 .bet-card.auto-mode {
@@ -798,15 +805,20 @@
     0 0 0 2px rgba(255, 200, 87, 0.30);
 }
 
-/* -------- Bets list (other players) -------- */
+/* -------- Bets list (other players) --------
+   Locked to fixed height so adding rows (real or bot bets) does NOT push
+   the bet card up out of the player's tap zone. Internal scroll absorbs
+   row count changes. */
 .bets-list-sheet {
   background: var(--bg-1);
   border: 1px solid var(--border);
   border-radius: 12px;
   display: flex;
   flex-direction: column;
-  flex: 0 0 auto;
-  max-height: 30vh;
+  flex: 0 0 28vh;
+  height: 28vh;
+  min-height: 200px;
+  max-height: 28vh;
   overflow: hidden;
   padding-bottom: var(--safe-bottom);
 }
