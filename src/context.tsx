@@ -409,9 +409,11 @@ export const Provider = ({ children }: any) => {
       toast.error(data.message);
     });
 
-    socket.on("success", (data) => {
-      toast.success(data);
-    });
+    // The "success" socket event drives the CoinFxLayer (gold-coin animation
+    // between balance and plane). The old top-of-screen toast was redundant
+    // and covered the header — visual feedback now lives entirely in the
+    // coin fly animation.
+    socket.on("success", () => {});
     return () => {
       socket.off("connect");
       socket.off("disconnect");
