@@ -351,16 +351,21 @@
 }
 
 /* -------- History bar --------
-   flex: 0 0 auto so the bar doesn't get squished by the flex algorithm
-   when content overflows in AUTO mode. (Default flex-shrink: 1 made
-   the chips' row shrink from ~31 → 15px, hiding half each chip.) */
+   Locked at a fixed 32px height so the chips' rounded pills never get
+   clipped at the bottom. flex-basis 32px AND min-height 32px together
+   prevent ANY flex-shrink (default min-height: auto wasn't enforcing
+   strongly enough — chips were getting bottom-clipped on tight
+   viewports when the rest of the layout overflowed). */
 .history-bar-mobile {
   display: flex;
-  flex: 0 0 auto;
+  flex: 0 0 32px;
+  height: 32px;
+  min-height: 32px;
+  align-items: center;
   gap: 6px;
   overflow-x: auto;
   overflow-y: hidden;
-  padding: 4px 2px;
+  padding: 0 2px;
   scrollbar-width: none;
   &::-webkit-scrollbar { display: none; }
 }
