@@ -1,0 +1,138 @@
+/* ====================================================================
+   Mobile overrides — surgical fixes for small viewports.
+   Keep this file isolated; do NOT mix into existing component SCSS.
+   Imported AFTER index.scss so these rules win without !important spam.
+   ==================================================================== */
+
+/* iOS safe-area + viewport math */
+:root {
+  --safe-top: env(safe-area-inset-top, 0px);
+  --safe-bottom: env(safe-area-inset-bottom, 0px);
+  --safe-left: env(safe-area-inset-left, 0px);
+  --safe-right: env(safe-area-inset-right, 0px);
+}
+
+html, body {
+  overflow-x: hidden;
+  -webkit-text-size-adjust: 100%;
+  touch-action: manipulation; /* removes 300ms tap delay */
+}
+
+@media (max-width: 991.98px) {
+  /* Body: no accidental horizontal scroll, respect notches */
+  body {
+    padding-left: var(--safe-left);
+    padding-right: var(--safe-right);
+  }
+
+  /* Loading rotation */
+  .myloading {
+    padding: 0 16px;
+  }
+
+  /* Game canvas: keep aspect ratio, never overflow */
+  .game-container {
+    width: 100%;
+    overflow: hidden;
+  }
+
+  .crash-game-area, .crash-container, canvas {
+    max-width: 100%;
+    height: auto !important;
+  }
+
+  /* Bet panel — bigger touch targets */
+  .bet-control button,
+  .bet-block button,
+  .navigation-switcher button {
+    min-height: 44px;
+    min-width: 44px;
+  }
+
+  /* Number input spinners — bigger tap area on mobile */
+  .input-spinner button,
+  .spinner button {
+    min-width: 32px;
+    min-height: 32px;
+  }
+}
+
+@media (max-width: 634px) {
+  /* Recharge / generic modals → fluid */
+  .recharge-body,
+  .auto-play-body,
+  .recharge .modal-body,
+  .modal-body {
+    width: 92vw !important;
+    max-width: 420px !important;
+    max-height: 85vh !important;
+    overflow-y: auto;
+    box-sizing: border-box;
+  }
+
+  /* History popup */
+  .history-popup,
+  .history-detail {
+    max-width: 95vw !important;
+    max-height: 80vh !important;
+    overflow-y: auto;
+  }
+
+  /* Bet panel: stack the dual bets vertically on phones */
+  .bet-container,
+  .bet-control-container {
+    flex-direction: column !important;
+    gap: 8px;
+  }
+
+  .bet-block {
+    width: 100% !important;
+    max-width: 100% !important;
+    margin: 0 !important;
+  }
+
+  /* Bets list table — give horizontal scroll instead of crushing columns */
+  .all-data-table,
+  .legend,
+  .my-bets-table {
+    font-size: 11px;
+  }
+
+  /* Header: hide non-critical text labels, keep icons */
+  .header-balance-label,
+  .header-username-label {
+    display: none !important;
+  }
+
+  /* Bottom-anchored buttons clear the iOS home indicator */
+  .bet-control,
+  .footer-actions {
+    padding-bottom: calc(8px + var(--safe-bottom));
+  }
+}
+
+@media (max-width: 414px) {
+  /* Extra small phones */
+  body {
+    font-size: 11px;
+  }
+
+  .crashed-text {
+    font-size: 48px !important;
+  }
+
+  /* Avatars shrink */
+  .user-avatar,
+  .bet-user-avatar {
+    width: 24px !important;
+    height: 24px !important;
+  }
+}
+
+/* Disable hover effects on touch devices to avoid sticky :hover after tap */
+@media (hover: none) {
+  .btn:hover,
+  button:hover {
+    background: inherit;
+  }
+}

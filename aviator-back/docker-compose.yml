@@ -1,0 +1,40 @@
+services:
+  mongo:
+    image: mongo:7
+    container_name: aviator-mongo
+    restart: unless-stopped
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongo_data:/data/db
+    healthcheck:
+      test: ["CMD", "mongosh", "--quiet", "--eval", "db.adminCommand('ping').ok"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  api:
+    build: .
+    container_name: aviator-api
+    restart: unless-stopped
+    depends_on:
+      mongo:
+        condition: service_healthy
+    environment:
+      PORT: 5000
+      MONGO_URI: mongodb://mongo:27017/aviator
+      JWT_SECRET: ${JWT_SECRET:-dev-secret-change-me}
+      TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN:-}
+      TELEGRAM_WEBAPP_URL: ${TELEGRAM_WEBAPP_URL:-http://localhost:3000}
+      ALLOW_DEV_AUTH: "true"
+      INITIAL_BALANCE: 1000
+      MIN_BET: 1
+      MAX_BET: 1000
+      BET_DURATION_MS: 5000
+      SETTLE_DURATION_MS: 3000
+      HOUSE_EDGE: 0.03
+    ports:
+      - "5000:5000"
+
+volumes:
+  mongo_data:
