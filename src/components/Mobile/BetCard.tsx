@@ -26,39 +26,48 @@ export const BetCard: React.FC<Props> = ({ side }) => {
   const minBet = ctx.minBet ?? 1;
   const maxBet = ctx.maxBet ?? 1000;
 
-  const setSafeAmount = (v: number) => setAmount(Math.max(minBet, Math.min(maxBet, +v.toFixed(2))));
+  const setSafeAmount = (v: number) =>
+    setAmount(Math.max(minBet, Math.min(maxBet, +v.toFixed(2))));
 
+  // Direct socket emission — bypasses the older state-watcher path that
+  // could drop the auto flag during React batching.
   const placeBet = () => {
     if (phase !== "BET") return;
-    if (amount > userInfo.balance) {
-      // surfaced via toast by error event; just no-op locally
-    }
+    if (amount > userInfo.balance) return;
+    const isAuto = mode === "auto";
+    const target = isAuto ? autoTarget : 2;
+
+    // Mirror to legacy state so the auto-repeat handler in context.tsx
+    // (which fires on finishGame for auto mode) still works.
     ctx.update({
       userInfo: {
         ...userInfo,
-        [side]: {
-          ...sideInfo,
-          betAmount: amount,
-          target: mode === "auto" ? autoTarget : 2,
-          auto: mode === "auto",
-        },
+        [side]: { ...sideInfo, betAmount: amount, target, auto: isAuto },
       },
     });
-    ctx.updateUserBetState({ [`${side}betState`]: true } as any);
+
+    // Emit directly — most reliable path.
+    const sock = (ctx as any).socket;
+    sock?.emit("playBet", { betAmount: amount, target, type: side, auto: isAuto });
+
+    // Optimistic UI flags.
+    ctx.updateUserBetState({ [`${side}betted`]: true } as any);
   };
 
   const cancelBet = () => {
-    ctx.updateUserBetState({ [`${side}betState`]: false, [`${side}betted`]: false } as any);
+    ctx.updateUserBetState(
+      { [`${side}betState`]: false, [`${side}betted`]: false } as any,
+    );
   };
 
   const cashOut = () => {
     callCashOut(Number((ctx.currentTarget as any) || 0), side);
   };
 
-  // Render state machine
-  let body: React.ReactNode;
+  // ---- CTA selection ----
+  let cta: React.ReactNode;
   if (phase === "PLAYING" && betted && !cashouted) {
-    body = (
+    cta = (
       <button className="bet-cta cta-cashout" onClick={cashOut}>
         <span className="cta-line-1">CASH OUT</span>
         <span className="cta-line-2">
@@ -67,30 +76,37 @@ export const BetCard: React.FC<Props> = ({ side }) => {
       </button>
     );
   } else if (betted && !cashouted) {
-    body = (
+    cta = (
       <button className="bet-cta cta-cancel" onClick={cancelBet}>
         <span className="cta-line-1">CANCEL</span>
         <span className="cta-line-2">{amount.toFixed(2)} INR</span>
       </button>
     );
   } else if (cashouted) {
-    body = (
+    cta = (
       <button className="bet-cta cta-won" disabled>
         <span className="cta-line-1">CASHED OUT</span>
         <span className="cta-line-2">+{cashAmount.toFixed(2)} INR</span>
       </button>
     );
   } else {
-    body = (
-      <button className="bet-cta cta-bet" onClick={placeBet} disabled={phase !== "BET"}>
-        <span className="cta-line-1">BET</span>
-        <span className="cta-line-2">{amount.toFixed(2)} INR</span>
+    cta = (
+      <button
+        className={`bet-cta ${mode === "auto" ? "cta-bet-auto" : "cta-bet"}`}
+        onClick={placeBet}
+        disabled={phase !== "BET"}
+      >
+        <span className="cta-line-1">{mode === "auto" ? "AUTO BET" : "BET"}</span>
+        <span className="cta-line-2">
+          {amount.toFixed(2)} INR
+          {mode === "auto" && ` · @${autoTarget.toFixed(2)}x`}
+        </span>
       </button>
     );
   }
 
   return (
-    <div className={`bet-card side-${side}`}>
+    <div className={`bet-card side-${side} ${mode === "auto" ? "auto-mode" : ""}`}>
       <div className="bet-card-tabs">
         <button
           className={`tab ${mode === "bet" ? "active" : ""}`}
@@ -108,37 +124,40 @@ export const BetCard: React.FC<Props> = ({ side }) => {
         </button>
       </div>
 
-      <div className="bet-card-row">
-        <div className="amount-stepper">
-          <button
-            className="step-btn"
-            onClick={() => setSafeAmount(amount - 1)}
-            disabled={betted}
-            aria-label="decrease"
-          >
-            −
-          </button>
-          <input
-            className="amount-input"
-            type="number"
-            inputMode="decimal"
-            value={amount}
-            onChange={(e) => setSafeAmount(Number(e.target.value))}
-            disabled={betted}
-            min={minBet}
-            max={maxBet}
-            step="1"
-          />
-          <button
-            className="step-btn"
-            onClick={() => setSafeAmount(amount + 1)}
-            disabled={betted}
-            aria-label="increase"
-          >
-            +
-          </button>
-        </div>
-        {body}
+      {/* Full-width stepper so the bet number gets real room.
+          Layout was previously stepper + CTA in a 2-column grid which
+          collapsed the input on small screens. */}
+      <div className="amount-stepper full">
+        <button
+          type="button"
+          className="step-btn"
+          onClick={() => setSafeAmount(amount - 1)}
+          disabled={betted}
+          aria-label="decrease"
+        >
+          −
+        </button>
+        <input
+          className="amount-input main"
+          type="text"
+          inputMode="decimal"
+          value={amount.toFixed(2)}
+          onChange={(e) => {
+            const v = parseFloat(e.target.value.replace(/[^\d.]/g, ""));
+            if (!isNaN(v)) setSafeAmount(v);
+          }}
+          disabled={betted}
+          aria-label="bet amount"
+        />
+        <button
+          type="button"
+          className="step-btn"
+          onClick={() => setSafeAmount(amount + 1)}
+          disabled={betted}
+          aria-label="increase"
+        >
+          +
+        </button>
       </div>
 
       <div className="quick-amounts">
@@ -156,7 +175,7 @@ export const BetCard: React.FC<Props> = ({ side }) => {
 
       {mode === "auto" && (
         <div className="auto-target-row">
-          <span>Auto cash out at</span>
+          <span className="auto-label">Auto @</span>
           <div className="amount-stepper compact">
             <button
               className="step-btn"
@@ -167,12 +186,13 @@ export const BetCard: React.FC<Props> = ({ side }) => {
             </button>
             <input
               className="amount-input compact"
-              type="number"
+              type="text"
               inputMode="decimal"
-              step="0.1"
-              min={1.01}
-              value={autoTarget}
-              onChange={(e) => setAutoTarget(Math.max(1.01, Number(e.target.value)))}
+              value={autoTarget.toFixed(2)}
+              onChange={(e) => {
+                const v = parseFloat(e.target.value.replace(/[^\d.]/g, ""));
+                if (!isNaN(v)) setAutoTarget(Math.max(1.01, v));
+              }}
               disabled={betted}
             />
             <button
@@ -183,9 +203,11 @@ export const BetCard: React.FC<Props> = ({ side }) => {
               +
             </button>
           </div>
-          <span className="x-suffix">x</span>
+          <span className="auto-x">x</span>
         </div>
       )}
+
+      <div className="bet-cta-row">{cta}</div>
     </div>
   );
 };

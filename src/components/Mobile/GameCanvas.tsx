@@ -2,6 +2,7 @@ import React from "react";
 import Context from "../../context";
 import { Plane } from "./Plane";
 import { FxLayer } from "./FxLayer";
+import { planeTracker } from "./planeTracker";
 
 /**
  * GameCanvas — the centerpiece. Draws:
@@ -94,19 +95,21 @@ export const GameCanvas: React.FC = () => {
       const phase = phaseRef.current;
       ctx.clearRect(0, 0, W, H);
 
-      const padX = 32;
-      const padBottom = 28;
-      const padTop = 36;
-      const T_MAX = 8; // seconds before x saturates at right edge
-      const M_MAX = 20; // multiplier before y saturates at top edge (log-mapped)
-      const LOG_MAX = Math.log(M_MAX);
+      const padX = 28;
+      const padBottom = 24;
+      const padTop = 30;
+      // x reaches the right edge at T_MAX seconds (slower than y so the
+      // dominant motion is upward — more "diagonal climb" feel)
+      const T_MAX = 10;
+      // y mapping uses cube-root so the climb is steep early:
+      //   1.5x → 30% up, 2x → 38%, 5x → 60%, 10x → 78%, 20x → 100%.
+      const M_MAX = 20;
+      const Y_POWER = 1 / 3;
 
       const xAt = (t: number) => padX + Math.min(t / T_MAX, 1) * (W - padX * 2);
-      // Logarithmic y so 2x already pushes 23% up, 5x at 54%, 10x at 77%.
-      // Linear scaling made the early climb (1.0–2.0x) look flat.
       const yAt = (m: number) => {
         if (m <= 1) return H - padBottom;
-        const k = Math.min(Math.log(m) / LOG_MAX, 1);
+        const k = Math.min(Math.pow((m - 1) / (M_MAX - 1), Y_POWER), 1);
         return H - padBottom - k * (H - padBottom - padTop);
       };
 
@@ -180,11 +183,15 @@ export const GameCanvas: React.FC = () => {
         ctx.setLineDash([]);
 
         // ---- Plane position + tilt (slope of the curve at end) ----
-        // Approximate slope using neighbor sample
         const slopeFrom = pts[pts.length - 4] || pts[0];
         const slopeAngle = Math.atan2(targetY - slopeFrom[1], targetX - slopeFrom[0]);
         plane.style.opacity = "1";
         plane.style.transform = `translate3d(${targetX - PLANE_HALF_W}px, ${targetY - PLANE_HALF_H}px, 0) rotate(${slopeAngle.toFixed(4)}rad)`;
+        // share plane center % for FxLayer (so crash burst + parachute origin
+        // anchor to the actual plane location, not a fixed center)
+        planeTracker.x = targetX / W;
+        planeTracker.y = targetY / H;
+        planeTracker.flying = true;
       } else if (phase === "BET") {
         if (liveMultRef.current) liveMultRef.current.textContent = "1.00";
         // Plane parked at runway origin (with idle bob from CSS class)
@@ -192,6 +199,9 @@ export const GameCanvas: React.FC = () => {
         const py = H - padBottom - PLANE_HALF_H * 1.2;
         plane.style.opacity = "1";
         plane.style.transform = `translate3d(${px}px, ${py}px, 0) rotate(0rad)`;
+        planeTracker.x = (px + PLANE_HALF_W) / W;
+        planeTracker.y = (py + PLANE_HALF_H) / H;
+        planeTracker.flying = false;
         if (phaseTextRef.current) phaseTextRef.current.style.opacity = "1";
         if (countdownRef.current) {
           countdownRef.current.style.opacity = "1";

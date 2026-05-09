@@ -117,26 +117,30 @@
   100% { opacity: 0; transform: translate(-50%, -50%) scale(1.9) rotate(60deg); }
 }
 
+/* Parachute drops FROM the plane — start tiny (plane-sized), open as it falls.
+   The drop curve covers a smaller distance so it stays inside the canvas. */
 @keyframes fx-para-mine-drop {
-  0%   { opacity: 0; transform: translate(-50%, -10%) scale(0.6); }
-  18%  { opacity: 1; transform: translate(-50%, -10%) scale(1); }
-  100% { opacity: 0.4; transform: translate(-50%, calc(120% + 80px)) scale(1) rotate(8deg); }
+  0%   { opacity: 0; transform: translate(-50%, -50%) scale(0.35); }
+  10%  { opacity: 1; transform: translate(-50%, -50%) scale(0.55); }
+  35%  { transform: translate(-50%, -10%) scale(1); }
+  100% { opacity: 0.3; transform: translate(-50%, calc(70% + 30px)) scale(1.15) rotate(6deg); }
 }
 
 @keyframes fx-para-mine-sway {
   0%, 100% { margin-left: 0; }
-  50%      { margin-left: 18px; }
+  50%      { margin-left: 14px; }
 }
 
 @keyframes fx-para-other-drop {
-  0%   { opacity: 0; transform: translate(-50%, -20%) scale(0.6); }
-  20%  { opacity: 1; transform: translate(-50%, -20%) scale(1); }
-  100% { opacity: 0; transform: translate(-50%, calc(180% + 60px)) scale(0.95) rotate(-6deg); }
+  0%   { opacity: 0; transform: translate(-50%, -50%) scale(0.3); }
+  15%  { opacity: 1; transform: translate(-50%, -40%) scale(0.7); }
+  40%  { transform: translate(-50%, -10%) scale(1); }
+  100% { opacity: 0; transform: translate(-50%, calc(80% + 30px)) scale(1) rotate(-4deg); }
 }
 
 @keyframes fx-para-other-sway {
   0%, 100% { margin-left: 0; }
-  50%      { margin-left: -10px; }
+  50%      { margin-left: -8px; }
 }
 
 .fx-layer {
@@ -491,39 +495,46 @@
   }
 }
 
-.bet-card-row {
-  display: grid;
-  grid-template-columns: 1fr 1.2fr;
-  gap: 8px;
-  align-items: stretch;
+/* Stepper occupies its own full-width row so the amount can never get
+   crowded out by the CTA. The CTA lives on its own row below. */
+.bet-cta-row {
+  display: flex;
+}
+.bet-cta-row .bet-cta {
+  flex: 1;
 }
 
 .amount-stepper {
   display: flex;
   align-items: stretch;
   background: var(--bg-0);
-  border: 1px solid var(--border);
+  border: 1px solid rgba(255, 200, 87, 0.18);
   border-radius: 999px;
   overflow: hidden;
-  min-height: 44px;
+  min-height: 38px;
+
+  &.full {
+    width: 100%;
+  }
 
   &.compact {
     min-height: 28px;
   }
 
   .step-btn {
-    flex: 0 0 28px;
-    background: transparent;
-    color: var(--text-light);
+    flex: 0 0 36px;
+    background: linear-gradient(180deg, rgba(255, 200, 87, 0.10), rgba(255, 153, 51, 0.04));
+    color: var(--crash-gold);
     border: none;
     font-size: 18px;
-    font-weight: 700;
+    font-weight: 800;
     cursor: pointer;
     padding: 0;
     line-height: 1;
+    transition: background 100ms;
 
     &:disabled { opacity: 0.4; cursor: not-allowed; }
-    &:active { background: var(--bg-2); }
+    &:active { background: rgba(255, 200, 87, 0.22); }
   }
 
   .amount-input {
@@ -532,16 +543,22 @@
     color: var(--text-light);
     border: none;
     text-align: center;
-    font-size: 16px;
-    font-weight: 700;
+    font-size: 17px;
+    font-weight: 800;
     font-variant-numeric: tabular-nums;
+    letter-spacing: 0.02em;
     width: 100%;
     min-width: 0;
-    padding: 0;
+    padding: 0 4px;
     outline: none;
+    line-height: 38px;
 
+    &.main {
+      font-size: 18px;
+    }
     &.compact {
-      font-size: 12px;
+      font-size: 13px;
+      line-height: 28px;
     }
     &::-webkit-outer-spin-button,
     &::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
@@ -665,16 +682,40 @@
 .auto-target-row {
   display: flex;
   align-items: center;
-  justify-content: space-between;
   gap: 6px;
   padding: 4px 6px;
   background: var(--bg-0);
-  border-radius: 6px;
+  border: 1px dashed rgba(255, 200, 87, 0.25);
+  border-radius: 8px;
   font-size: 11px;
   color: var(--text-muted);
 
-  .x-suffix { font-weight: 700; color: var(--text-light); }
-  .amount-stepper { flex: 0 0 110px; }
+  .auto-label {
+    font-weight: 700;
+    color: var(--crash-gold);
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+    flex: 0 0 auto;
+  }
+  .auto-x { font-weight: 800; color: var(--crash-gold); flex: 0 0 auto; }
+  .amount-stepper { flex: 1 1 auto; min-width: 100px; }
+}
+
+/* Auto-mode card gets a subtle gold-dashed outline so users can see at a
+   glance that the bet button will trigger an auto-bet round. */
+.bet-card.auto-mode {
+  border-color: rgba(255, 200, 87, 0.45);
+  box-shadow: 0 0 0 1px rgba(255, 200, 87, 0.15);
+}
+
+.bet-cta.cta-bet-auto {
+  background: linear-gradient(180deg, #3DE085 0%, #2ECC71 50%, #1E8449 100%);
+  border-color: #FFC857;
+  box-shadow:
+    0 1px 0 rgba(255,255,255,0.35) inset,
+    0 -2px 0 #166034 inset,
+    0 4px 14px rgba(46, 204, 113, 0.35),
+    0 0 0 2px rgba(255, 200, 87, 0.30);
 }
 
 /* -------- Bets list (other players) -------- */

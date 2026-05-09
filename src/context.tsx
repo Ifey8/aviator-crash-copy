@@ -198,16 +198,49 @@ export const Provider = ({ children }: any) => {
       attrs.userInfo.balance = user.balance;
       attrs.userInfo.userType = user.userType;
       attrs.userInfo.userName = user.userName;
+      // Sync the server-authoritative cashout/bet state into state.userInfo.f/s
+      // (engine flips cashouted→true on auto-cashout; UI must reflect that).
+      // Preserve user-controlled fields: target, auto (those live on the client).
+      for (const side of ["f", "s"] as const) {
+        const u = user[side];
+        const cur = attrs.userInfo[side];
+        if (u) {
+          attrs.userInfo[side] = {
+            ...cur,
+            betted: !!u.betted,
+            cashouted: !!u.cashouted,
+            cashAmount: Number(u.cashAmount || 0),
+            // server's cashOutAt is sometimes named differently; fall back gracefully
+            // betAmount on server is authoritative once a bet has been placed
+            betAmount: u.betted ? Number(u.betAmount || cur.betAmount) : cur.betAmount,
+          };
+        }
+      }
       update(attrs);
-      // Keep the standalone userInfo state in sync — Header reads from this.
-      setUserInfo((prev) => ({
-        ...prev,
-        balance: user.balance,
-        userType: user.userType,
-        userName: user.userName,
-        avatar: (user as any).avatar ?? prev.avatar,
-        token: (user as any).token ?? prev.token,
-      }));
+      // Mirror the same cashout sync into standalone userInfo for BetCard.
+      setUserInfo((prev) => {
+        const next = {
+          ...prev,
+          balance: user.balance,
+          userType: user.userType,
+          userName: user.userName,
+          avatar: (user as any).avatar ?? prev.avatar,
+          token: (user as any).token ?? prev.token,
+        } as any;
+        for (const side of ["f", "s"] as const) {
+          const u = user[side];
+          if (u) {
+            next[side] = {
+              ...prev[side],
+              betted: !!u.betted,
+              cashouted: !!u.cashouted,
+              cashAmount: Number(u.cashAmount || 0),
+              betAmount: u.betted ? Number(u.betAmount || prev[side].betAmount) : prev[side].betAmount,
+            };
+          }
+        }
+        return next;
+      });
     });
 
     socket.on("history", (history: any) => {

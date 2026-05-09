@@ -1,6 +1,7 @@
 import React from "react";
 import Context from "../../context";
 import { Parachute, BurstSuccess, BurstCrash } from "./Effects";
+import { planeTracker } from "./planeTracker";
 
 /**
  * FxLayer — overlays celebration effects on the game canvas.
@@ -65,10 +66,11 @@ export const FxLayer: React.FC = () => {
       const m = msg.match(/cashed?\s*out\s*@\s*([\d.]+)/i);
       if (m) {
         const mult = Number(m[1]);
+        // anchor parachute to current plane location
         push({
           kind: "para-mine",
-          x: 0.5,
-          y: 0.45,
+          x: planeTracker.x,
+          y: planeTracker.y,
           variant: Math.floor(Math.random() * VARIANT_COUNT),
           payout: `${mult.toFixed(2)}x`,
           ttl: 4000,
@@ -116,8 +118,9 @@ export const FxLayer: React.FC = () => {
   const lastPhaseRef = React.useRef<string | null>(null);
   React.useEffect(() => {
     if (phase === "GAMEEND" && lastPhaseRef.current !== "GAMEEND") {
-      // Position will be near current plane spot — just put it center-ish.
-      push({ kind: "crash", x: 0.55, y: 0.42, ttl: 800 });
+      // anchor burst to plane's last position so it's clearly the plane
+      // exploding, not a generic decoration
+      push({ kind: "crash", x: planeTracker.x, y: planeTracker.y, ttl: 800 });
     }
     lastPhaseRef.current = phase as string;
   }, [phase, push]);
@@ -140,21 +143,21 @@ export const FxLayer: React.FC = () => {
         if (it.kind === "para-mine") {
           return (
             <div key={it.id} className="fx-para fx-para-mine" style={style}>
-              <Parachute size={84} variant={it.variant} payout={it.payout} />
+              <Parachute size={56} variant={it.variant} payout={it.payout} />
             </div>
           );
         }
         if (it.kind === "para-other") {
           return (
             <div key={it.id} className="fx-para fx-para-other" style={style}>
-              <Parachute size={48} variant={it.variant} label={it.label} payout={it.payout} />
+              <Parachute size={40} variant={it.variant} label={it.label} payout={it.payout} />
             </div>
           );
         }
         if (it.kind === "crash") {
           return (
             <div key={it.id} className="fx-crash" style={style}>
-              <BurstCrash size={130} />
+              <BurstCrash size={100} />
             </div>
           );
         }
