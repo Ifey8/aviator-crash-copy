@@ -21,6 +21,28 @@ export const config = {
   rechargeMinAmount: num(process.env.RECHARGE_MIN_AMOUNT, 100),
   rechargeMaxAmount: num(process.env.RECHARGE_MAX_AMOUNT, 50000),
   rechargeOrderTtlMs: num(process.env.RECHARGE_ORDER_TTL_MS, 15 * 60 * 1000),
+
+  // -------- Crypto (TRON / USDT-TRC20) recharge --------
+  // Network: "shasta" (testnet) | "mainnet" | "" (disabled)
+  tronNetwork: (process.env.TRON_NETWORK || "shasta") as "shasta" | "mainnet" | "",
+  /** Receiver wallet — your TronLink address. */
+  tronReceiver: process.env.TRON_USDT_RECEIVER || "",
+  /** USDT TRC20 contract address. Shasta: your deployed MockUSDT. Mainnet: TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t. */
+  tronContract: process.env.TRON_USDT_CONTRACT || "",
+  /** Optional TronGrid API key (improves rate limits). */
+  trongridApiKey: process.env.TRONGRID_API_KEY || "",
+  /** Watcher poll interval (ms). 30s default — fine for testnet. */
+  cryptoWatchIntervalMs: num(process.env.CRYPTO_WATCH_INTERVAL_MS, 30_000),
+  /** Min confirmations before crediting. 1 for testnet, 19+ for prod USDT mainnet. */
+  cryptoMinConfirmations: num(process.env.CRYPTO_MIN_CONFIRMATIONS, 1),
+  /** Order expiry (ms). 15min default. */
+  cryptoOrderTtlMs: num(process.env.CRYPTO_ORDER_TTL_MS, 15 * 60 * 1000),
+  /** Min/max USDT per order. */
+  cryptoMinUsdt: num(process.env.CRYPTO_MIN_USDT, 10),
+  cryptoMaxUsdt: num(process.env.CRYPTO_MAX_USDT, 5000),
+  /** Used when CoinGecko is unreachable. Manually adjust as needed. */
+  usdtInrRateFallback: num(process.env.USDT_INR_RATE, 83),
+
   allowDevAuth: bool(process.env.ALLOW_DEV_AUTH, true),
   initialBalance: num(process.env.INITIAL_BALANCE, 1000),
   minBet: num(process.env.MIN_BET, 1),

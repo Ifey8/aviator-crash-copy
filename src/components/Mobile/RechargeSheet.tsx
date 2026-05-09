@@ -1,6 +1,7 @@
 import React from "react";
 import Context from "../../context";
 import { config } from "../../config";
+import { CryptoPayPanel } from "./CryptoPayPanel";
 
 /**
  * RechargeSheet — bottom sheet for topping up balance via a payment provider.
@@ -25,7 +26,8 @@ import { config } from "../../config";
 
 const PRESETS = [100, 500, 1000, 2000, 5000];
 
-type Step = "picker" | "creating" | "pending" | "success" | "failed";
+type PayMethod = "fiat" | "crypto";
+type Step = "picker" | "creating" | "pending" | "success" | "failed" | "crypto";
 
 interface OrderData {
   orderId: string;
@@ -55,6 +57,7 @@ export const RechargeSheet: React.FC<Props> = ({ open, onClose }) => {
 
   const [step, setStep] = React.useState<Step>("picker");
   const [amount, setAmount] = React.useState<number>(500);
+  const [method, setMethod] = React.useState<PayMethod>("fiat");
   const [customInput, setCustomInput] = React.useState("");
   const [order, setOrder] = React.useState<OrderData | null>(null);
   const [error, setError] = React.useState<string | null>(null);
@@ -66,6 +69,7 @@ export const RechargeSheet: React.FC<Props> = ({ open, onClose }) => {
       setOrder(null);
       setError(null);
       setCustomInput("");
+      setMethod("fiat");
     }
   }, [open]);
 
@@ -113,6 +117,13 @@ export const RechargeSheet: React.FC<Props> = ({ open, onClose }) => {
   const handleConfirm = async (): Promise<void> => {
     if (amount <= 0) {
       setError("Enter a valid amount");
+      return;
+    }
+    if (method === "crypto") {
+      // Crypto path is handled by CryptoPayPanel as a separate step.
+      // It owns its own create/poll/socket logic since the flow differs
+      // (no payment URL to open — user transfers from their own wallet).
+      setStep("crypto");
       return;
     }
     setStep("creating");
@@ -170,6 +181,29 @@ export const RechargeSheet: React.FC<Props> = ({ open, onClose }) => {
           <div className="rs-picker">
             <h3 className="rs-title">Top up balance</h3>
             <p className="rs-sub">Choose an amount to add to your wallet.</p>
+
+            {/* Pay-method selector — fiat (UPI/cards via mock provider) vs
+                crypto (USDT-TRC20 on TRON). The chosen method changes how
+                Continue routes; amount stays the same in INR. */}
+            <div className="rs-method-tabs">
+              <button
+                type="button"
+                className={`rs-method ${method === "fiat" ? "active" : ""}`}
+                onClick={() => setMethod("fiat")}
+              >
+                <span className="rs-method-name">UPI / Cards</span>
+                <span className="rs-method-sub">INR</span>
+              </button>
+              <button
+                type="button"
+                className={`rs-method ${method === "crypto" ? "active" : ""}`}
+                onClick={() => setMethod("crypto")}
+              >
+                <span className="rs-method-name">USDT</span>
+                <span className="rs-method-sub">TRC-20</span>
+              </button>
+            </div>
+
             <div className="rs-presets">
               {PRESETS.map((p) => (
                 <button
@@ -200,13 +234,23 @@ export const RechargeSheet: React.FC<Props> = ({ open, onClose }) => {
               />
             </div>
             <button className="rs-cta" onClick={handleConfirm}>
-              Continue · ₹{amount.toLocaleString("en-IN")}
+              Continue · ₹{amount.toLocaleString("en-IN")}{method === "crypto" ? " · USDT" : ""}
             </button>
             {error && <div className="rs-error">{error}</div>}
             <p className="rs-fine">
-              Minimum ₹100 · Maximum ₹50,000 · Funds usually arrive within 1 minute.
+              {method === "crypto"
+                ? "Minimum 10 USDT · Live USDT/INR rate · Funds credit on 1 confirmation"
+                : "Minimum ₹100 · Maximum ₹50,000 · Funds usually arrive within 1 minute"}
             </p>
           </div>
+        )}
+
+        {step === "crypto" && (
+          <CryptoPayPanel
+            amountInr={amount}
+            onDone={onClose}
+            onRetry={() => setStep("picker")}
+          />
         )}
 
         {step === "creating" && (

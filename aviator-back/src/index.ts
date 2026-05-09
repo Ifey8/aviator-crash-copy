@@ -10,6 +10,8 @@ import { authRouter } from "./routes/auth";
 import { userRouter } from "./routes/user";
 import { adminRouter } from "./routes/admin";
 import { rechargeRouter } from "./routes/recharge";
+import { cryptoRouter } from "./routes/crypto";
+import { startTronWatcher } from "./payment/providers/tron";
 import { startTelegramBot } from "./bot/telegram";
 
 const app = express();
@@ -29,6 +31,7 @@ app.get("/health", (_req, res) =>
 app.use("/api/auth", authRouter);
 app.use("/api/admin", adminRouter);
 app.use("/api/recharge", rechargeRouter);
+app.use("/api/crypto", cryptoRouter);
 app.use("/api", userRouter);
 
 const server = http.createServer(app);
@@ -42,6 +45,7 @@ const main = async () => {
   initSockets(io);
   await engine.start();
   await startTelegramBot();
+  startTronWatcher();
   server.listen(config.port, () => {
     console.log(`[api] listening on :${config.port}`);
   });

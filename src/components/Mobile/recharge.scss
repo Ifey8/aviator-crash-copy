@@ -97,6 +97,49 @@
   font-size: 13px;
 }
 
+/* Method tabs (UPI/Cards vs Crypto) above the amount picker. */
+.rs-method-tabs {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  margin-bottom: 14px;
+  background: rgba(255, 245, 220, 0.04);
+  border: 1px solid rgba(255, 200, 87, 0.15);
+  border-radius: 12px;
+  padding: 4px;
+}
+.rs-method {
+  background: transparent;
+  border: 0;
+  color: rgba(255, 245, 220, 0.5);
+  padding: 8px 6px;
+  border-radius: 8px;
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1px;
+  transition: all 140ms;
+  &:hover { color: #fff5dc; }
+  &.active {
+    background:
+      linear-gradient(180deg, rgba(255, 200, 87, 0.20) 0%, rgba(255, 153, 51, 0.10) 100%);
+    color: #ffe9a8;
+    box-shadow: inset 0 0 0 1px rgba(255, 200, 87, 0.45);
+  }
+}
+.rs-method-name {
+  font-family: "Cinzel", serif;
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+}
+.rs-method-sub {
+  font-size: 9px;
+  letter-spacing: 0.10em;
+  opacity: 0.65;
+}
+
 .rs-presets {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
@@ -317,6 +360,133 @@
   0%   { transform: scale(0.4); opacity: 0; }
   70%  { transform: scale(1.12); }
   100% { transform: scale(1); opacity: 1; }
+}
+
+/* ============================================================
+   CryptoPayPanel — USDT-TRC20 pending state (QR + address).
+   ============================================================ */
+.cp-pending {
+  text-align: center;
+}
+.cp-network-badge {
+  display: inline-block;
+  font-size: 9px;
+  letter-spacing: 0.18em;
+  font-weight: 800;
+  color: #ffd86b;
+  background: rgba(212, 168, 63, 0.10);
+  border: 1px solid rgba(212, 168, 63, 0.40);
+  padding: 3px 8px;
+  border-radius: 999px;
+  margin-bottom: 10px;
+}
+.cp-amount-row {
+  margin-bottom: 14px;
+}
+.cp-amount-usdt {
+  font-family: "Cinzel", serif;
+  font-weight: 900;
+  color: #ffe9a8;
+  text-shadow: 0 0 18px rgba(255, 200, 87, 0.45);
+  margin-bottom: 2px;
+}
+.cp-amount-num {
+  font-size: 38px;
+  letter-spacing: 0.02em;
+}
+.cp-amount-unit {
+  font-size: 16px;
+  margin-left: 6px;
+  color: var(--crash-gold);
+}
+.cp-amount-inr {
+  font-size: 12px;
+  color: rgba(255, 245, 220, 0.55);
+  font-variant-numeric: tabular-nums;
+}
+.cp-rate {
+  opacity: 0.55;
+  font-size: 11px;
+  margin-left: 4px;
+}
+.cp-qr-wrap {
+  display: flex;
+  justify-content: center;
+  margin: 10px 0 16px;
+  padding: 10px;
+  background: #fff5dc;
+  border-radius: 10px;
+  width: fit-content;
+  margin-left: auto;
+  margin-right: auto;
+  box-shadow: 0 0 0 1px rgba(255, 200, 87, 0.4), 0 6px 20px rgba(0,0,0,0.35);
+}
+.cp-field {
+  text-align: left;
+  margin-bottom: 10px;
+}
+.cp-field-label {
+  display: block;
+  font-size: 10px;
+  letter-spacing: 0.12em;
+  color: rgba(255, 245, 220, 0.5);
+  text-transform: uppercase;
+  margin-bottom: 4px;
+}
+.cp-field-value {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  background: rgba(255, 245, 220, 0.04);
+  border: 1px solid rgba(255, 200, 87, 0.22);
+  border-radius: 8px;
+  padding: 7px 10px;
+  code {
+    flex: 1;
+    font-family: "SF Mono", "Roboto Mono", monospace;
+    font-size: 12px;
+    color: #fff5dc;
+    word-break: break-all;
+    line-height: 1.35;
+  }
+}
+.cp-copy-btn {
+  flex-shrink: 0;
+  background: linear-gradient(180deg, rgba(255, 200, 87, 0.30) 0%, rgba(255, 153, 51, 0.15) 100%);
+  border: 1px solid rgba(255, 200, 87, 0.55);
+  color: #ffe9a8;
+  padding: 5px 9px;
+  border-radius: 6px;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: all 120ms;
+  &:hover {
+    background: linear-gradient(180deg, rgba(255, 200, 87, 0.40) 0%, rgba(255, 153, 51, 0.20) 100%);
+  }
+}
+.cp-countdown {
+  margin: 14px 0 8px;
+}
+.cp-warn {
+  font-size: 11px;
+  line-height: 1.5;
+  color: rgba(255, 215, 100, 0.75);
+  background: rgba(193, 34, 68, 0.08);
+  border: 1px solid rgba(255, 200, 87, 0.20);
+  padding: 8px 10px;
+  border-radius: 8px;
+  margin: 12px 0 4px;
+  text-align: left;
+  b { color: #ffe9a8; }
+}
+.cp-txhash {
+  font-family: "SF Mono", "Roboto Mono", monospace;
+  font-size: 11px;
+  color: rgba(255, 245, 220, 0.5);
+  margin: 4px 0 12px;
 }
 
 /* ============================================================
