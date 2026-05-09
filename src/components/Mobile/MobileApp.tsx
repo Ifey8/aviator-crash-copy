@@ -6,7 +6,9 @@ import { GameCanvas } from "./GameCanvas";
 import { BetCard } from "./BetCard";
 import { BetsListSheet } from "./BetsListSheet";
 import "./mobile.scss";
-import "./luxe.scss";
+// luxe.scss is imported from src/app.tsx as the LAST stylesheet so its
+// theme overrides win the cascade. Don't re-import here — webpack dedup
+// would lock in the earliest position and let auth.scss override luxe.
 
 const useTelegramTheme = () => {
   React.useEffect(() => {
