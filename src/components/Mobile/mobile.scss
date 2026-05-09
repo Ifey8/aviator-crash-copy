@@ -808,17 +808,18 @@
 /* -------- Bets list (other players) --------
    Locked to fixed height so adding rows (real or bot bets) does NOT push
    the bet card up out of the player's tap zone. Internal scroll absorbs
-   row count changes. */
+   row count changes. Halved from 28vh → 14vh so the game canvas + plane
+   get more vertical space (was too cramped). */
 .bets-list-sheet {
   background: var(--bg-1);
   border: 1px solid var(--border);
   border-radius: 12px;
   display: flex;
   flex-direction: column;
-  flex: 0 0 28vh;
-  height: 28vh;
-  min-height: 200px;
-  max-height: 28vh;
+  flex: 0 0 14vh;
+  height: 14vh;
+  min-height: 110px;
+  max-height: 14vh;
   overflow: hidden;
   padding-bottom: var(--safe-bottom);
 }
