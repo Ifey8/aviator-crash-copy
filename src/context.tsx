@@ -342,6 +342,29 @@ export const Provider = ({ children }: any) => {
       }));
     });
 
+    // Defensive: when the server announces a fresh BET phase, eagerly clear
+    // any stale "cashouted/betted" UI state from the previous round so the
+    // BetCard re-renders the BET CTA. The server also emits an authoritative
+    // myInfo at this moment, but doing this client-side avoids a flash of
+    // the old state while the network round-trip lands.
+    let lastSeenPhase: string | null = null;
+    socket.on("gameState", (gs: GameStatusType) => {
+      if (gs?.GameState === "BET" && lastSeenPhase !== "BET") {
+        setUserInfo((prev) => ({
+          ...prev,
+          f: { ...prev.f, betted: false, cashouted: false, cashAmount: 0 },
+          s: { ...prev.s, betted: false, cashouted: false, cashAmount: 0 },
+        }));
+        setUserBetState((prev) => ({
+          fbetState: prev.fbetState, // preserve auto-repeat intent
+          fbetted: false,
+          sbetState: prev.sbetState,
+          sbetted: false,
+        }));
+      }
+      lastSeenPhase = gs?.GameState ?? null;
+    });
+
     socket.on("getBetLimits", (betAmounts: { max: number; min: number }) => {
       setBetLimit({ maxBet: betAmounts.max, minBet: betAmounts.min });
     });

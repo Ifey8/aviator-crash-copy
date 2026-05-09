@@ -44,8 +44,22 @@ const announcePhase = (io: Server) => {
 };
 
 export const initSockets = (io: Server): void => {
+  const sessionByUser = new Map<string, Socket>();
+
   // Wire engine events to broadcasts
-  engine.on("phaseChange", () => announcePhase(io));
+  engine.on("phaseChange", () => {
+    announcePhase(io);
+    // When a fresh BET phase starts, the engine has just reset every
+    // player's f/s sides to emptySide(). Push that authoritative reset
+    // to every connected client so the BetCard UI flips out of any
+    // lingering "CASHED OUT" state from the previous round.
+    if (engine.phase === "BET") {
+      for (const [userName, sock] of sessionByUser.entries()) {
+        const p = engine.getPlayer(userName);
+        if (p) sock.emit("myInfo", userToFrontend(p));
+      }
+    }
+  });
   engine.on("tick", () => broadcastGameState(io));
   engine.on("betPlaced", () => broadcastBets(io));
   engine.on("cashOut", () => broadcastBets(io));
@@ -61,8 +75,6 @@ export const initSockets = (io: Server): void => {
       }
     },
   );
-
-  const sessionByUser = new Map<string, Socket>();
 
   io.on("connection", (socket: Socket) => {
     let userName: string | null = null;
