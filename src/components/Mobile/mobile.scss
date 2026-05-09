@@ -976,17 +976,26 @@
   .mobile-main {
     display: grid;
     grid-template-columns: 320px 1fr;
-    grid-template-rows: auto auto;
+    /* Explicit row sizing — was `auto auto` (only 2 rows for 3 areas)
+       which made the 3 implicit rows split available height evenly,
+       stretching the history pills vertically into giant capsules. */
+    grid-template-rows: auto 1fr auto;
     grid-template-areas:
       "sheet  history"
       "sheet  game"
       "sheet  bets";
     gap: 8px;
   }
-  .history-bar-mobile { grid-area: history; }
-  .game-canvas-wrap   { grid-area: game; min-height: 320px; }
+  .history-bar-mobile {
+    grid-area: history;
+    /* Chips have flex:0 0 auto width but the flex container's default
+       align-items:stretch was making them grow to fill the row height
+       on tall viewports. Anchor chips to their natural height. */
+    align-items: center;
+  }
+  .game-canvas-wrap   { grid-area: game; min-height: 320px; height: auto; }
   .bet-cards-grid     { grid-area: bets; }
-  .bets-list-sheet    { grid-area: sheet; max-height: none; }
+  .bets-list-sheet    { grid-area: sheet; max-height: none; flex: 1 1 auto; height: auto; }
 }
 
 /* -------- Tiny phones: keep things tight -------- */
