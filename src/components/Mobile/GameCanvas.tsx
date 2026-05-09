@@ -100,27 +100,29 @@ export const GameCanvas: React.FC = () => {
       const padTop = 30;
 
       // ---- Trajectory math ----------------------------------------------
-      // Both x and y are parametric on the multiplier so the curve is a
-      // single coherent arc (no time/multiplier drift).
+      // Concave-UP arc — like a real plane taxi/take-off:
+      //   slow climb across most of the screen, then accelerating rise
+      //   into the top-right corner. The curve hugs the bottom early and
+      //   shoots up late.
       //
       //   progress(m) = (m-1)/(M_PEAK-1)   ∈ [0..1] (clamped)
-      //   x_norm = progress^0.7    (slightly slower than linear)
-      //   y_norm = progress^0.45   (faster than x → curve rises diagonally
-      //                              and the gap between them creates the
-      //                              concave-down arc shape)
+      //   x_norm = progress^0.45   (x leads — fast horizontal travel early)
+      //   y_norm = progress^1.4    (y trails — slow rise early, sharp at end)
       //
-      // At m=2:  progress=1/(M-1)→x≈21%  y≈33%  (clear lift-off)
-      // At m=5:  x≈56%  y≈67%
-      // At m=M_PEAK (10): both 100% — plane reaches top-right corner.
+      // At m=2:   progress=0.111 → x≈39%  y≈ 5% (plane near runway, far right)
+      // At m=4:   progress=0.333 → x≈61%  y≈22%
+      // At m=6:   progress=0.555 → x≈76%  y≈44%
+      // At m=8:   progress=0.778 → x≈89%  y≈70%
+      // At m=10 (M_PEAK): both 100% — plane reaches top-right corner.
       // For m>M_PEAK the plane "cruises" at the corner with bob+speed
       // lines so it never feels frozen.
       const M_PEAK = 10;
       const progressOf = (m: number) =>
         Math.min(Math.max((m - 1) / (M_PEAK - 1), 0), 1);
       const xAtM = (m: number) =>
-        padX + Math.pow(progressOf(m), 0.7) * (W - padX * 2);
+        padX + Math.pow(progressOf(m), 0.45) * (W - padX * 2);
       const yAtM = (m: number) =>
-        H - padBottom - Math.pow(progressOf(m), 0.45) * (H - padBottom - padTop);
+        H - padBottom - Math.pow(progressOf(m), 1.4) * (H - padBottom - padTop);
 
       if (phase === "PLAYING") {
         const elapsed = (Date.now() - phaseStartRef.current) / 1000;
@@ -225,8 +227,19 @@ export const GameCanvas: React.FC = () => {
         ctx.setLineDash([]);
 
         // ---- Plane position + tilt (slope of the curve at end) ----
-        const slopeFrom = pts[pts.length - 4] || pts[0];
-        const slopeAngle = Math.atan2(targetY - slopeFrom[1], targetX - slopeFrom[0]);
+        // Use a fixed-pixel slope window so the angle stays geometrically
+        // sensible regardless of how the curve is parameterised. With the
+        // concave-up mapping the very last samples cluster near vertical;
+        // walk back through the trail until we're ~50px away.
+        let slopeFrom = pts[0];
+        for (let i = pts.length - 2; i >= 0; i--) {
+          const dx = targetX - pts[i][0];
+          const dy = targetY - pts[i][1];
+          if (Math.hypot(dx, dy) >= 50) { slopeFrom = pts[i]; break; }
+        }
+        let slopeAngle = Math.atan2(targetY - slopeFrom[1], targetX - slopeFrom[0]);
+        // Clamp tilt so the plane never points more than ~55° upward.
+        slopeAngle = Math.max(slopeAngle, -0.96);
         plane.style.opacity = "1";
         plane.style.transform = `translate3d(${targetX - PLANE_HALF_W}px, ${targetY - PLANE_HALF_H}px, 0) rotate(${slopeAngle.toFixed(4)}rad)`;
         // share plane center % for FxLayer (so crash burst + parachute origin
