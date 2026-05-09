@@ -175,12 +175,13 @@ export const BetCard: React.FC<Props> = ({ side }) => {
 
       {mode === "auto" && (
         <div className="auto-target-row">
-          <span className="auto-label">Auto @</span>
+          <div className="auto-target-caption">Auto cashout target</div>
           <div className="amount-stepper compact">
             <button
               className="step-btn"
               onClick={() => setAutoTarget(Math.max(1.01, +(autoTarget - 0.1).toFixed(2)))}
               disabled={betted}
+              aria-label="decrease target"
             >
               −
             </button>
@@ -188,22 +189,23 @@ export const BetCard: React.FC<Props> = ({ side }) => {
               className="amount-input compact"
               type="text"
               inputMode="decimal"
-              value={autoTarget.toFixed(2)}
+              value={`${autoTarget.toFixed(2)}x`}
               onChange={(e) => {
                 const v = parseFloat(e.target.value.replace(/[^\d.]/g, ""));
                 if (!isNaN(v)) setAutoTarget(Math.max(1.01, v));
               }}
               disabled={betted}
+              aria-label="auto cashout target"
             />
             <button
               className="step-btn"
               onClick={() => setAutoTarget(+(autoTarget + 0.1).toFixed(2))}
               disabled={betted}
+              aria-label="increase target"
             >
               +
             </button>
           </div>
-          <span className="auto-x">x</span>
         </div>
       )}
 

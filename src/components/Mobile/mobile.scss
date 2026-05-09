@@ -117,13 +117,14 @@
   100% { opacity: 0; transform: translate(-50%, -50%) scale(1.9) rotate(60deg); }
 }
 
-/* Parachute drops FROM the plane — start tiny (plane-sized), open as it falls.
-   The drop curve covers a smaller distance so it stays inside the canvas. */
+/* Parachute drops FROM the plane location — small at first (canopy not yet
+   inflated), grows as the canopy opens, then drifts down well into the
+   canvas. Distances use vh-aware px so the drop reads even on tall layouts. */
 @keyframes fx-para-mine-drop {
-  0%   { opacity: 0; transform: translate(-50%, -50%) scale(0.35); }
-  10%  { opacity: 1; transform: translate(-50%, -50%) scale(0.55); }
-  35%  { transform: translate(-50%, -10%) scale(1); }
-  100% { opacity: 0.3; transform: translate(-50%, calc(70% + 30px)) scale(1.15) rotate(6deg); }
+  0%   { opacity: 0; transform: translate(-50%, -50%) scale(0.30); }
+  8%   { opacity: 1; transform: translate(-50%, -50%) scale(0.55); }
+  35%  { transform: translate(-50%, 20px) scale(1); }
+  100% { opacity: 0.25; transform: translate(-50%, 280px) scale(1.15) rotate(6deg); }
 }
 
 @keyframes fx-para-mine-sway {
@@ -132,10 +133,10 @@
 }
 
 @keyframes fx-para-other-drop {
-  0%   { opacity: 0; transform: translate(-50%, -50%) scale(0.3); }
-  15%  { opacity: 1; transform: translate(-50%, -40%) scale(0.7); }
-  40%  { transform: translate(-50%, -10%) scale(1); }
-  100% { opacity: 0; transform: translate(-50%, calc(80% + 30px)) scale(1) rotate(-4deg); }
+  0%   { opacity: 0; transform: translate(-50%, -50%) scale(0.25); }
+  12%  { opacity: 1; transform: translate(-50%, -40%) scale(0.6); }
+  40%  { transform: translate(-50%, 20px) scale(0.95); }
+  100% { opacity: 0; transform: translate(-50%, 320px) scale(1) rotate(-5deg); }
 }
 
 @keyframes fx-para-other-sway {
@@ -681,24 +682,28 @@
 
 .auto-target-row {
   display: flex;
-  align-items: center;
-  gap: 6px;
-  padding: 4px 6px;
+  flex-direction: column;
+  gap: 3px;
+  padding: 6px 8px;
   background: var(--bg-0);
-  border: 1px dashed rgba(255, 200, 87, 0.25);
+  border: 1px dashed rgba(255, 200, 87, 0.30);
   border-radius: 8px;
-  font-size: 11px;
-  color: var(--text-muted);
 
-  .auto-label {
+  .auto-target-caption {
+    font-size: 9px;
     font-weight: 700;
-    color: var(--crash-gold);
-    letter-spacing: 0.05em;
+    letter-spacing: 0.10em;
     text-transform: uppercase;
-    flex: 0 0 auto;
+    color: var(--crash-gold);
+    opacity: 0.85;
+    line-height: 1;
   }
-  .auto-x { font-weight: 800; color: var(--crash-gold); flex: 0 0 auto; }
-  .amount-stepper { flex: 1 1 auto; min-width: 100px; }
+  .amount-stepper { width: 100%; }
+  .amount-stepper .amount-input {
+    font-size: 13px;
+    font-weight: 800;
+    color: var(--crash-gold);
+  }
 }
 
 /* Auto-mode card gets a subtle gold-dashed outline so users can see at a

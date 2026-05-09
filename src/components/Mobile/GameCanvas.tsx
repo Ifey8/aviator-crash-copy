@@ -98,20 +98,29 @@ export const GameCanvas: React.FC = () => {
       const padX = 28;
       const padBottom = 24;
       const padTop = 30;
-      // x reaches the right edge at T_MAX seconds (slower than y so the
-      // dominant motion is upward — more "diagonal climb" feel)
-      const T_MAX = 10;
-      // y mapping uses cube-root so the climb is steep early:
-      //   1.5x → 30% up, 2x → 38%, 5x → 60%, 10x → 78%, 20x → 100%.
-      const M_MAX = 20;
-      const Y_POWER = 1 / 3;
 
-      const xAt = (t: number) => padX + Math.min(t / T_MAX, 1) * (W - padX * 2);
-      const yAt = (m: number) => {
-        if (m <= 1) return H - padBottom;
-        const k = Math.min(Math.pow((m - 1) / (M_MAX - 1), Y_POWER), 1);
-        return H - padBottom - k * (H - padBottom - padTop);
-      };
+      // ---- Trajectory math ----------------------------------------------
+      // Both x and y are parametric on the multiplier so the curve is a
+      // single coherent arc (no time/multiplier drift).
+      //
+      //   progress(m) = (m-1)/(M_PEAK-1)   ∈ [0..1] (clamped)
+      //   x_norm = progress^0.7    (slightly slower than linear)
+      //   y_norm = progress^0.45   (faster than x → curve rises diagonally
+      //                              and the gap between them creates the
+      //                              concave-down arc shape)
+      //
+      // At m=2:  progress=1/(M-1)→x≈21%  y≈33%  (clear lift-off)
+      // At m=5:  x≈56%  y≈67%
+      // At m=M_PEAK (10): both 100% — plane reaches top-right corner.
+      // For m>M_PEAK the plane "cruises" at the corner with bob+speed
+      // lines so it never feels frozen.
+      const M_PEAK = 10;
+      const progressOf = (m: number) =>
+        Math.min(Math.max((m - 1) / (M_PEAK - 1), 0), 1);
+      const xAtM = (m: number) =>
+        padX + Math.pow(progressOf(m), 0.7) * (W - padX * 2);
+      const yAtM = (m: number) =>
+        H - padBottom - Math.pow(progressOf(m), 0.45) * (H - padBottom - padTop);
 
       if (phase === "PLAYING") {
         const elapsed = (Date.now() - phaseStartRef.current) / 1000;
@@ -120,17 +129,50 @@ export const GameCanvas: React.FC = () => {
         if (phaseTextRef.current) phaseTextRef.current.style.opacity = "0";
         if (countdownRef.current) countdownRef.current.style.opacity = "0";
 
-        const targetX = xAt(elapsed);
-        const targetY = yAt(m);
+        // ---- Cruising state when plane has reached the corner ----
+        // When m exceeds M_PEAK, both x and y are saturated at 1, so the
+        // plane would freeze at the corner. We add a tiny vertical bob
+        // (sine of time) and draw scrolling speed lines on the canvas
+        // background so the plane reads as "still flying through clouds".
+        const cruising = m > M_PEAK;
+        const cruiseT = cruising ? (Date.now() - phaseStartRef.current) / 1000 : 0;
+        const cruiseBobY = cruising ? Math.sin(cruiseT * 4.5) * 4 : 0;
+        const cruiseBobX = cruising ? Math.cos(cruiseT * 3.2) * 2 : 0;
 
-        // Sample the curve
-        const SAMPLES = 36;
+        const baseTargetX = xAtM(m);
+        const baseTargetY = yAtM(m);
+        const targetX = baseTargetX + cruiseBobX;
+        const targetY = baseTargetY + cruiseBobY;
+
+        // Sample the curve in MULTIPLIER space (not time) so the trail is
+        // a smooth continuous arc that keeps its shape regardless of
+        // elapsed time.
+        const SAMPLES = 40;
         const pts: [number, number][] = [];
         for (let i = 0; i <= SAMPLES; i++) {
           const k = i / SAMPLES;
-          const tk = k * elapsed;
-          const mk = multiplierAt(tk);
-          pts.push([xAt(tk), yAt(mk)]);
+          const mk = 1 + k * (m - 1);
+          pts.push([xAtM(mk), yAtM(mk)]);
+        }
+
+        // ---- Speed lines (only when cruising) ----
+        if (cruising) {
+          ctx.save();
+          const phaseOffset = (cruiseT * 220) % 60;
+          ctx.strokeStyle = "rgba(255, 200, 87, 0.35)";
+          ctx.lineWidth = 1.4;
+          ctx.lineCap = "round";
+          for (let yi = 0; yi < 6; yi++) {
+            const sy = padTop + 8 + yi * ((H - padTop - padBottom - 16) / 5);
+            const sx = ((yi * 73) % 60) - phaseOffset;
+            for (let x = sx; x < W; x += 60) {
+              ctx.beginPath();
+              ctx.moveTo(x, sy);
+              ctx.lineTo(x + 18, sy);
+              ctx.stroke();
+            }
+          }
+          ctx.restore();
         }
 
         // ---- Filled gradient under the curve ----
