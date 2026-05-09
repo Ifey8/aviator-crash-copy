@@ -100,18 +100,20 @@ export const GameCanvas: React.FC = () => {
       const padTop = 30;
 
       // ---- Trajectory math ----------------------------------------------
-      // Concave-DOWN arc — sharp lift-off, then leveling cruise:
-      //   plane rises steeply at the start, gaining altitude fast, then
-      //   the climb slows as it approaches the top while x catches up.
+      // Concave-UP arc (taxi → take-off):
+      //   plane hugs the bottom early then sweeps up to the top-right.
+      //   The previous y power 1.4 made the lift-off feel sluggish (only
+      //   4% up at m≈2). Bumped to 1.15 so the early segment lifts a bit
+      //   faster while keeping the concave-up shape.
       //
       //   progress(m) = (m-1)/(M_PEAK-1)   ∈ [0..1] (clamped)
-      //   y_norm = progress^0.4   (y leads — fast vertical climb early)
-      //   x_norm = progress^0.65  (x trails — picks up later)
+      //   x_norm = progress^0.45   (x leads — fast horizontal travel)
+      //   y_norm = progress^1.15   (y trails — slow rise, sharper at end)
       //
-      // At m=2:   progress=0.111 → x≈24%  y≈42%   (plane already half up, ~quarter across)
-      // At m=4:   progress=0.333 → x≈48%  y≈64%
-      // At m=6:   progress=0.555 → x≈67%  y≈78%
-      // At m=8:   progress=0.778 → x≈85%  y≈90%
+      // At m=2:   progress=0.111 → x≈39%  y≈ 8%   (lifted off the runway)
+      // At m=4:   progress=0.333 → x≈61%  y≈28%
+      // At m=6:   progress=0.555 → x≈76%  y≈51%
+      // At m=8:   progress=0.778 → x≈89%  y≈75%
       // At m=10 (M_PEAK): both 100% — plane reaches top-right corner.
       // For m>M_PEAK the plane "cruises" at the corner with bob+speed
       // lines so it never feels frozen.
@@ -119,9 +121,9 @@ export const GameCanvas: React.FC = () => {
       const progressOf = (m: number) =>
         Math.min(Math.max((m - 1) / (M_PEAK - 1), 0), 1);
       const xAtM = (m: number) =>
-        padX + Math.pow(progressOf(m), 0.65) * (W - padX * 2);
+        padX + Math.pow(progressOf(m), 0.45) * (W - padX * 2);
       const yAtM = (m: number) =>
-        H - padBottom - Math.pow(progressOf(m), 0.4) * (H - padBottom - padTop);
+        H - padBottom - Math.pow(progressOf(m), 1.15) * (H - padBottom - padTop);
 
       if (phase === "PLAYING") {
         const elapsed = (Date.now() - phaseStartRef.current) / 1000;
