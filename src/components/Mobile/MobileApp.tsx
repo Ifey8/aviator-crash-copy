@@ -5,6 +5,7 @@ import { HistoryBar } from "./HistoryBar";
 import { GameCanvas } from "./GameCanvas";
 import { BetCard } from "./BetCard";
 import { BetsListSheet } from "./BetsListSheet";
+import { CoinFxLayer } from "./CoinFxLayer";
 import "./mobile.scss";
 // luxe.scss is imported from src/app.tsx as the LAST stylesheet so its
 // theme overrides win the cascade. Don't re-import here — webpack dedup
@@ -51,6 +52,10 @@ export const MobileApp: React.FC = () => {
         </div>
         <BetsListSheet />
       </main>
+
+      {/* Viewport-fixed gold-coin animation between header balance and plane.
+          Spans across header + canvas, so it lives outside <main>. */}
+      <CoinFxLayer />
 
       {rechargeState && (
         <div className="mobile-modal-overlay">

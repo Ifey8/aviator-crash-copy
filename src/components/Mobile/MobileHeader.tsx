@@ -16,7 +16,7 @@ export const MobileHeader: React.FC<{ onOpenMenu: () => void }> = ({ onOpenMenu 
         {errorBackend && <span className="mobile-header-offline">offline</span>}
       </div>
       <div className="mobile-header-right">
-        <div className="mobile-header-balance">
+        <div className="mobile-header-balance" data-fx="balance">
           <span className="balance-amount">{balance.toFixed(2)}</span>
           <span className="balance-currency">{currency}</span>
         </div>

@@ -1,22 +1,25 @@
 import React from "react";
 import Context from "../../context";
-import { Parachute, BurstSuccess, BurstCrash } from "./Effects";
+import { Parachute, BurstCrash } from "./Effects";
 import { planeTracker } from "./planeTracker";
 
 /**
  * FxLayer — overlays celebration effects on the game canvas.
  *
- *   • bet placed   → BurstSuccess pop, ~500ms
  *   • my cash-out  → big highlighted Parachute drifting down
  *   • other cashes → smaller Parachutes scattered, drifting down (continuous)
  *   • round end    → BurstCrash on top of the plane, ~700ms
+ *
+ * Bet-placed feedback now lives in <CoinFxLayer/> (gold coins flying from
+ * the header balance to the plane), so the green "Bet placed" toast was
+ * removed.
  *
  * Hooks into the existing socket via Context — no new socket events needed.
  */
 
 interface FxItem {
   id: string;
-  kind: "success" | "para-mine" | "para-other" | "crash";
+  kind: "para-mine" | "para-other" | "crash";
   x: number; // 0..1 — % of canvas width
   y: number; // 0..1 — % of canvas height
   variant?: number;
@@ -47,22 +50,17 @@ export const FxLayer: React.FC = () => {
     }, it.ttl + 200);
   }, []);
 
-  // ---- 1) Listen to "success" socket events: drives bet & my-cashout fx ----
+  // ---- 1) Listen to "success" socket events for my-cashout parachute ----
   // The myInfo handler in context.tsx only syncs balance/userType/userName
   // back to standalone userInfo state (intentionally — to preserve local
   // bet input). So we cannot rely on userInfo.f.cashouted for detection.
-  // Instead the server's "success" message carries the signal directly:
-  //   "Bet placed"        → BurstSuccess
-  //   "Cashed out @ 1.72x" → my parachute drop
+  // The server's "success" message carries the signal directly.
+  // (Bet-placed feedback handled by <CoinFxLayer/>; nothing to do here.)
   React.useEffect(() => {
     const sock = (ctx as any).socket;
     if (!sock) return;
     const onSuccess = (msg: string) => {
       if (typeof msg !== "string") return;
-      if (/bet\s*placed/i.test(msg)) {
-        push({ kind: "success", x: 0.5, y: 0.82, ttl: 600 });
-        return;
-      }
       const m = msg.match(/cashed?\s*out\s*@\s*([\d.]+)/i);
       if (m) {
         const mult = Number(m[1]);
@@ -132,14 +130,6 @@ export const FxLayer: React.FC = () => {
           left: `${it.x * 100}%`,
           top: `${it.y * 100}%`,
         };
-        if (it.kind === "success") {
-          return (
-            <div key={it.id} className="fx-success" style={style}>
-              <BurstSuccess size={72} />
-              <div className="fx-success-label">Bet placed</div>
-            </div>
-          );
-        }
         if (it.kind === "para-mine") {
           return (
             <div key={it.id} className="fx-para fx-para-mine" style={style}>
