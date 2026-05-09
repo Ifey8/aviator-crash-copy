@@ -1,124 +1,272 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!--
-  Aviator app icon — a Mughal-style gold medallion with a stylised cartoon
-  plane at the centre. Square 80×80 viewBox; scales cleanly from 16px
-  (favicon) to 512px (PWA / Apple-Touch). Self-contained, no externals.
+  Aviator app icon — full-bleed gold-to-crimson radial with chubby cartoon plane.
+  Generated via Claude Design (claude.ai/design).
+  512x512 viewBox; iOS squircle clip; halo + sparkle stars + speed lines.
 -->
-<svg
-  xmlns="http://www.w3.org/2000/svg"
-  viewBox="0 0 80 80"
-  width="80"
-  height="80"
-  role="img"
-  aria-label="Aviator"
->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512" role="img" aria-label="Aviator">
   <defs>
-    <!-- Gold disc — pale highlight at top, deep ember at bottom -->
-    <radialGradient id="discBg" cx="42%" cy="32%" r="78%">
-      <stop offset="0%"  stop-color="#FFF5D4" />
-      <stop offset="32%" stop-color="#FBD667" />
-      <stop offset="68%" stop-color="#D4A83F" />
-      <stop offset="100%" stop-color="#6B4A0E" />
+<!-- Squircle / rounded-square clip (iOS-style) -->
+    <clipPath id="aviator-squircle" clipPathUnits="userSpaceOnUse">
+      <rect x="0" y="0" width="512" height="512" rx="112" ry="112"/>
+    </clipPath>
+
+    <!-- Background: gold core to deep crimson corners, full bleed -->
+    <radialGradient id="aviator-bg" cx="46%" cy="40%" r="78%">
+      <stop offset="0%"  stop-color="#FFE38A"/>
+      <stop offset="22%" stop-color="#FFB940"/>
+      <stop offset="48%" stop-color="#E64A2A"/>
+      <stop offset="78%" stop-color="#8C1124"/>
+      <stop offset="100%" stop-color="#3A0510"/>
     </radialGradient>
 
-    <!-- Plane fuselage — saffron orange to deep crimson -->
-    <linearGradient id="bodyG" x1="0" y1="0" x2="0" y2="1">
-      <stop offset="0%"  stop-color="#FFE3A1" />
-      <stop offset="50%" stop-color="#FF9933" />
-      <stop offset="100%" stop-color="#C12244" />
-    </linearGradient>
-
-    <!-- Wing — navy with a touch of highlight -->
-    <linearGradient id="wingG" x1="0" y1="0" x2="0" y2="1">
-      <stop offset="0%"  stop-color="#3B5BB8" />
-      <stop offset="100%" stop-color="#10215A" />
-    </linearGradient>
-
-    <!-- Inset shadow for depth on the medallion -->
-    <radialGradient id="vignette" cx="50%" cy="50%" r="60%">
-      <stop offset="80%" stop-color="rgba(0,0,0,0)" />
-      <stop offset="100%" stop-color="rgba(58,40,7,0.45)" />
+    <!-- Soft white halo behind plane -->
+    <radialGradient id="aviator-halo" cx="50%" cy="50%" r="55%">
+      <stop offset="0%"  stop-color="#FFFFFF" stop-opacity="0.55"/>
+      <stop offset="35%" stop-color="#FFE9B8" stop-opacity="0.30"/>
+      <stop offset="75%" stop-color="#FFE9B8" stop-opacity="0.06"/>
+      <stop offset="100%" stop-color="#FFE9B8" stop-opacity="0"/>
     </radialGradient>
+
+    <!-- Saffron fuselage shading (top brighter, bottom shadowed) -->
+    <linearGradient id="aviator-body" x1="40%" y1="0%" x2="55%" y2="100%">
+      <stop offset="0%"   stop-color="#FFC371"/>
+      <stop offset="42%"  stop-color="#FF9933"/>
+      <stop offset="100%" stop-color="#B8530F"/>
+    </linearGradient>
+
+    <!-- Crimson wing shading -->
+    <linearGradient id="aviator-wing" x1="30%" y1="0%" x2="60%" y2="100%">
+      <stop offset="0%"   stop-color="#E03052"/>
+      <stop offset="55%"  stop-color="#C12244"/>
+      <stop offset="100%" stop-color="#7A0F25"/>
+    </linearGradient>
+
+    <!-- Crimson tail shading (similar but darker on edge) -->
+    <linearGradient id="aviator-tail" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%"   stop-color="#D12846"/>
+      <stop offset="100%" stop-color="#8A1224"/>
+    </linearGradient>
+
+    <!-- Cockpit window glass -->
+    <linearGradient id="aviator-glass" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%"   stop-color="#E5F1FF"/>
+      <stop offset="55%"  stop-color="#9FC2F2"/>
+      <stop offset="100%" stop-color="#3D5A99"/>
+    </linearGradient>
+
+    <!-- Propeller motion blur disc -->
+    <radialGradient id="aviator-prop" cx="50%" cy="50%" r="50%">
+      <stop offset="0%"   stop-color="#FFFFFF" stop-opacity="0.7"/>
+      <stop offset="55%"  stop-color="#FFE9B8" stop-opacity="0.35"/>
+      <stop offset="100%" stop-color="#FFE9B8" stop-opacity="0"/>
+    </radialGradient>
+
+    <!-- Reusable sparkle (4-point twinkle) -->
+    <symbol id="aviator-spark" viewBox="-12 -12 24 24" overflow="visible">
+      <path d="M 0 -12 Q 1.6 -1.6 12 0 Q 1.6 1.6 0 12 Q -1.6 1.6 -12 0 Q -1.6 -1.6 0 -12 Z" fill="#FFE38A"/>
+    </symbol>
+
+    <!-- ============================================== -->
+    <!-- THE ICON                                       -->
+    <!-- ============================================== -->
   </defs>
+  <!-- Full-bleed gold->crimson background -->
+  <rect x="0" y="0" width="512" height="512" fill="url(#aviator-bg)"/>
 
-  <!-- Outer gold ring -->
-  <circle cx="40" cy="40" r="38" fill="url(#discBg)" />
-  <!-- Engraved inner shadow -->
-  <circle cx="40" cy="40" r="38" fill="url(#vignette)" />
-  <!-- Engraved inner ring -->
-  <circle cx="40" cy="40" r="34" fill="none" stroke="#6B4A0E" stroke-width="0.7" opacity="0.65" />
-  <circle cx="40" cy="40" r="32.6" fill="none" stroke="#FFF5D4" stroke-width="0.4" opacity="0.55" />
 
-  <!-- Four cardinal star pip ornaments (Mughal-medallion hint) -->
-  <g fill="#6B4A0E" opacity="0.55">
-    <circle cx="40" cy="6.5" r="1.1" />
-    <circle cx="40" cy="73.5" r="1.1" />
-    <circle cx="6.5" cy="40" r="1.1" />
-    <circle cx="73.5" cy="40" r="1.1" />
-  </g>
+      <!-- Everything inside the squircle -->
+      <g clip-path="url(#aviator-squircle)">
 
-  <!-- Plane mascot, centered -->
-  <g transform="translate(13 24)">
-    <!-- horizontal tail stabilizer -->
-    <path
-      d="M 0 11 Q -3 8 0 5 L 7 6 L 7 14 L 0 13 Z"
-      fill="url(#wingG)"
-      stroke="#FFC857"
-      stroke-width="0.6"
-      stroke-linejoin="round"
-    />
-    <!-- vertical fin -->
-    <path
-      d="M 5 4 L 7 -3 Q 10 -4 13 -3 L 14 4 Z"
-      fill="#9B1A36"
-      stroke="#FFC857"
-      stroke-width="0.6"
-      stroke-linejoin="round"
-    />
-    <!-- main wing (sweepback) -->
-    <path
-      d="M 17 14 Q 27 17 38 17 Q 35 27 23 28 Q 14 27 13 21 Z"
-      fill="url(#wingG)"
-      stroke="#FFC857"
-      stroke-width="0.7"
-      stroke-linejoin="round"
-    />
-    <!-- fuselage -->
-    <path
-      d="M 6 12 Q 6 6 13 6 L 40 6 Q 49 6 49 12 Q 49 18 40 18 L 13 18 Q 6 18 6 12 Z"
-      fill="url(#bodyG)"
-      stroke="#5A0610"
-      stroke-width="0.7"
-      stroke-linejoin="round"
-    />
-    <!-- cockpit window -->
-    <path
-      d="M 27 8 Q 28 6 32 6 L 38 6.5 Q 40 8 40 11 Q 40 13 36 13 L 30 13 Q 26 12 27 8 Z"
-      fill="#E7EEFC"
-      stroke="#1E3A8A"
-      stroke-width="0.6"
-      stroke-linejoin="round"
-    />
-    <!-- cockpit specular highlight -->
-    <path
-      d="M 28 8.5 Q 30 7.5 33 7.5"
-      stroke="#FFFFFF"
-      stroke-width="0.8"
-      fill="none"
-      stroke-linecap="round"
-      opacity="0.9"
-    />
-    <!-- gold belly trim -->
-    <path
-      d="M 9 16 Q 27 19 47 15"
-      stroke="#FFC857"
-      stroke-width="0.6"
-      fill="none"
-      stroke-linecap="round"
-      opacity="0.9"
-    />
-    <!-- propeller hub -->
-    <circle cx="50" cy="12" r="2.4" fill="#FFC857" stroke="#5A0610" stroke-width="0.5" />
-    <circle cx="50" cy="12" r="1.2" fill="#C12244" />
-  </g>
+        <!-- Full-bleed background -->
+        <rect x="0" y="0" width="512" height="512" fill="url(#aviator-bg)"/>
+
+        <!-- Subtle warm glow center (extra pop behind plane) -->
+        <ellipse cx="256" cy="252" rx="240" ry="210" fill="url(#aviator-halo)"/>
+
+        <!-- Sparkle stars (gold twinkles, festive accent) -->
+        <g opacity="0.92">
+          <use href="#aviator-spark" x="86"  y="118" width="22" height="22"/>
+          <use href="#aviator-spark" x="432" y="96"  width="16" height="16" opacity="0.85"/>
+          <use href="#aviator-spark" x="448" y="356" width="20" height="20" opacity="0.75"/>
+          <use href="#aviator-spark" x="74"  y="408" width="14" height="14" opacity="0.7"/>
+        </g>
+
+        <!-- ====================================== -->
+        <!-- PLANE: tilted -25° to climb up-right    -->
+        <!-- Designed pre-rotation with nose at +x   -->
+        <!-- ====================================== -->
+        <g transform="rotate(-25 256 256)">
+
+          <!-- Drop shadow under plane (very subtle, on bg) -->
+          <ellipse cx="270" cy="312" rx="190" ry="22" fill="#3A0510" opacity="0.28"/>
+
+          <!-- 1. TAIL HORIZONTAL STABILIZER (sticks out left/down at back) -->
+          <path d="M 96 244
+                   L 44 220
+                   Q 36 226 36 244
+                   L 38 268
+                   Q 44 280 56 280
+                   L 110 268
+                   Z"
+                fill="url(#aviator-tail)"/>
+
+          <!-- 2. TAIL VERTICAL FIN (rises up from back of fuselage) -->
+          <path d="M 102 235
+                   L 108 142
+                   Q 112 128 128 130
+                   Q 144 134 158 158
+                   L 184 235
+                   Z"
+                fill="url(#aviator-tail)"/>
+          <!-- Gold accent stripe on tail fin -->
+          <path d="M 122 220
+                   L 130 168
+                   Q 134 158 144 160
+                   L 154 195
+                   L 168 222
+                   Z"
+                fill="#FFC857"/>
+
+          <!-- 3. FUSELAGE BODY (saffron, big rounded teardrop) -->
+          <path d="M 92 256
+                   C 92 230 116 218 152 218
+                   L 380 218
+                   Q 428 218 456 246
+                   Q 466 256 456 266
+                   Q 428 294 380 294
+                   L 152 294
+                   C 116 294 92 282 92 256 Z"
+                fill="url(#aviator-body)"/>
+
+          <!-- 4. BELLY SHADOW (slight darken on bottom curve) -->
+          <path d="M 100 270
+                   Q 130 296 200 296
+                   L 380 296
+                   Q 432 294 458 268
+                   Q 456 286 432 296
+                   Q 400 308 360 308
+                   L 160 306
+                   Q 116 302 100 270 Z"
+                fill="#7A340A" opacity="0.55"/>
+
+          <!-- 5. GOLD PINSTRIPE (decorative band along fuselage) -->
+          <path d="M 100 254
+                   Q 270 250 452 252
+                   L 452 262
+                   Q 270 264 100 264 Z"
+                fill="#FFC857"/>
+          <!-- thin crimson line under gold for richness -->
+          <rect x="100" y="262" width="350" height="3" fill="#7A0F25" opacity="0.7"/>
+
+          <!-- 6. FOREGROUND WING (large swept wing extending below) -->
+          <!-- Sits in front of body (visual: 3/4 view from above-side) -->
+          <path d="M 218 285
+                   L 296 392
+                   Q 304 404 320 404
+                   L 388 404
+                   Q 402 404 400 392
+                   L 376 285
+                   Z"
+                fill="url(#aviator-wing)"/>
+          <!-- Wing top highlight (where it joins body) -->
+          <path d="M 220 286
+                   L 376 286
+                   L 376 292
+                   L 220 292 Z"
+                fill="#F5466B" opacity="0.55"/>
+          <!-- Wing trailing-edge gold trim (thick enough to read at small sizes) -->
+          <path d="M 296 392
+                   Q 304 404 320 404
+                   L 388 404
+                   Q 402 404 400 392
+                   L 396 384
+                   Q 400 388 388 388
+                   L 320 388
+                   Q 304 388 300 380
+                   Z"
+                fill="#FFC857"/>
+          <!-- Wing under-shadow (tiny darker triangle near root for depth) -->
+          <path d="M 218 285 L 248 340 L 228 295 Z" fill="#5A0918" opacity="0.6"/>
+
+          <!-- 7. BACK WING TIP (peeks above body, far-side wing in 3/4) -->
+          <path d="M 244 220
+                   L 226 178
+                   Q 230 168 244 168
+                   L 304 168
+                   Q 318 168 322 178
+                   L 332 220
+                   Z"
+                fill="#7A0F25"/>
+          <path d="M 250 220
+                   L 234 184
+                   Q 238 176 248 176
+                   L 300 176
+                   Q 312 176 316 184
+                   L 326 220
+                   Z"
+                fill="#A91A36"/>
+
+          <!-- 8. COCKPIT BUBBLE (navy frame on top of fuselage) -->
+          <path d="M 282 220
+                   L 284 196
+                   Q 290 178 312 175
+                   L 352 175
+                   Q 374 178 378 196
+                   L 380 220
+                   Z"
+                fill="#1E3A8A"/>
+          <!-- Glass window (light blue) -->
+          <path d="M 292 218
+                   L 294 200
+                   Q 298 188 314 186
+                   L 350 186
+                   Q 366 188 368 200
+                   L 370 218
+                   Z"
+                fill="url(#aviator-glass)"/>
+          <!-- Window divider (cute cockpit beam) -->
+          <rect x="328" y="186" width="6" height="32" fill="#1E3A8A"/>
+          <!-- Window highlight (top-left shine) -->
+          <path d="M 300 200
+                   Q 304 192 314 192
+                   L 322 192
+                   L 318 198
+                   Q 308 200 304 208 Z"
+                fill="#FFFFFF" opacity="0.7"/>
+
+          <!-- 9. NOSE CONE / SPINNER (navy ring) -->
+          <ellipse cx="458" cy="256" rx="14" ry="20" fill="#1E3A8A"/>
+
+          <!-- 10. PROPELLER MOTION BLUR DISC -->
+          <ellipse cx="472" cy="256" rx="14" ry="62" fill="url(#aviator-prop)"/>
+          <!-- ghost prop blade hint -->
+          <path d="M 470 200 Q 480 256 470 312"
+                stroke="#FFFFFF" stroke-width="4" stroke-linecap="round"
+                fill="none" opacity="0.45"/>
+
+          <!-- 11. PROPELLER HUB (gold dot) -->
+          <circle cx="468" cy="256" r="8" fill="#FFC857"/>
+          <circle cx="468" cy="256" r="3" fill="#7A340A"/>
+
+          <!-- 12. TOP HIGHLIGHT (saffron sheen along upper fuselage) -->
+          <path d="M 130 226
+                   Q 270 218 410 226
+                   L 408 234
+                   Q 270 228 132 236 Z"
+                fill="#FFE3A8" opacity="0.55"/>
+
+          <!-- 13. SPEED LINES behind plane (dynamic motion cue) -->
+          <g stroke="#FFFFFF" stroke-linecap="round" fill="none" opacity="0.55">
+            <path d="M 30 200 L 80 215" stroke-width="6"/>
+            <path d="M 14 256 L 70 256" stroke-width="6"/>
+            <path d="M 28 312 L 80 298" stroke-width="6"/>
+          </g>
+
+        </g>
+        <!-- /plane -->
+
+      </g>
+      <!-- /clip -->
+    
 </svg>
