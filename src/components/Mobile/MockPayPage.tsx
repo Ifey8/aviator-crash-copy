@@ -33,9 +33,13 @@ export const MockPayPage: React.FC = () => {
       const json = await res.json();
       if (json.status) {
         setDone("paid");
-        // Close the tab after a short pause so the user sees success.
+        // If we were opened by a popup (window.opener exists), auto-close so
+        // the original game tab can reclaim focus. Otherwise leave the tab
+        // open and rely on the explicit "Back to game" button below.
         setTimeout(() => {
-          if (window.opener) window.close();
+          if (window.opener) {
+            try { window.close(); } catch { /* same-origin restriction */ }
+          }
         }, 1200);
       } else {
         setDone("error");
@@ -47,6 +51,12 @@ export const MockPayPage: React.FC = () => {
     } finally {
       setPaying(false);
     }
+  };
+
+  const handleBack = (): void => {
+    // Same-tab nav back to the game. Replace state so users don't
+    // get stuck in a back-button loop returning to /mock-pay.
+    window.location.replace("/");
   };
 
   if (!orderId) {
@@ -62,6 +72,13 @@ export const MockPayPage: React.FC = () => {
 
   return (
     <div className="mock-pay">
+      <button
+        className="mock-pay-back"
+        onClick={handleBack}
+        aria-label="Back to game"
+      >
+        ← Back to game
+      </button>
       <div className="mock-pay-card">
         <div className="mock-pay-bank">DEV · MOCK PAYMENT</div>
         <h2>Confirm payment</h2>
@@ -74,7 +91,9 @@ export const MockPayPage: React.FC = () => {
           <div className="mock-pay-success">
             <div className="mock-pay-check">✓</div>
             <p>Payment successful</p>
-            <p className="mock-pay-fine">You can close this tab.</p>
+            <button className="mock-pay-btn mock-pay-btn-back" onClick={handleBack}>
+              Back to game
+            </button>
           </div>
         )}
         {done !== "paid" && (

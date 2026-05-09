@@ -45,21 +45,24 @@ const announcePhase = (io: Server) => {
 };
 
 /**
- * Active socket per logged-in user. Module-scope so other modules
- * (e.g. recharge route after webhook) can push events to a specific user
- * without going through the socket layer's connection state.
+ * Active sockets per logged-in user. Multi-tab safe — a user is "in the room"
+ * as long as ANY of their tabs has a live socket. Engine state (active bet
+ * / balance) is keyed by userName, not socket, so it survives tab churn.
+ *
+ * Module-scope so other modules (e.g. recharge route after webhook) can push
+ * events to a specific user. Push goes to ALL their open tabs.
  */
-const sessionByUser = new Map<string, Socket>();
+const userSockets = new Map<string, Set<Socket>>();
 
-/** Send a one-off event to a specific user; no-op if they're disconnected. */
+/** Send a one-off event to ALL of a user's open tabs. */
 export const pushToUser = (
   userName: string,
   event: string,
   payload: unknown,
 ): boolean => {
-  const sock = sessionByUser.get(userName);
-  if (!sock) return false;
-  sock.emit(event, payload);
+  const set = userSockets.get(userName);
+  if (!set || set.size === 0) return false;
+  for (const s of set) s.emit(event, payload);
   return true;
 };
 
@@ -69,10 +72,10 @@ export const pushToUser = (
  * Returns true if the user was online.
  */
 export const pushUserMyInfo = (userName: string): boolean => {
-  const sock = sessionByUser.get(userName);
-  if (!sock) return false;
+  const set = userSockets.get(userName);
+  if (!set || set.size === 0) return false;
   const p = engine.getPlayer(userName);
-  if (p) sock.emit("myInfo", userToFrontend(p));
+  if (p) for (const s of set) s.emit("myInfo", userToFrontend(p));
   return true;
 };
 
@@ -86,9 +89,10 @@ export const initSockets = (io: Server): void => {
     // to every connected client so the BetCard UI flips out of any
     // lingering "CASHED OUT" state from the previous round.
     if (engine.phase === "BET") {
-      for (const [userName, sock] of sessionByUser.entries()) {
+      for (const [userName, set] of userSockets.entries()) {
         const p = engine.getPlayer(userName);
-        if (p) sock.emit("myInfo", userToFrontend(p));
+        if (!p) continue;
+        for (const sock of set) sock.emit("myInfo", userToFrontend(p));
       }
     }
   });
@@ -103,10 +107,12 @@ export const initSockets = (io: Server): void => {
     // Send success + fresh myInfo to the player whose side just cashed out.
     // Crucial for AUTO cash-outs: those fire from engine.tick(), not from a
     // socket request, so without this the client never knows it succeeded.
-    const sock = sessionByUser.get(p.userName);
-    if (!sock) return;
-    sock.emit("myInfo", userToFrontend(p));
-    sock.emit("success", `Cashed out @ ${p[idx].cashOutAt.toFixed(2)}x`);
+    const set = userSockets.get(p.userName);
+    if (!set) return;
+    for (const sock of set) {
+      sock.emit("myInfo", userToFrontend(p));
+      sock.emit("success", `Cashed out @ ${p[idx].cashOutAt.toFixed(2)}x`);
+    }
   });
   engine.on(
     "roundEnded",
@@ -115,8 +121,8 @@ export const initSockets = (io: Server): void => {
       io.emit("history", history);
       // Per-user finishGame
       for (const p of previousHand) {
-        const sock = sessionByUser.get(p.userName);
-        if (sock) sock.emit("finishGame", userToFrontend(p));
+        const set = userSockets.get(p.userName);
+        if (set) for (const sock of set) sock.emit("finishGame", userToFrontend(p));
       }
     },
   );
@@ -138,21 +144,43 @@ export const initSockets = (io: Server): void => {
       }
 
       userName = session.userName;
-      sessionByUser.set(userName, socket);
+      // Multi-tab / refresh / reconnect handling: if the same user already has
+      // a player in the engine, KEEP their existing f/s state (active bets,
+      // cashout target, auto flag). We only update the socket reference so
+      // future engine events route to this socket. Without this, opening a
+      // payment page in a new tab (or any reconnect) would wipe an active bet.
+      // Track this socket as one of the user's open tabs.
+      let set = userSockets.get(userName);
+      if (!set) {
+        set = new Set();
+        userSockets.set(userName, set);
+      }
+      set.add(socket);
 
-      const player: PlayerState = {
-        userId: socket.id,
-        userName: session.userName,
-        avatar: session.avatar,
-        balance: session.balance,
-        userType: session.userType,
-        token: session.token,
-        f: emptySide(),
-        s: emptySide(),
-      };
-      engine.addPlayer(player);
+      const existing = engine.getPlayer(userName);
+      if (existing) {
+        existing.userId = socket.id;
+        existing.token = session.token;
+        // Refresh balance/avatar in case Mongo changed (e.g. recharge credit
+        // happened while disconnected).
+        existing.balance = session.balance;
+        existing.avatar = session.avatar;
+        socket.emit("myInfo", userToFrontend(existing));
+      } else {
+        const player: PlayerState = {
+          userId: socket.id,
+          userName: session.userName,
+          avatar: session.avatar,
+          balance: session.balance,
+          userType: session.userType,
+          token: session.token,
+          f: emptySide(),
+          s: emptySide(),
+        };
+        engine.addPlayer(player);
+        socket.emit("myInfo", userToFrontend(player));
+      }
 
-      socket.emit("myInfo", userToFrontend(player));
       socket.emit("history", engine.history);
       socket.emit("gameState", engine.statusSnapshot());
       socket.emit("bettedUserInfo", engine.bettedUsersSnapshot());
@@ -197,8 +225,17 @@ export const initSockets = (io: Server): void => {
 
     socket.on("disconnect", () => {
       if (userName) {
-        sessionByUser.delete(userName);
-        engine.removePlayer(userName);
+        const set = userSockets.get(userName);
+        if (set) {
+          set.delete(socket);
+          // Only tear down the player when their LAST tab disconnects.
+          // Multi-tab safe: opening /mock-pay in a new tab + closing it must
+          // not kick the user from the room while their main tab is alive.
+          if (set.size === 0) {
+            userSockets.delete(userName);
+            engine.removePlayer(userName);
+          }
+        }
       }
       console.log(`[ws] disconnect ${socket.id}`);
     });

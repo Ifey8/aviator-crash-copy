@@ -58,17 +58,27 @@
 .rs-close {
   position: absolute;
   top: 10px;
-  right: 14px;
-  width: 32px;
-  height: 32px;
-  border: 0;
-  background: rgba(255, 245, 220, 0.06);
+  right: 12px;
+  width: 36px;
+  height: 36px;
+  border: 1px solid rgba(255, 200, 87, 0.3);
+  background: rgba(255, 245, 220, 0.08);
   color: #fff5dc;
   border-radius: 50%;
   font-size: 22px;
+  font-weight: 300;
   line-height: 1;
   cursor: pointer;
-  &:hover { background: rgba(255, 245, 220, 0.12); }
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 5;
+  transition: all 120ms;
+  &:hover {
+    background: rgba(255, 200, 87, 0.18);
+    border-color: rgba(255, 200, 87, 0.6);
+    transform: rotate(90deg);
+  }
 }
 
 .rs-title {
@@ -337,6 +347,7 @@
    MockPayPage — fake provider screen for dev only.
    ============================================================ */
 .mock-pay {
+  position: relative;
   min-height: 100vh;
   background: linear-gradient(160deg, #0e1830 0%, #0a0e1d 50%, #1a0710 100%);
   display: flex;
@@ -344,6 +355,32 @@
   justify-content: center;
   padding: 24px;
   font-family: -apple-system, "SF Pro Text", system-ui, sans-serif;
+}
+
+.mock-pay-back {
+  position: fixed;
+  top: 14px;
+  left: 14px;
+  background: rgba(255, 245, 220, 0.06);
+  border: 1px solid rgba(255, 200, 87, 0.3);
+  color: #fff5dc;
+  padding: 8px 14px;
+  border-radius: 8px;
+  font-size: 12px;
+  letter-spacing: 0.06em;
+  cursor: pointer;
+  font-weight: 600;
+  transition: all 120ms;
+  &:hover {
+    background: rgba(255, 200, 87, 0.16);
+    border-color: rgba(255, 200, 87, 0.55);
+  }
+}
+
+.mock-pay-btn-back {
+  margin-top: 14px;
+  background: linear-gradient(180deg, #ffe38a 0%, #ffb940 45%, #d99000 100%) !important;
+  color: #3a1a04 !important;
 }
 
 .mock-pay-card {
