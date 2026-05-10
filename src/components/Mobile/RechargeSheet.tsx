@@ -61,15 +61,44 @@ export const RechargeSheet: React.FC<Props> = ({ open, onClose }) => {
   const [customInput, setCustomInput] = React.useState("");
   const [order, setOrder] = React.useState<OrderData | null>(null);
   const [error, setError] = React.useState<string | null>(null);
+  // inrEnabled: backend admin Setting. Default null = still loading; default
+  // to false when the call fails so we don't show a tab that returns 403.
+  const [inrEnabled, setInrEnabled] = React.useState<boolean | null>(null);
+
+  // Fetch channel availability whenever the sheet opens (it can change
+  // mid-session when admin flips the toggle). Once loaded, prefer crypto
+  // automatically if INR is off so the user doesn't see an empty picker.
+  React.useEffect(() => {
+    if (!open) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await fetch(`${apiBase}/recharge/config`, { headers: authHeaders() });
+        const json = await res.json();
+        if (cancelled) return;
+        const inr = !!json?.data?.inrEnabled;
+        setInrEnabled(inr);
+        if (!inr) setMethod("crypto");
+      } catch {
+        if (!cancelled) {
+          setInrEnabled(false);
+          setMethod("crypto");
+        }
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [open]);
 
   // Reset on close so re-opening starts clean.
+  // method is NOT reset here — the open-effect above sets it based on
+  // current inrEnabled value, so we don't flash an INR tab that's about
+  // to be hidden.
   React.useEffect(() => {
     if (!open) {
       setStep("picker");
       setOrder(null);
       setError(null);
       setCustomInput("");
-      setMethod("fiat");
     }
   }, [open]);
 
@@ -186,14 +215,20 @@ export const RechargeSheet: React.FC<Props> = ({ open, onClose }) => {
                 crypto (USDT-TRC20 on TRON). The chosen method changes how
                 Continue routes; amount stays the same in INR. */}
             <div className="rs-method-tabs">
-              <button
-                type="button"
-                className={`rs-method ${method === "fiat" ? "active" : ""}`}
-                onClick={() => setMethod("fiat")}
-              >
-                <span className="rs-method-name">UPI / Cards</span>
-                <span className="rs-method-sub">INR</span>
-              </button>
+              {/* INR tab only shown when admin has enabled the channel.
+                  Until a real payment provider is wired in, the route
+                  returns 403 and we'd just frustrate users. */}
+              {inrEnabled !== false && (
+                <button
+                  type="button"
+                  className={`rs-method ${method === "fiat" ? "active" : ""}`}
+                  onClick={() => setMethod("fiat")}
+                  disabled={inrEnabled === null}
+                >
+                  <span className="rs-method-name">UPI / Cards</span>
+                  <span className="rs-method-sub">INR</span>
+                </button>
+              )}
               <button
                 type="button"
                 className={`rs-method ${method === "crypto" ? "active" : ""}`}
@@ -203,6 +238,11 @@ export const RechargeSheet: React.FC<Props> = ({ open, onClose }) => {
                 <span className="rs-method-sub">TRC-20</span>
               </button>
             </div>
+            {inrEnabled === false && (
+              <p className="rs-fine" style={{ marginTop: -4, opacity: 0.7 }}>
+                INR top-up is temporarily unavailable. USDT (TRC-20) is live.
+              </p>
+            )}
 
             <div className="rs-presets">
               {PRESETS.map((p) => (

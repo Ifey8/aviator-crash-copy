@@ -64,6 +64,15 @@ export interface SettingsDoc {
    */
   registerMaxPerIp24h: number;
 
+  // ── Recharge channels ──
+  /**
+   * 1 = INR (fiat) recharge endpoint is live for users; 0 = blocked.
+   * Default OFF until a real payment provider (Razorpay etc) is integrated —
+   * with only `mockPayout` wired in, every "Pay" click auto-credits the
+   * user with no money flowing in. USDT recharge unaffected.
+   */
+  inrRechargeEnabled: number;
+
   // ── Auto-payout (USDT only) ──
   /**
    * 1 = USDT withdrawals that pass risk checks auto-broadcast to TRON
@@ -107,6 +116,7 @@ const SettingsSchema = new Schema<SettingsDoc>(
     withdrawalReviewAboveInr: { type: Number, required: true, min: 0 },
     withdrawalReviewNewAccountHours: { type: Number, required: true, min: 0 },
     registerMaxPerIp24h: { type: Number, required: true, min: 0, max: 100 },
+    inrRechargeEnabled: { type: Number, required: true, min: 0, max: 1 },
     usdtAutoPayoutEnabled: { type: Number, required: true, min: 0, max: 1 },
     usdtAutoPayoutMaxInr: { type: Number, required: true, min: 0 },
     updatedAt: { type: Date, default: Date.now },

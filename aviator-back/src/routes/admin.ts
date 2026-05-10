@@ -30,6 +30,7 @@ adminRouter.put("/settings", async (req, res) => {
     "withdrawalFeePct", "withdrawalMinInr", "wagerMultiplier",
     "withdrawalReviewAboveInr", "withdrawalReviewNewAccountHours",
     "registerMaxPerIp24h",
+    "inrRechargeEnabled",
     "usdtAutoPayoutEnabled", "usdtAutoPayoutMaxInr",
   ] as const;
   const patch: Record<string, number> = {};

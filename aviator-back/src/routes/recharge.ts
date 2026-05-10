@@ -8,8 +8,27 @@ import { engine } from "../game/engine";
 import { pushToUser, pushUserMyInfo } from "../sockets";
 import { getProvider, defaultProvider, listProviders } from "../payment";
 import { triggerReferralReward } from "../payment/referral";
+import { getSetting } from "../settings";
 
 export const rechargeRouter = Router();
+
+/**
+ * GET /api/recharge/config — public-ish (auth required) channel availability.
+ * Frontend uses this to hide/disable INR tab in the RechargeSheet when the
+ * operator hasn't enabled fiat. USDT recharge is gated separately by
+ * tronNetwork being set.
+ */
+rechargeRouter.get("/config", requireAuth, async (_req, res) => {
+  res.json({
+    status: true,
+    data: {
+      inrEnabled: Number(getSetting("inrRechargeEnabled") || 0) === 1,
+      usdtEnabled: !!config.tronNetwork && !!config.tronContract,
+      minInr: config.rechargeMinAmount,
+      maxInr: config.rechargeMaxAmount,
+    },
+  });
+});
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -46,6 +65,16 @@ rechargeRouter.post("/create", requireAuth, async (req: Request, res: Response) 
   const userName = req.authUserName!;
   const amount = Number(req.body?.amount);
   const providerName: string = req.body?.provider || defaultProvider();
+
+  // Gate: INR recharge disabled until a real payment provider is integrated.
+  // Mock provider auto-credits on click which is fine in dev but would be a
+  // money printer in prod; admin Settings → "INR recharge enabled" turns it on.
+  if (Number(getSetting("inrRechargeEnabled") || 0) !== 1) {
+    return res.status(403).json({
+      status: false,
+      message: "INR recharge is temporarily unavailable. Please use USDT (crypto) recharge for now.",
+    });
+  }
 
   if (!amount || amount < config.rechargeMinAmount || amount > config.rechargeMaxAmount) {
     return res.status(400).json({

@@ -29,6 +29,7 @@ type SettingsKey =
   | "withdrawalReviewAboveInr"
   | "withdrawalReviewNewAccountHours"
   | "registerMaxPerIp24h"
+  | "inrRechargeEnabled"
   | "usdtAutoPayoutEnabled"
   | "usdtAutoPayoutMaxInr";
 
@@ -52,6 +53,7 @@ const defaultsFromEnv = (): Omit<SettingsDoc, "_id" | "updatedAt" | "updatedBy">
   withdrawalReviewAboveInr: 5000,
   withdrawalReviewNewAccountHours: 24,
   registerMaxPerIp24h: 3,
+  inrRechargeEnabled: 0, // OFF — re-enable after a real payment provider is integrated
   usdtAutoPayoutEnabled: 0, // OFF by default — operator must explicitly opt in
   usdtAutoPayoutMaxInr: 2000,
 });

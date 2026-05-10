@@ -365,6 +365,7 @@ interface SettingsData {
   withdrawalReviewAboveInr: number;
   withdrawalReviewNewAccountHours: number;
   registerMaxPerIp24h: number;
+  inrRechargeEnabled: number;
   usdtAutoPayoutEnabled: number;
   usdtAutoPayoutMaxInr: number;
   updatedAt?: string;
@@ -389,6 +390,7 @@ const SETTINGS_FIELDS: { key: keyof SettingsData; label: string; hint: string; g
   { group: "Anti-abuse", key: "withdrawalReviewAboveInr", label: "Review above (INR)", hint: "Withdrawals at or above this gross amount auto-flagged for admin review. 0 disables." },
   { group: "Anti-abuse", key: "withdrawalReviewNewAccountHours", label: "Review new account (hours)", hint: "If account younger than this and withdrawing → flagged for review. 0 disables." },
   { group: "Anti-abuse", key: "registerMaxPerIp24h", label: "Max registrations / IP / 24h", hint: "Hard cap on new accounts from one IP per day. 3 = real users uneffected, bot farms blocked. 0 disables." },
+  { group: "Recharge", key: "inrRechargeEnabled", label: "INR recharge enabled (1=on, 0=off)", hint: "Turn ON only AFTER a real payment provider (Razorpay/Cashfree) is wired in. While OFF, the INR top-up route returns 403 and the in-app RechargeSheet hides the INR tab. USDT recharge is unaffected." },
   { group: "Auto-payout", key: "usdtAutoPayoutEnabled", label: "USDT auto-payout (1=on, 0=off)", hint: "When ON: USDT withdrawals under the cap broadcast to TRON automatically (no admin click). Bank withdrawals always manual. Default OFF — opt in when comfortable." },
   { group: "Auto-payout", key: "usdtAutoPayoutMaxInr", label: "Auto-payout cap (INR)", hint: "USDT withdrawals at or above this stay in 'processing' awaiting admin Approve. Below this and auto-on → instant broadcast. Set 2000-5000 for sensible mid-range automation." },
 ];
