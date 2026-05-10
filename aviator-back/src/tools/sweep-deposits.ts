@@ -1,21 +1,23 @@
 /**
  * sweep-deposits.ts — manual sweep of paid deposit addresses → hot wallet.
  *
- * Run periodically (cron / manual) on the server:
+ * Run periodically (cron / manual):
  *   docker compose exec api node dist/tools/sweep-deposits.js [--dry-run]
  *
- * What it does:
- *   1. Find CryptoOrders with status=paid AND sweptAt=null
- *   2. For each one's depositAddress:
- *      a. Query USDT balance (skip if 0)
- *      b. If TRX < SWEEP_GAS_RESERVE, transfer TRX from hot wallet
- *      c. Send all USDT from depositAddress → hot wallet
- *      d. Mark sweptAt + sweptTxHash in DB
+ * What it does (per-ADDRESS, not per-order — addresses are recycled):
+ *   1. Group paid+un-swept orders by depositAddress
+ *   2. For each address with non-zero USDT balance:
+ *      a. Top up TRX from hot wallet if balance < gas reserve
+ *      b. Send all USDT from depositAddress → hot wallet
+ *      c. Mark all backing orders sweptAt + sweptTxHash
+ *
+ * Address-level grouping means N orders sharing 1 address = 1 sweep
+ * (way cheaper than 1 sweep per order in the old design).
  *
  * SAFETY:
- *   • --dry-run flag previews actions without sending tx.
- *   • Hot wallet must have enough TRX to fund gas top-ups.
- *   • Each sweep costs ~10-20 TRX in fees (TRX top-up + USDT transfer gas).
+ *   • --dry-run flag previews actions without sending tx
+ *   • Hot wallet must have enough TRX to fund gas top-ups
+ *   • Each sweep costs ~10-20 TRX in fees
  */
 import { connectDb } from "../db/connection";
 import { CryptoOrderModel } from "../db/models/CryptoOrder";
@@ -52,51 +54,78 @@ const main = async (): Promise<void> => {
   console.log(`[sweep] hot wallet: ${hot.address} (index ${hot.index})`);
   console.log(`[sweep] dry run: ${dryRun}`);
 
-  const orders = await CryptoOrderModel.find({
-    status: "paid",
-    sweptAt: null,
-    network: config.tronNetwork,
-  }).sort({ paidAt: 1 });
+  // Group paid+un-swept orders by depositAddress so we sweep each address
+  // ONCE regardless of how many orders shared it.
+  const grouped = await CryptoOrderModel.aggregate<{
+    _id: string;            // depositAddress
+    derivIndex: number;
+    orderIds: string[];
+    totalUsdt: number;
+  }>([
+    {
+      $match: {
+        status: "paid",
+        sweptAt: null,
+        network: config.tronNetwork,
+        contractAddress: config.tronContract,
+      },
+    },
+    {
+      $group: {
+        _id: "$depositAddress",
+        derivIndex: { $first: "$derivIndex" },
+        orderIds: { $push: "$orderId" },
+        totalUsdt: { $sum: "$actualUsdt" },
+      },
+    },
+    { $sort: { totalUsdt: -1 } },
+  ]);
 
-  console.log(`[sweep] ${orders.length} paid order(s) to sweep`);
-  if (orders.length === 0) return;
+  console.log(`[sweep] ${grouped.length} address(es) with un-swept funds (${grouped.reduce((s, g) => s + g.totalUsdt, 0).toFixed(2)} USDT total expected)`);
+  if (grouped.length === 0) return;
 
-  // We'll need a TronWeb instance with the hot wallet's privKey to fund gas.
   const hotClient = buildClient(hot.privateKey);
 
   let successCount = 0;
-  let totalUsdt = 0;
+  let totalSweptUsdt = 0;
 
-  for (const order of orders) {
-    const acct = deriveAccount(order.derivIndex);
-    if (acct.address !== order.depositAddress) {
+  for (const grp of grouped) {
+    const acct = deriveAccount(grp.derivIndex);
+    if (acct.address !== grp._id) {
       console.error(
-        `[sweep] derivIndex ${order.derivIndex} produced ${acct.address} but order has ${order.depositAddress} — skipping`,
+        `[sweep] derivIndex ${grp.derivIndex} produced ${acct.address} but DB has ${grp._id} — skipping`,
       );
       continue;
     }
 
     const subClient = buildClient(acct.privateKey);
 
-    // Query USDT balance on the deposit address.
-    const usdtContract = await subClient.contract().at(order.contractAddress);
+    // Query the actual on-chain USDT balance (not the DB sum, in case of
+    // late deposits we don't know about).
+    const usdtContract = await subClient.contract().at(config.tronContract);
     const balRaw: bigint = await usdtContract.balanceOf(acct.address).call();
     const balance = Number(balRaw) / 1e6;
     if (balance <= 0) {
-      console.log(`[sweep] ${order.orderId.slice(0, 8)}… ${acct.address.slice(0, 10)}… USDT=0  skipping`);
+      console.log(`[sweep] ${acct.address.slice(0, 10)}… on-chain USDT=0  marking ${grp.orderIds.length} order(s) swept anyway`);
+      // Mark swept so we don't re-check forever.
+      if (!dryRun) {
+        await CryptoOrderModel.updateMany(
+          { orderId: { $in: grp.orderIds } },
+          { $set: { sweptAt: new Date(), sweptTxHash: "no-balance" } },
+        );
+      }
       continue;
     }
 
-    // Query TRX balance for gas.
     const trxBalSun = await subClient.trx.getBalance(acct.address);
     const trxBalance = trxBalSun / 1e6;
 
     console.log(
-      `[sweep] ${order.orderId.slice(0, 8)}… ${acct.address.slice(0, 10)}…  ` +
-        `USDT=${balance.toFixed(2)}  TRX=${trxBalance.toFixed(2)}`,
+      `[sweep] ${acct.address.slice(0, 10)}…  ` +
+        `USDT=${balance.toFixed(2)}  TRX=${trxBalance.toFixed(2)}  ` +
+        `orders=${grp.orderIds.length}`,
     );
 
-    // Top up TRX if low.
     if (trxBalance < config.cryptoSweepGasReserveTrx) {
       const need = config.cryptoSweepGasReserveTrx - trxBalance;
       console.log(`  → topping up ${need.toFixed(2)} TRX from hot wallet`);
@@ -109,15 +138,13 @@ const main = async (): Promise<void> => {
           console.error("  TRX top-up failed:", tx);
           continue;
         }
-        // Wait for funding to settle.
         await new Promise((r) => setTimeout(r, 4000));
       }
     }
 
-    // Sweep USDT.
     console.log(`  → transferring ${balance.toFixed(6)} USDT → hot wallet`);
     if (dryRun) {
-      console.log("    [dry-run] would call usdtContract.transfer(hot, balance)");
+      console.log(`    [dry-run] would sweep + mark ${grp.orderIds.length} order(s)`);
       continue;
     }
     let sweepTxId: string;
@@ -129,16 +156,17 @@ const main = async (): Promise<void> => {
       continue;
     }
 
-    order.sweptAt = new Date();
-    order.sweptTxHash = sweepTxId;
-    await order.save();
+    await CryptoOrderModel.updateMany(
+      { orderId: { $in: grp.orderIds } },
+      { $set: { sweptAt: new Date(), sweptTxHash: sweepTxId } },
+    );
     successCount++;
-    totalUsdt += balance;
-    console.log(`  ✓ swept ${sweepTxId.slice(0, 12)}…`);
+    totalSweptUsdt += balance;
+    console.log(`  ✓ swept ${sweepTxId.slice(0, 12)}… (${grp.orderIds.length} orders)`);
   }
 
   console.log("");
-  console.log(`[sweep] done — swept ${successCount}/${orders.length} orders, ${totalUsdt.toFixed(2)} USDT total`);
+  console.log(`[sweep] done — swept ${successCount}/${grouped.length} address(es), ${totalSweptUsdt.toFixed(2)} USDT total`);
   process.exit(0);
 };
 

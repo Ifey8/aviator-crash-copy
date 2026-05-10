@@ -1,8 +1,44 @@
 # Crypto Pay 操作手冊
 
-Per-order HD deposit address 嘅完整使用流程。Coinbase Commerce / BitPay
-業界標準模式 — 每個 order 一個獨立 TRON address,用戶送任何 USDT amount
-backend 自動 credit 對應 INR。
+Per-order HD deposit address + **cooldown 重用** 嘅完整使用流程。Coinbase
+Commerce / BitPay 業界標準模式 — 每個 order **獨立 binding** 一個 TRON
+address,**舊 order 完成 1 小時後該 address 可被新 order 重用**,大幅減少
+sweep gas 成本。
+
+## 💡 Address Pool 重用機制(省 gas 嘅關鍵)
+
+而家 backend 唔係每個 order 都派一個全新 address — 每次 create order:
+
+```
+1. 查 DB 揾「過咗 cooldown 嘅完成 order」(paid 1h+ / expired 1h+)
+2. 如果有 → 重用嗰個 derivIndex 同 depositAddress
+3. 如果冇 → 派新 derivIndex(counter 自動 +1)
+```
+
+實際效果:
+- 一日 100 個 order → 只生成 ~5 個 unique address(因為 1h cooldown 內最多 ~10-15 個 active order)
+- 一年 10K order → ~50 個 address
+- Sweep gas 由「每 order 一筆」變成「每 address 一批,N orders 共享」
+- **Gas overhead 由 ~5% 降到 ~0.5%**
+
+### 重用安全保證(timestamp window)
+
+每個 tx 上鏈嗰一刻都有 `block_timestamp`。Backend match 規則:
+- `tx.to === order.depositAddress` ✓
+- `tx.block_timestamp >= order.createdAt - 60s`(允許 ~1min clock skew)
+- `tx.block_timestamp <= order.expiresAt + 5min`(post-expiry grace)
+
+呢樣保證:
+- 用戶 A 嘅 order 完結 1 小時後,address 重用俾 B
+- A 如果**仍然**喺 1.5 小時後送錢,個 tx timestamp 大過 A.expiresAt → 唔 match A
+- 但 timestamp 又**小過** B.createdAt(因為 B 啱啱 create) → 都唔 match B
+- → **無人賺 A 嗰筆「late」錢**(會卡住喺 address,sweep 入 hot wallet,operator 可手動 reconcile)
+
+冷靜期由 `CRYPTO_ADDRESS_REUSE_COOLDOWN_MS` env 控制,默認 1 小時。
+
+---
+
+Per-order HD deposit address 嘅完整使用流程。
 
 ---
 

@@ -33,6 +33,14 @@ export const config = {
   cryptoHotWalletIndex: num(process.env.CRYPTO_HOT_WALLET_INDEX, 0),
   /** Min TRX to keep in deposit addresses for sweep gas (sweeper tops up to this if low). */
   cryptoSweepGasReserveTrx: num(process.env.CRYPTO_SWEEP_GAS_RESERVE_TRX, 30),
+  /**
+   * Cooldown after a deposit address's last order finalises before we
+   * recycle it for a new order. 1h default — long enough that a late
+   * payment for the old order is unambiguously "expired", short enough
+   * that the address pool stays small. Order TTL is 15min, so 1h means
+   * 45min of dead time between orders sharing an address.
+   */
+  cryptoAddressReuseCooldownMs: num(process.env.CRYPTO_ADDRESS_REUSE_COOLDOWN_MS, 60 * 60 * 1000),
   /** Optional TronGrid API key (improves rate limits). */
   trongridApiKey: process.env.TRONGRID_API_KEY || "",
   /** Watcher poll interval (ms). 30s default — fine for testnet. */

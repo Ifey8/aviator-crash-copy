@@ -75,7 +75,10 @@ const CryptoOrderSchema = new Schema<CryptoOrderDoc>({
   fxRateAt: { type: Date, required: true },
 
   network: { type: String, required: true, index: true },
-  depositAddress: { type: String, required: true, unique: true, index: true },
+  // NOT unique: same address may legitimately back many sequential orders
+  // (we recycle after `cryptoAddressReuseCooldownMs`). Tx-to-order matching
+  // uses (depositAddress, status:'pending', timestamp window) as the key.
+  depositAddress: { type: String, required: true, index: true },
   derivIndex: { type: Number, required: true, index: true },
   contractAddress: { type: String, required: true },
 

@@ -97,3 +97,59 @@ export const allocNextDepositIndex = async (): Promise<number> => {
   }
   return n;
 };
+
+/**
+ * Allocate a deposit address for a new order, reusing an old one if its
+ * last order has finalised (paid/expired/cancelled) AND the cooldown has
+ * elapsed AND no other pending order is currently bound to it.
+ *
+ * Reuse strategy = significantly fewer addresses → way fewer sweeps
+ * → way less TRX gas burn over a year. Cost: 1h dead time between uses
+ * (configurable). Tx misattribution prevented by strict timestamp window
+ * matching in the watcher (tx must be within order's [createdAt, expiresAt]).
+ */
+export const allocateAddress = async (): Promise<DerivedAccount> => {
+  // Lazy import to avoid require cycles.
+  // eslint-disable-next-line @typescript-eslint/no-var-requires
+  const { CryptoOrderModel } = require("../db/models/CryptoOrder") as typeof import("../db/models/CryptoOrder");
+
+  const now = Date.now();
+  const cutoff = new Date(now - config.cryptoAddressReuseCooldownMs);
+
+  // Pick the OLDEST eligible address (so reuse spreads across the pool).
+  // Eligibility: this order is finalised AND its cooldown window has passed.
+  const candidates = await CryptoOrderModel.find(
+    {
+      network: config.tronNetwork,
+      contractAddress: config.tronContract,
+      $or: [
+        { status: "paid", paidAt: { $lt: cutoff } },
+        // For expired/cancelled, base cooldown off expiresAt (which is when
+        // the order's window definitively closed).
+        { status: { $in: ["expired", "cancelled"] }, expiresAt: { $lt: cutoff } },
+      ],
+    },
+    { derivIndex: 1, depositAddress: 1, paidAt: 1, expiresAt: 1 },
+  )
+    .sort({ paidAt: 1, expiresAt: 1 })
+    .limit(20)
+    .lean();
+
+  for (const c of candidates) {
+    // Make sure no PENDING order is still bound to this address.
+    const inUse = await CryptoOrderModel.exists({
+      depositAddress: c.depositAddress,
+      status: "pending",
+      expiresAt: { $gt: new Date() },
+    });
+    if (!inUse) {
+      console.log(`[wallet] reusing address ${c.depositAddress.slice(0, 10)}… (index ${c.derivIndex})`);
+      return deriveAccount(c.derivIndex);
+    }
+  }
+
+  // No recyclable address — derive a fresh one.
+  const fresh = await allocNextDepositIndex();
+  console.log(`[wallet] allocating fresh address at index ${fresh}`);
+  return deriveAccount(fresh);
+};

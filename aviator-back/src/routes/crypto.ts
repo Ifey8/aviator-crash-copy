@@ -5,7 +5,7 @@ import { requireAuth } from "../middleware/requireAuth";
 import { config } from "../config";
 import { getUsdtInrRate } from "../payment/pricer";
 import { pushToUser } from "../sockets";
-import { allocNextDepositIndex, deriveAccount } from "../payment/wallet";
+import { allocateAddress } from "../payment/wallet";
 
 export const cryptoRouter = Router();
 
@@ -89,10 +89,10 @@ cryptoRouter.post("/create", requireAuth, async (req: Request, res: Response) =>
     });
   }
 
-  // Allocate fresh deposit address for this order. Atomic counter ensures
-  // every concurrent createOrder gets a unique index.
-  const derivIndex = await allocNextDepositIndex();
-  const acct = deriveAccount(derivIndex);
+  // Allocate (or recycle) a deposit address. Recycles if a past order's
+  // cooldown has elapsed; otherwise derives a fresh index. Hugely cuts
+  // sweep gas over time vs allocating a brand-new address every order.
+  const acct = await allocateAddress();
 
   const orderId = randomUUID();
   const expiresAt = new Date(Date.now() + config.cryptoOrderTtlMs);
