@@ -1,4 +1,5 @@
 import React from "react";
+import { QRCodeSVG } from "qrcode.react";
 import { useAuth } from "../../auth/AuthProvider";
 import { config } from "../../config";
 import "./admin.scss";
@@ -839,19 +840,7 @@ const WalletsTab: React.FC = () => {
         </span>
       </div>
 
-      {hot && (
-        <div className="admin-wallets-hot" style={{ marginTop: 16 }}>
-          <h3 style={{ fontSize: 14, margin: "0 0 8px" }}>Hot wallet (index {hot.index})</h3>
-          <div className="admin-withdrawals-hot">
-            <code>{hot.address}</code>
-          </div>
-          <div style={{ fontSize: 12, marginTop: 4 }}>
-            <strong style={{ color: "#ffc857" }}>{hot.usdtBalance.toFixed(4)} USDT</strong>
-            {" · "}
-            <strong>{hot.trxBalance.toFixed(4)} TRX</strong>
-          </div>
-        </div>
-      )}
+      {hot && <HotWalletCard hot={hot} />}
 
       <h3 style={{ fontSize: 14, margin: "20px 0 8px" }}>Deposit sub-addresses ({deposits.length})</h3>
       <table className="admin-table">
@@ -880,6 +869,106 @@ const WalletsTab: React.FC = () => {
 
       {transferOpen && (
         <TransferOutModal onClose={() => setTransferOpen(false)} onDone={() => { setTransferOpen(false); load(true); }} hotUsdt={hot?.usdtBalance || 0} hotTrx={hot?.trxBalance || 0} />
+      )}
+    </div>
+  );
+};
+
+/**
+ * Hot wallet display card — address + balances + copy + QR for scan.
+ *
+ * Why a QR: when topping up the hot wallet from a phone wallet (Binance,
+ * TronLink mobile), scanning is way safer than typing/pasting a 34-char
+ * address. ⚠️ The QR encodes the address only — destination network is
+ * still TRON-TRC20, the operator must select that on the sender app.
+ */
+const HotWalletCard: React.FC<{ hot: WalletEntry }> = ({ hot }) => {
+  const [copied, setCopied] = React.useState(false);
+  const [qrOpen, setQrOpen] = React.useState(false);
+
+  const copy = async () => {
+    try {
+      await navigator.clipboard.writeText(hot.address);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1800);
+    } catch {
+      const ta = document.createElement("textarea");
+      ta.value = hot.address;
+      document.body.appendChild(ta);
+      ta.select();
+      try { document.execCommand("copy"); setCopied(true); setTimeout(() => setCopied(false), 1800); } catch { /* ignore */ }
+      document.body.removeChild(ta);
+    }
+  };
+
+  return (
+    <div className="admin-wallets-hot" style={{ marginTop: 16 }}>
+      <h3 style={{ fontSize: 14, margin: "0 0 8px" }}>Hot wallet (index {hot.index})</h3>
+      <div style={{ display: "flex", gap: 14, alignItems: "flex-start", flexWrap: "wrap" }}>
+        <div
+          onClick={() => setQrOpen(true)}
+          style={{
+            background: "white",
+            padding: 6,
+            borderRadius: 6,
+            cursor: "zoom-in",
+            flex: "0 0 auto",
+            display: "flex",
+          }}
+          title="Click to enlarge"
+        >
+          <QRCodeSVG value={hot.address} size={88} level="M" />
+        </div>
+        <div style={{ flex: "1 1 280px", minWidth: 0 }}>
+          <div style={{ display: "flex", gap: 6, alignItems: "center", flexWrap: "wrap" }}>
+            <code
+              style={{
+                background: "rgba(255, 200, 87, 0.06)",
+                padding: "4px 8px",
+                borderRadius: 4,
+                fontSize: 11,
+                wordBreak: "break-all",
+                flex: 1,
+                minWidth: 0,
+              }}
+            >
+              {hot.address}
+            </code>
+            <button onClick={copy} style={{ whiteSpace: "nowrap" }}>
+              {copied ? "✓ Copied" : "Copy"}
+            </button>
+            <button onClick={() => setQrOpen(true)}>QR</button>
+          </div>
+          <div style={{ fontSize: 12, marginTop: 8 }}>
+            <strong style={{ color: "#ffc857" }}>{hot.usdtBalance.toFixed(4)} USDT</strong>
+            {" · "}
+            <strong>{hot.trxBalance.toFixed(4)} TRX</strong>
+          </div>
+          <div style={{ fontSize: 10.5, opacity: 0.55, marginTop: 4 }}>
+            Network: TRC20 · Send TRX or USDT (TRC20) only — never ERC20/BEP20
+          </div>
+        </div>
+      </div>
+
+      {qrOpen && (
+        <div className="admin-modal-overlay" onClick={() => setQrOpen(false)}>
+          <div className="admin-modal" onClick={(e) => e.stopPropagation()} style={{ maxWidth: 360 }}>
+            <h3>Scan to deposit</h3>
+            <div style={{ background: "white", padding: 16, borderRadius: 8, display: "flex", justifyContent: "center" }}>
+              <QRCodeSVG value={hot.address} size={260} level="H" />
+            </div>
+            <p style={{ fontSize: 11, opacity: 0.7, textAlign: "center", marginTop: 12 }}>
+              Network: <strong style={{ color: "#ffc857" }}>TRON (TRC20)</strong>
+            </p>
+            <code style={{ display: "block", textAlign: "center", fontSize: 10.5, wordBreak: "break-all", margin: "8px 0" }}>
+              {hot.address}
+            </code>
+            <div className="admin-modal-actions">
+              <button onClick={copy}>{copied ? "✓ Copied" : "Copy address"}</button>
+              <button className="primary" onClick={() => setQrOpen(false)}>Close</button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );
