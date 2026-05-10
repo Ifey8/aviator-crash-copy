@@ -52,6 +52,10 @@ const main = async () => {
   startTronWatcher();
   server.listen(config.port, () => {
     console.log(`[api] listening on :${config.port}`);
+    console.log(
+      `[api] allowDevAuth=${config.allowDevAuth} ` +
+        `(prod MUST be false; otherwise tokenless sockets spawn guest users)`,
+    );
   });
 };
 

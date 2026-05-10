@@ -55,7 +55,13 @@ export const config = {
   /** Used when CoinGecko is unreachable. Manually adjust as needed. */
   usdtInrRateFallback: num(process.env.USDT_INR_RATE, 83),
 
-  allowDevAuth: bool(process.env.ALLOW_DEV_AUTH, true),
+  // Production-safe default: dev guest auto-creation is OFF unless explicitly
+  // enabled. Setting this to true allows any tokenless socket connection to
+  // spawn a fresh User doc with initialBalance — useful for local dev, a
+  // disaster on prod (every anonymous visitor / scraper / TG link-preview
+  // bot creates a real DB row). Set ALLOW_DEV_AUTH=true in .env only for
+  // local development.
+  allowDevAuth: bool(process.env.ALLOW_DEV_AUTH, false),
   initialBalance: num(process.env.INITIAL_BALANCE, 1000),
   minBet: num(process.env.MIN_BET, 1),
   maxBet: num(process.env.MAX_BET, 1000),
