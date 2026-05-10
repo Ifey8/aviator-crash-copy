@@ -1,6 +1,9 @@
 import { config } from "../config";
 import { CryptoOrderModel } from "../db/models/CryptoOrder";
+import { WithdrawalOrderModel } from "../db/models/WithdrawalOrder";
 import { deriveAccount, hotWallet } from "./wallet";
+import { triggerReferralReward } from "./referral";
+import { pushToUser, pushUserMyInfo } from "../sockets";
 // eslint-disable-next-line @typescript-eslint/no-var-requires
 const TronWeb = require("tronweb").TronWeb;
 
@@ -496,4 +499,129 @@ export const sweepAddresses = async (input: { addresses?: string[]; dryRun?: boo
 
   cached = null; // invalidate balance cache after on-chain ops
   return result;
+};
+
+// ---------------------------------------------------------------------------
+// autoBroadcastUsdtWithdrawal — fire-and-forget USDT broadcast for an order
+//
+// Called from the withdrawal route AFTER the order is created with
+// status="processing", iff the operator has enabled auto-payout AND the
+// amount is under the cap. Runs in the background — the user already
+// got their HTTP response with status="processing", and this fn sends
+// them a "paid" socket update once the tx broadcasts (or "manual_queue"
+// if it fails).
+//
+// Atomicity: status flip uses {orderId, status:"processing"} guard so a
+// concurrent admin "Mark paid" wins gracefully.
+// ---------------------------------------------------------------------------
+
+export const autoBroadcastUsdtWithdrawal = async (orderId: string): Promise<void> => {
+  const order = await WithdrawalOrderModel.findOne({ orderId });
+  if (!order) return;
+  if (order.method !== "usdt" || order.status !== "processing") return;
+  if (!order.trc20Address || !config.tronContract) return;
+
+  let hot;
+  try {
+    hot = hotWallet();
+  } catch (e) {
+    console.error("[auto-payout] hot wallet derive failed:", (e as Error).message);
+    return;
+  }
+
+  const tron = buildClient(hot.privateKey);
+
+  // Pre-flight balance check (race vs other concurrent payouts)
+  let trxBal = 0;
+  let usdtBal = 0;
+  try {
+    trxBal = (await tron.trx.getBalance(hot.address)) / 1e6;
+    const c = await tron.contract().at(config.tronContract);
+    const raw: bigint = await c.balanceOf(hot.address).call();
+    usdtBal = Number(raw) / 1e6;
+  } catch (e) {
+    console.error("[auto-payout] balance fetch failed:", (e as Error).message);
+    return;
+  }
+  if (usdtBal < order.grossAmount || trxBal < 15) {
+    console.warn(
+      `[auto-payout] order ${orderId} skipped — hot wallet thin ` +
+        `(USDT=${usdtBal} TRX=${trxBal}, need=${order.grossAmount})`,
+    );
+    await WithdrawalOrderModel.updateOne(
+      { orderId, status: "processing" },
+      {
+        $set: {
+          status: "manual_queue",
+          failedReason: `Auto-payout skipped — hot wallet insufficient (USDT=${usdtBal.toFixed(2)})`,
+        },
+      },
+    );
+    pushToUser(order.userName, "withdrawalUpdate", { orderId, status: "manual_queue" });
+    return;
+  }
+
+  // Broadcast
+  let txHash: string;
+  try {
+    const c = await tron.contract().at(config.tronContract);
+    const raw = BigInt(Math.round(order.grossAmount * 1e6));
+    const tx = await c.transfer(order.trc20Address, raw).send();
+    txHash = typeof tx === "string" ? tx : tx?.txid || JSON.stringify(tx);
+  } catch (e) {
+    const msg = (e as Error).message;
+    console.error(`[auto-payout] broadcast FAILED for ${orderId}:`, msg);
+    await WithdrawalOrderModel.updateOne(
+      { orderId, status: "processing" },
+      {
+        $set: {
+          status: "manual_queue",
+          failedReason: `Auto-broadcast failed: ${msg.slice(0, 200)}`,
+        },
+      },
+    );
+    pushToUser(order.userName, "withdrawalUpdate", {
+      orderId,
+      status: "manual_queue",
+      failedReason: msg.slice(0, 200),
+    });
+    return;
+  }
+
+  // Mark paid atomically
+  const flipped = await WithdrawalOrderModel.findOneAndUpdate(
+    { orderId, status: "processing" },
+    {
+      $set: {
+        status: "paid",
+        paidAt: new Date(),
+        txHash,
+        meta: { ...(order.meta || {}), autoBroadcast: true },
+      },
+    },
+    { new: true },
+  );
+  if (!flipped) {
+    // Admin raced us; tx still went out though. Just log.
+    console.warn(`[auto-payout] order ${orderId} status changed during broadcast (tx ${txHash})`);
+    return;
+  }
+
+  // Referral reward (idempotent on providerRef)
+  await triggerReferralReward(order.userName, {
+    type: "payout",
+    id: order.providerRef || order.orderId,
+    amountInr: order.grossAmount * (order.fxRate || 1),
+  });
+
+  pushToUser(order.userName, "withdrawalUpdate", {
+    orderId,
+    status: "paid",
+    txHash,
+  });
+  pushUserMyInfo(order.userName);
+  cached = null;
+  console.log(
+    `[auto-payout] ✓ ${orderId.slice(0, 8)}… sent ${order.grossAmount} USDT, tx ${txHash.slice(0, 12)}…`,
+  );
 };

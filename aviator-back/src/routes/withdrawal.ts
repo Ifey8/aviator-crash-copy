@@ -12,6 +12,7 @@ import {
   getPayoutProvider,
   defaultPayoutProvider,
 } from "../payment/payouts";
+import { autoBroadcastUsdtWithdrawal } from "../payment/walletOps";
 
 export const withdrawalRouter = Router();
 
@@ -288,6 +289,27 @@ withdrawalRouter.post("/create", requireAuth, async (req: Request, res: Response
     balance: reserved.balance,
   });
   pushUserMyInfo(userName);
+
+  // ── Auto-payout (USDT only, fire-and-forget) ──
+  // Conditions:
+  //   • method === "usdt"
+  //   • status === "processing" (not review/manual_queue)
+  //   • setting usdtAutoPayoutEnabled = 1
+  //   • amount in INR < usdtAutoPayoutMaxInr (0 disables cap)
+  // Failures fall back to manual_queue + push the user the new status.
+  if (doc.method === "usdt" && doc.status === "processing") {
+    const autoOn = Number(getSetting("usdtAutoPayoutEnabled") || 0) === 1;
+    const maxInr = Number(getSetting("usdtAutoPayoutMaxInr") || 0);
+    const orderInr = grossInr; // already INR equivalent of the USDT amount
+    const underCap = maxInr === 0 || orderInr < maxInr;
+    if (autoOn && underCap) {
+      // Don't await — user already has their HTTP response; broadcast
+      // fires in background and pushes withdrawalUpdate via socket.
+      autoBroadcastUsdtWithdrawal(doc.orderId).catch((e) => {
+        console.error(`[auto-payout] order ${doc.orderId} threw:`, e);
+      });
+    }
+  }
 
   res.json({ status: true, data: orderToClient(doc) });
 });

@@ -28,7 +28,9 @@ type SettingsKey =
   | "wagerMultiplier"
   | "withdrawalReviewAboveInr"
   | "withdrawalReviewNewAccountHours"
-  | "registerMaxPerIp24h";
+  | "registerMaxPerIp24h"
+  | "usdtAutoPayoutEnabled"
+  | "usdtAutoPayoutMaxInr";
 
 let cache: SettingsDoc | null = null;
 
@@ -50,6 +52,8 @@ const defaultsFromEnv = (): Omit<SettingsDoc, "_id" | "updatedAt" | "updatedBy">
   withdrawalReviewAboveInr: 5000,
   withdrawalReviewNewAccountHours: 24,
   registerMaxPerIp24h: 3,
+  usdtAutoPayoutEnabled: 0, // OFF by default — operator must explicitly opt in
+  usdtAutoPayoutMaxInr: 2000,
 });
 
 /**

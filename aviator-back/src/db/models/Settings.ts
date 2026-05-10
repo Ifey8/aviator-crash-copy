@@ -64,6 +64,25 @@ export interface SettingsDoc {
    */
   registerMaxPerIp24h: number;
 
+  // ── Auto-payout (USDT only) ──
+  /**
+   * 1 = USDT withdrawals that pass risk checks auto-broadcast to TRON
+   *     (no admin click needed). 0 = always manual.
+   * Pre-conditions still required even when on:
+   *   • status not "review" / "manual_queue"
+   *   • amount < usdtAutoPayoutMaxInr
+   *   • hot wallet has enough USDT + ≥ 15 TRX gas
+   * Bank withdrawals always remain manual (no real provider yet).
+   */
+  usdtAutoPayoutEnabled: number;
+  /**
+   * USDT auto-payout cap (INR equivalent at order's locked fxRate).
+   * Withdrawals AT OR ABOVE this stay in `processing` and require
+   * admin Approve / Paid. 0 disables the cap (auto regardless of size,
+   * not recommended).
+   */
+  usdtAutoPayoutMaxInr: number;
+
   updatedAt: Date;
   updatedBy?: string;
 }
@@ -88,6 +107,8 @@ const SettingsSchema = new Schema<SettingsDoc>(
     withdrawalReviewAboveInr: { type: Number, required: true, min: 0 },
     withdrawalReviewNewAccountHours: { type: Number, required: true, min: 0 },
     registerMaxPerIp24h: { type: Number, required: true, min: 0, max: 100 },
+    usdtAutoPayoutEnabled: { type: Number, required: true, min: 0, max: 1 },
+    usdtAutoPayoutMaxInr: { type: Number, required: true, min: 0 },
     updatedAt: { type: Date, default: Date.now },
     updatedBy: { type: String },
   },

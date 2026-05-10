@@ -365,6 +365,8 @@ interface SettingsData {
   withdrawalReviewAboveInr: number;
   withdrawalReviewNewAccountHours: number;
   registerMaxPerIp24h: number;
+  usdtAutoPayoutEnabled: number;
+  usdtAutoPayoutMaxInr: number;
   updatedAt?: string;
   updatedBy?: string;
 }
@@ -387,6 +389,8 @@ const SETTINGS_FIELDS: { key: keyof SettingsData; label: string; hint: string; g
   { group: "Anti-abuse", key: "withdrawalReviewAboveInr", label: "Review above (INR)", hint: "Withdrawals at or above this gross amount auto-flagged for admin review. 0 disables." },
   { group: "Anti-abuse", key: "withdrawalReviewNewAccountHours", label: "Review new account (hours)", hint: "If account younger than this and withdrawing → flagged for review. 0 disables." },
   { group: "Anti-abuse", key: "registerMaxPerIp24h", label: "Max registrations / IP / 24h", hint: "Hard cap on new accounts from one IP per day. 3 = real users uneffected, bot farms blocked. 0 disables." },
+  { group: "Auto-payout", key: "usdtAutoPayoutEnabled", label: "USDT auto-payout (1=on, 0=off)", hint: "When ON: USDT withdrawals under the cap broadcast to TRON automatically (no admin click). Bank withdrawals always manual. Default OFF — opt in when comfortable." },
+  { group: "Auto-payout", key: "usdtAutoPayoutMaxInr", label: "Auto-payout cap (INR)", hint: "USDT withdrawals at or above this stay in 'processing' awaiting admin Approve. Below this and auto-on → instant broadcast. Set 2000-5000 for sensible mid-range automation." },
 ];
 
 const SettingsTab: React.FC = () => {
@@ -504,7 +508,7 @@ interface WithdrawalRow {
   txHash?: string;
   provider?: string;
   failedReason?: string;
-  meta?: { reviewReason?: string };
+  meta?: { reviewReason?: string; autoBroadcast?: boolean };
   createdAt: string;
   paidAt?: string;
 }
@@ -663,6 +667,9 @@ const WithdrawalsTab: React.FC = () => {
                 </td>
                 <td>
                   <span className={`tag status-${r.status}`}>{r.status}</span>
+                  {r.meta?.autoBroadcast && (
+                    <span className="tag" style={{ background: "rgba(86,224,154,0.18)", color: "#56e09a", marginLeft: 4 }} title="Auto-broadcast">⚡ AUTO</span>
+                  )}
                   {r.meta?.reviewReason && (
                     <div className="seed" title={r.meta.reviewReason}>⚠ {r.meta.reviewReason}</div>
                   )}
