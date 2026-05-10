@@ -97,6 +97,11 @@ withdrawalRouter.get("/quote", requireAuth, async (req: Request, res: Response) 
       minInr: min,
       maxGrossInr: Math.max(0, maxGross),
       usdtInrRate: usdtRate,
+      // Channel availability — frontend hides Bank tab when off so users
+      // don't fill the form just to hit 403. Same setting that gates INR
+      // recharge; flipping it on re-enables both bank withdrawal AND fiat
+      // top-up at the same time.
+      bankEnabled: Number(getSetting("inrRechargeEnabled") || 0) === 1,
     },
   });
 });
@@ -127,6 +132,15 @@ withdrawalRouter.post("/create", requireAuth, async (req: Request, res: Response
   }
   if (!isFinite(amount) || amount <= 0) {
     return res.status(400).json({ status: false, message: "Invalid amount" });
+  }
+
+  // INR channel gate — same setting controls fiat recharge AND bank payout.
+  // Off until a real Indian payout provider (Razorpay / Cashfree) is wired in.
+  if (method === "bank" && Number(getSetting("inrRechargeEnabled") || 0) !== 1) {
+    return res.status(403).json({
+      status: false,
+      message: "Bank withdrawals are temporarily unavailable. Please use USDT withdrawal.",
+    });
   }
 
   const feePct = Number(getSetting("withdrawalFeePct") || 0);

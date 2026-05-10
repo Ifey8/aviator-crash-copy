@@ -28,6 +28,7 @@ interface QuoteData {
   minInr: number;
   maxGrossInr: number;
   usdtInrRate: number | null;
+  bankEnabled?: boolean;
 }
 
 interface OrderData {
@@ -86,8 +87,12 @@ export const WithdrawalSheet: React.FC<Props> = ({ open, onClose }) => {
         const r = await fetch(`${apiBase}/withdrawal/quote`, { headers: authHeaders() });
         const j = await r.json();
         if (cancelled) return;
-        if (j.status) setQuote(j.data);
-        else setError(j.message);
+        if (j.status) {
+          setQuote(j.data);
+          // Snap selected tab to whichever channel is available so the user
+          // doesn't see an empty form for a disabled method.
+          if (j.data?.bankEnabled === false) setTab("usdt");
+        } else setError(j.message);
       } catch (e) {
         if (!cancelled) setError((e as Error).message);
       }
@@ -221,12 +226,17 @@ export const WithdrawalSheet: React.FC<Props> = ({ open, onClose }) => {
             </div>
 
             <div className="wd-tabs">
-              <button
-                className={`wd-tab ${tab === "bank" ? "active" : ""}`}
-                onClick={() => setTab("bank")}
-              >
-                Bank (INR)
-              </button>
+              {/* Bank tab only when admin has the INR channel on. While off,
+                  the route returns 403 — hiding the tab saves users the
+                  detour of filling the form. */}
+              {quote?.bankEnabled !== false && (
+                <button
+                  className={`wd-tab ${tab === "bank" ? "active" : ""}`}
+                  onClick={() => setTab("bank")}
+                >
+                  Bank (INR)
+                </button>
+              )}
               <button
                 className={`wd-tab ${tab === "usdt" ? "active" : ""}`}
                 onClick={() => setTab("usdt")}
@@ -234,6 +244,11 @@ export const WithdrawalSheet: React.FC<Props> = ({ open, onClose }) => {
                 USDT (TRC20)
               </button>
             </div>
+            {quote?.bankEnabled === false && (
+              <p className="wd-hint" style={{ marginTop: 0, opacity: 0.75 }}>
+                Bank withdrawals are temporarily unavailable. USDT (TRC20) is live.
+              </p>
+            )}
 
             {tab === "bank" ? (
               <div className="wd-form">
