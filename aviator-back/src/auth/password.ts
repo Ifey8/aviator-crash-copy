@@ -1,6 +1,6 @@
 import bcrypt from "bcryptjs";
 import { UserModel, UserDoc } from "../db/models/User";
-import { config } from "../config";
+import { getSetting } from "../settings";
 import { signToken } from "./jwt";
 
 const BCRYPT_ROUNDS = 10;
@@ -85,7 +85,10 @@ export const registerWithPassword = async (input: {
     passwordHash,
     phone: input.phone,
     avatar: `av-${Math.floor(Math.random() * 8) + 1}.png`,
-    balance: config.initialBalance,
+    // Live admin-tunable setting (admin Settings → "Initial balance"). Was
+    // mistakenly using config.initialBalance (env, 1000) — admin's value
+    // had no effect, so users could spam-register for free credits.
+    balance: getSetting("initialBalance"),
     lastLoginAt: new Date(),
     sid,
     referrer,

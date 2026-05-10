@@ -975,6 +975,134 @@
   }
 }
 
+/* -------- Brand button (logo click → AccountSheet) -------- */
+.mobile-header-brand-btn {
+  background: transparent;
+  border: none;
+  padding: 0;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: inherit;
+  font: inherit;
+  &:active { transform: scale(0.97); }
+  &:focus-visible {
+    outline: 2px solid #ffc857;
+    outline-offset: 4px;
+    border-radius: 6px;
+  }
+}
+
+/* -------- Account sheet -------- */
+.account-sheet {
+  max-width: 360px;
+  text-align: left;
+
+  .account-header {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-bottom: 14px;
+    .account-avatar {
+      width: 48px; height: 48px;
+      border-radius: 50%;
+      background: linear-gradient(135deg, #ff9933, #ffc857);
+      display: flex; align-items: center; justify-content: center;
+      overflow: hidden;
+      img { width: 100%; height: 100%; object-fit: cover; }
+    }
+    .account-name-block { flex: 1; }
+    .account-name {
+      font-weight: 800;
+      font-size: 16px;
+      color: #fff5dc;
+      letter-spacing: 0.02em;
+      display: flex; align-items: center; gap: 8px;
+    }
+    .account-admin-badge {
+      background: rgba(255, 200, 87, 0.18);
+      color: #ffc857;
+      font-size: 9px;
+      font-weight: 800;
+      letter-spacing: 0.08em;
+      padding: 2px 7px;
+      border-radius: 999px;
+    }
+    .account-meta {
+      font-size: 11px;
+      color: var(--text-muted);
+      margin-top: 2px;
+    }
+  }
+
+  .account-balance-card {
+    background: rgba(255, 200, 87, 0.06);
+    border: 1px solid rgba(255, 200, 87, 0.18);
+    border-radius: 10px;
+    padding: 10px 12px;
+    margin-bottom: 14px;
+    .account-balance-row {
+      display: flex; justify-content: space-between;
+      font-size: 12px; padding: 3px 0;
+      span { color: var(--text-muted); }
+      strong { color: #fff5dc; }
+      .account-locked { color: #c12244 !important; }
+      &.account-balance-w {
+        border-top: 1px dashed rgba(255, 200, 87, 0.3);
+        margin-top: 4px; padding-top: 6px;
+        font-size: 13px;
+        strong { color: #ffc857; font-size: 14px; }
+      }
+    }
+  }
+
+  .account-actions {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    margin-bottom: 12px;
+  }
+
+  .account-link {
+    text-align: center;
+    background: rgba(255, 200, 87, 0.08);
+    border: 1px solid rgba(255, 200, 87, 0.3);
+    color: #ffc857;
+    border-radius: 8px;
+    padding: 10px;
+    font-size: 13px;
+    font-weight: 700;
+    text-decoration: none;
+    letter-spacing: 0.02em;
+    &:hover { background: rgba(255, 200, 87, 0.16); }
+  }
+
+  .account-logout {
+    background: transparent;
+    border: 1px solid #c12244;
+    color: #ffb0bc;
+    border-radius: 8px;
+    padding: 10px;
+    font-weight: 700;
+    font-size: 13px;
+    cursor: pointer;
+    letter-spacing: 0.04em;
+    &:hover { background: rgba(193, 34, 68, 0.18); }
+  }
+
+  .account-close {
+    width: 100%;
+    background: transparent;
+    border: none;
+    color: var(--text-muted);
+    font-size: 11.5px;
+    padding: 6px;
+    cursor: pointer;
+    text-decoration: underline;
+  }
+}
+
 /* -------- Withdrawal sheet -------- */
 .withdrawal-sheet {
   max-width: 380px;

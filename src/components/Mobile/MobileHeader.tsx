@@ -48,22 +48,28 @@ interface HeaderProps {
   onOpenMenu: () => void;
   onRecharge?: () => void;
   onWithdraw?: () => void;
+  onOpenAccount?: () => void;
 }
 
-export const MobileHeader: React.FC<HeaderProps> = ({ onOpenMenu, onRecharge, onWithdraw }) => {
+export const MobileHeader: React.FC<HeaderProps> = ({ onOpenMenu, onRecharge, onWithdraw, onOpenAccount }) => {
   const { userInfo, errorBackend } = React.useContext(Context);
   const balanceServer = Number(userInfo?.balance || 0);
   const balance = useDisplayBalance(balanceServer);
   const currency = userInfo?.currency || "INR";
   return (
     <header className="mobile-header">
-      <div className="mobile-header-brand">
+      <button
+        className="mobile-header-brand mobile-header-brand-btn"
+        onClick={onOpenAccount}
+        aria-label="My account"
+        type="button"
+      >
         <span className="mobile-header-logo" aria-label="Aviator Plane">
           <Plane size={28} static halo={false} />
         </span>
         <span className="mobile-header-name">AVIATOR</span>
         {errorBackend && <span className="mobile-header-offline">offline</span>}
-      </div>
+      </button>
       <div className="mobile-header-right">
         <div className="mobile-header-balance" data-fx="balance">
           <span className="balance-amount">{balance.toFixed(2)}</span>
