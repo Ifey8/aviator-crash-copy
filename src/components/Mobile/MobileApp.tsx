@@ -7,6 +7,7 @@ import { BetCard } from "./BetCard";
 import { BetsListSheet } from "./BetsListSheet";
 import { CoinFxLayer } from "./CoinFxLayer";
 import { RechargeSheet } from "./RechargeSheet";
+import { ShareSheet } from "./ShareSheet";
 import "./mobile.scss";
 import "./recharge.scss";
 // luxe.scss is imported from src/app.tsx as the LAST stylesheet so its
@@ -35,8 +36,8 @@ const useTelegramTheme = () => {
 export const MobileApp: React.FC = () => {
   useTelegramTheme();
   const { rechargeState, errorBackend, platformLoading } = React.useContext(Context);
-  const [, setMenuOpen] = React.useState(false);
   const [rechargeOpen, setRechargeOpen] = React.useState(false);
+  const [shareOpen, setShareOpen] = React.useState(false);
 
   return (
     <div className="mobile-app">
@@ -46,7 +47,7 @@ export const MobileApp: React.FC = () => {
         <span /><span /><span /><span /><span />
       </div>
       <MobileHeader
-        onOpenMenu={() => setMenuOpen(true)}
+        onOpenMenu={() => setShareOpen(true)}
         onRecharge={() => setRechargeOpen(true)}
       />
       <main className="mobile-main">
@@ -65,17 +66,30 @@ export const MobileApp: React.FC = () => {
 
       <RechargeSheet open={rechargeOpen} onClose={() => setRechargeOpen(false)} />
 
-      {rechargeState && (
+      <ShareSheet open={shareOpen} onClose={() => setShareOpen(false)} />
+
+      {rechargeState && !shareOpen && !rechargeOpen && (
         <div className="mobile-modal-overlay">
           <div className="mobile-modal">
-            <h3>Insufficient balance</h3>
-            <p>You need at least 1 to play. Top up to continue.</p>
-            <button
-              className="modal-cta"
-              onClick={() => setRechargeOpen(true)}
-            >
-              Top up
-            </button>
+            <h3>Out of balance</h3>
+            <p>
+              Invite friends to recharge — get <strong>₹100</strong> for each
+              one. Or top up your own balance to keep playing.
+            </p>
+            <div className="modal-cta-row">
+              <button
+                className="modal-cta share-first"
+                onClick={() => setShareOpen(true)}
+              >
+                Share &amp; earn ₹100
+              </button>
+              <button
+                className="modal-cta secondary"
+                onClick={() => setRechargeOpen(true)}
+              >
+                Top up
+              </button>
+            </div>
           </div>
         </div>
       )}

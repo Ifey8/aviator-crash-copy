@@ -41,10 +41,20 @@ const toResult = (user: UserDoc): AuthResult => {
   };
 };
 
+const sanitizeAttr = (s?: string): string | undefined => {
+  if (!s) return undefined;
+  const cleaned = s.toString().replace(/[^A-Za-z0-9_.-]/g, "").slice(0, 64);
+  return cleaned || undefined;
+};
+
 export const registerWithPassword = async (input: {
   userName: string;
   password: string;
   phone?: string;
+  /** First-touch acquisition source (?sid=). Persisted only on creation. */
+  sid?: string;
+  /** First-touch referrer userName (?ref=). Persisted only on creation. */
+  referrer?: string;
 }): Promise<{ ok: true; result: AuthResult } | { ok: false; reason: string }> => {
   const userName = sanitizeUserName(input.userName);
   if (userName.length < 3) return { ok: false, reason: "Username must be 3–20 letters/digits/-/_" };
@@ -61,6 +71,14 @@ export const registerWithPassword = async (input: {
     if (phoneTaken) return { ok: false, reason: "Phone already registered" };
   }
 
+  const sid = sanitizeAttr(input.sid);
+  let referrer = sanitizeAttr(input.referrer);
+  if (referrer === userName) referrer = undefined;
+  if (referrer) {
+    const refUser = await UserModel.findOne({ userName: referrer });
+    if (!refUser) referrer = undefined;
+  }
+
   const passwordHash = await bcrypt.hash(input.password, BCRYPT_ROUNDS);
   const user = await UserModel.create({
     userName,
@@ -69,6 +87,8 @@ export const registerWithPassword = async (input: {
     avatar: `av-${Math.floor(Math.random() * 8) + 1}.png`,
     balance: config.initialBalance,
     lastLoginAt: new Date(),
+    sid,
+    referrer,
   });
 
   return { ok: true, result: toResult(user) };

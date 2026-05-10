@@ -21,6 +21,7 @@ adminRouter.put("/settings", async (req, res) => {
     "maxCrashMultiplier", "houseEdge", "minBet", "maxBet", "initialBalance",
     "cryptoMinUsdt", "cryptoMaxUsdt", "usdtInrRateFallback",
     "botMinCount", "botMaxCount",
+    "referralRewardInr",
   ] as const;
   const patch: Record<string, number> = {};
   for (const k of allowed) {
@@ -63,8 +64,13 @@ adminRouter.get("/users", async (req, res) => {
       { userName: { $regex: q, $options: "i" } },
       { phone: { $regex: q } },
       { email: { $regex: q, $options: "i" } },
+      { sid: { $regex: q, $options: "i" } },
+      { referrer: { $regex: q, $options: "i" } },
     ];
   }
+  // Optional explicit sid filter (e.g. /admin/users?sid=facebook)
+  const sidFilter = ((req.query.sid as string) || "").trim();
+  if (sidFilter) filter.sid = sidFilter;
   const [items, total] = await Promise.all([
     UserModel.find(filter).sort({ createdAt: -1 }).skip(skip).limit(limit).lean(),
     UserModel.countDocuments(filter),
@@ -81,6 +87,9 @@ adminRouter.get("/users", async (req, res) => {
       banned: !!u.banned,
       bannedReason: u.bannedReason,
       telegramId: u.telegramId,
+      sid: u.sid,
+      referrer: u.referrer,
+      referralEarned: u.referralEarned || 0,
       createdAt: u.createdAt,
       lastLoginAt: u.lastLoginAt,
     })),

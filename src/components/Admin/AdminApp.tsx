@@ -23,6 +23,9 @@ interface UserRow {
   banned: boolean;
   bannedReason?: string;
   telegramId?: number;
+  sid?: string;
+  referrer?: string;
+  referralEarned?: number;
   createdAt: string;
   lastLoginAt?: string;
 }
@@ -185,6 +188,7 @@ const UsersTab: React.FC = () => {
         <thead>
           <tr>
             <th>Username</th><th>Phone</th><th>Balance</th><th>Role</th>
+            <th>SID</th><th>Referrer</th><th>Ref Earned</th>
             <th>Status</th><th>Created</th><th>Actions</th>
           </tr>
         </thead>
@@ -195,12 +199,15 @@ const UsersTab: React.FC = () => {
               <td>{u.phone || "—"}</td>
               <td className="num">₹{u.balance.toFixed(2)}</td>
               <td>{u.isAdmin ? <span className="tag admin">ADMIN</span> : "player"}</td>
+              <td>{u.sid || "—"}</td>
+              <td>{u.referrer || "—"}</td>
+              <td className="num">₹{(u.referralEarned || 0).toFixed(2)}</td>
               <td>{u.banned ? <span className="tag banned">BANNED</span> : "active"}</td>
               <td>{new Date(u.createdAt).toLocaleDateString()}</td>
               <td><button onClick={() => setEditing(u)}>Edit</button></td>
             </tr>
           ))}
-          {items.length === 0 && <tr><td colSpan={7} className="empty">No users</td></tr>}
+          {items.length === 0 && <tr><td colSpan={10} className="empty">No users</td></tr>}
         </tbody>
       </table>
 
@@ -346,6 +353,7 @@ interface SettingsData {
   usdtInrRateFallback: number;
   botMinCount: number;
   botMaxCount: number;
+  referralRewardInr: number;
   updatedAt?: string;
   updatedBy?: string;
 }
@@ -361,6 +369,7 @@ const SETTINGS_FIELDS: { key: keyof SettingsData; label: string; hint: string; g
   { group: "Crypto", key: "usdtInrRateFallback", label: "USDT/INR fallback rate", hint: "Used when CoinGecko unreachable." },
   { group: "Bots", key: "botMinCount", label: "Bot min per round", hint: "Lower bound of random fake-player count." },
   { group: "Bots", key: "botMaxCount", label: "Bot max per round", hint: "Upper bound (5-15 = lively, 0-0 = none)." },
+  { group: "Referral", key: "referralRewardInr", label: "Reward per recharge (INR)", hint: "Credited to referrer EACH TIME a referred user recharges. 0 to disable referrals." },
 ];
 
 const SettingsTab: React.FC = () => {

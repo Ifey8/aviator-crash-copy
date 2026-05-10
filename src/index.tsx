@@ -10,6 +10,10 @@ import App from './app';
 import { Provider } from './context';
 import { AuthProvider } from './auth/AuthProvider';
 import { bootstrapTelegram } from './telegram-bootstrap';
+import { captureAttribution } from './acquisition';
+
+// Persist ?sid= and ?ref= from landing URL BEFORE telegram bootstrap reloads.
+captureAttribution();
 
 const renderApp = () => {
 	createRoot(document.getElementById("root") as HTMLElement).render(

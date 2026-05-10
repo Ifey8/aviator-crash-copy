@@ -7,6 +7,7 @@ import { config } from "../config";
 import { engine } from "../game/engine";
 import { pushToUser, pushUserMyInfo } from "../sockets";
 import { getProvider, defaultProvider, listProviders } from "../payment";
+import { triggerReferralReward } from "../payment/referral";
 
 export const rechargeRouter = Router();
 
@@ -199,6 +200,13 @@ const markPaidAndCredit = async (
     balance: newBalance,
   });
   pushUserMyInfo(order.userName);
+
+  // Referral reward (idempotent, no-op if user has no referrer)
+  await triggerReferralReward(order.userName, {
+    type: "recharge",
+    id: order.providerRef || order.orderId,
+    amountInr: order.amount,
+  });
 
   return { ok: true, order };
 };

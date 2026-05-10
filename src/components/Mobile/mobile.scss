@@ -955,6 +955,110 @@
     cursor: pointer;
     width: 100%;
   }
+
+  .modal-cta-row {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  .modal-cta.share-first {
+    background: linear-gradient(135deg, var(--crash-saffron, #ff9933) 0%, var(--crash-gold, #ffc857) 100%);
+    color: #1a0d00;
+    box-shadow: 0 6px 18px -8px rgba(255, 153, 51, 0.7);
+  }
+
+  .modal-cta.secondary {
+    background: transparent;
+    color: var(--text-muted);
+    border: 1px solid var(--border);
+  }
+}
+
+/* -------- Share modal -------- */
+.share-modal {
+  max-width: 360px;
+  text-align: left;
+
+  h3 {
+    text-align: center;
+    font-size: 17px;
+    background: linear-gradient(135deg, #ffc857, #ff9933 60%, #c12244);
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+    letter-spacing: 0.02em;
+  }
+
+  .share-blurb {
+    text-align: center;
+    font-size: 13px;
+    line-height: 1.45;
+    margin-bottom: 14px;
+    strong { color: #ffc857; }
+  }
+
+  .share-link-row {
+    display: flex;
+    gap: 6px;
+    margin-bottom: 14px;
+  }
+
+  .share-link-input {
+    flex: 1;
+    min-width: 0;
+    background: rgba(255, 245, 220, 0.06);
+    border: 1px solid var(--border);
+    color: #fff5dc;
+    border-radius: 8px;
+    padding: 9px 10px;
+    font-family: inherit;
+    font-size: 11px;
+    letter-spacing: 0.02em;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .share-copy-btn {
+    background: rgba(255, 200, 87, 0.15);
+    border: 1px solid #ffc857;
+    color: #ffc857;
+    border-radius: 8px;
+    padding: 0 14px;
+    font-weight: 700;
+    font-size: 12px;
+    cursor: pointer;
+    white-space: nowrap;
+  }
+
+  .share-actions {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  .modal-cta.share-cta {
+    background: linear-gradient(135deg, #ff9933 0%, #ffc857 100%);
+    color: #1a0d00;
+  }
+
+  .share-cancel {
+    background: transparent;
+    border: none;
+    color: var(--text-muted);
+    font-size: 12px;
+    padding: 8px;
+    cursor: pointer;
+    text-decoration: underline;
+  }
+
+  .share-stats {
+    margin-top: 12px;
+    text-align: center;
+    font-size: 11px;
+    color: var(--text-muted);
+    strong { color: #ffc857; letter-spacing: 0.05em; }
+  }
 }
 
 .connection-toast {

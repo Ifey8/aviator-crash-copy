@@ -21,7 +21,8 @@ type SettingsKey =
   | "cryptoMaxUsdt"
   | "usdtInrRateFallback"
   | "botMinCount"
-  | "botMaxCount";
+  | "botMaxCount"
+  | "referralRewardInr";
 
 let cache: SettingsDoc | null = null;
 
@@ -36,6 +37,7 @@ const defaultsFromEnv = (): Omit<SettingsDoc, "_id" | "updatedAt" | "updatedBy">
   usdtInrRateFallback: config.usdtInrRateFallback,
   botMinCount: 5,
   botMaxCount: 15,
+  referralRewardInr: 100,
 });
 
 /**

@@ -1,5 +1,6 @@
 import React from "react";
 import { config } from "../config";
+import { getAttribution } from "../acquisition";
 
 const TOKEN_KEY = "aviator_token";
 
@@ -111,10 +112,11 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const register: AuthValue["register"] = async (userName, password, phone) => {
     setLoading(true);
     try {
+      const { sid, ref } = getAttribution();
       const res = await fetch(`${apiBase}/auth/register`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ userName, password, phone }),
+        body: JSON.stringify({ userName, password, phone, sid, ref }),
       });
       const body = await res.json();
       if (!res.ok) return { ok: false, reason: body.message || "Register failed" };

@@ -29,6 +29,10 @@ export interface SettingsDoc {
   botMinCount: number;
   botMaxCount: number;
 
+  // ── Referral ──
+  /** INR credited to referrer EACH TIME a referred user successfully recharges. */
+  referralRewardInr: number;
+
   updatedAt: Date;
   updatedBy?: string;
 }
@@ -46,6 +50,7 @@ const SettingsSchema = new Schema<SettingsDoc>(
     usdtInrRateFallback: { type: Number, required: true, min: 0.01 },
     botMinCount: { type: Number, required: true, min: 0, max: 50 },
     botMaxCount: { type: Number, required: true, min: 0, max: 100 },
+    referralRewardInr: { type: Number, required: true, min: 0 },
     updatedAt: { type: Date, default: Date.now },
     updatedBy: { type: String },
   },

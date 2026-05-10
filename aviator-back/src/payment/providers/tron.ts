@@ -2,6 +2,7 @@ import { config } from "../../config";
 import { CryptoOrderModel, CryptoOrderDoc } from "../../db/models/CryptoOrder";
 import { engine } from "../../game/engine";
 import { pushToUser, pushUserMyInfo } from "../../sockets";
+import { triggerReferralReward } from "../referral";
 
 /**
  * TronProvider — polls TronGrid for incoming USDT-TRC20 transfers to each
@@ -125,6 +126,13 @@ const claim = async (order: CryptoOrderDoc, tx: Trc20Tx): Promise<void> => {
     source: "crypto",
   });
   pushUserMyInfo(order.userName);
+
+  // Referral reward (idempotent, txHash is unique per tx).
+  await triggerReferralReward(order.userName, {
+    type: "crypto",
+    id: tx.transaction_id,
+    amountInr: actualInr,
+  });
 
   console.log(
     `[tron] order ${order.orderId} paid ${actualUsdt} USDT → ` +

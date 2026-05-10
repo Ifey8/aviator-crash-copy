@@ -8,7 +8,9 @@ export const authRouter = Router();
 
 authRouter.post("/telegram", async (req, res) => {
   const initData: string = req.body?.initData || "";
-  const result = await authWithTelegram(initData);
+  const sid: string | undefined = req.body?.sid;
+  const ref: string | undefined = req.body?.ref || req.body?.referrer;
+  const result = await authWithTelegram(initData, { sid, referrer: ref });
   if (!result) return res.status(401).json({ status: false, message: "Invalid Telegram initData" });
   res.json({ status: true, ...result });
 });
@@ -16,15 +18,23 @@ authRouter.post("/telegram", async (req, res) => {
 authRouter.post("/guest", async (req, res) => {
   if (!config.allowDevAuth) return res.status(403).json({ status: false, message: "Dev auth disabled" });
   const name: string | undefined = req.body?.name;
-  const result = await authDevGuest(name);
+  const sid: string | undefined = req.body?.sid;
+  const ref: string | undefined = req.body?.ref || req.body?.referrer;
+  const result = await authDevGuest(name, { sid, referrer: ref });
   res.json({ status: true, ...result });
 });
 
 // ---------- Username / password ----------
 
 authRouter.post("/register", async (req, res) => {
-  const { userName, password, phone } = req.body || {};
-  const r = await registerWithPassword({ userName, password, phone });
+  const { userName, password, phone, sid, ref, referrer } = req.body || {};
+  const r = await registerWithPassword({
+    userName,
+    password,
+    phone,
+    sid,
+    referrer: ref || referrer,
+  });
   if (!r.ok) return res.status(400).json({ status: false, message: r.reason });
   res.json({ status: true, ...r.result });
 });

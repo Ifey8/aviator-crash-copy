@@ -18,6 +18,9 @@ export const BetCard: React.FC<Props> = ({ side }) => {
   const [mode, setMode] = React.useState<"bet" | "auto">("bet");
   const [amount, setAmount] = React.useState<number>(sideInfo.betAmount || 10);
   const [autoTarget, setAutoTarget] = React.useState<number>(sideInfo.target || 2);
+  // Track which quick-amount button was last tapped. Same button = +=,
+  // different button = reset to that amount as if first click.
+  const [lastQuickClick, setLastQuickClick] = React.useState<number | null>(null);
 
   const betted = side === "f" ? ctx.fbetted : ctx.sbetted;
   const cashouted = sideInfo.cashouted;
@@ -28,6 +31,20 @@ export const BetCard: React.FC<Props> = ({ side }) => {
 
   const setSafeAmount = (v: number) =>
     setAmount(Math.max(minBet, Math.min(maxBet, +v.toFixed(2))));
+
+  // Quick-button click semantics:
+  //   • First tap of a button → bet = button value
+  //   • Same button tapped again → bet += button value (累加)
+  //   • Different button → reset, that becomes the new "first tap"
+  // Direct edits (input / +/- stepper) reset the last-clicked tracker.
+  const onQuickClick = (v: number): void => {
+    if (lastQuickClick === v) {
+      setSafeAmount(amount + v);
+    } else {
+      setSafeAmount(v);
+      setLastQuickClick(v);
+    }
+  };
 
   const placeBet = () => {
     if (phase !== "BET") return;
@@ -136,7 +153,7 @@ export const BetCard: React.FC<Props> = ({ side }) => {
         <button
           type="button"
           className="step-btn"
-          onClick={() => setSafeAmount(amount - 1)}
+          onClick={() => { setSafeAmount(amount - 1); setLastQuickClick(null); }}
           disabled={betted}
           aria-label="decrease"
         >
@@ -149,7 +166,7 @@ export const BetCard: React.FC<Props> = ({ side }) => {
           value={amount.toFixed(2)}
           onChange={(e) => {
             const v = parseFloat(e.target.value.replace(/[^\d.]/g, ""));
-            if (!isNaN(v)) setSafeAmount(v);
+            if (!isNaN(v)) { setSafeAmount(v); setLastQuickClick(null); }
           }}
           disabled={betted}
           aria-label="bet amount"
@@ -157,7 +174,7 @@ export const BetCard: React.FC<Props> = ({ side }) => {
         <button
           type="button"
           className="step-btn"
-          onClick={() => setSafeAmount(amount + 1)}
+          onClick={() => { setSafeAmount(amount + 1); setLastQuickClick(null); }}
           disabled={betted}
           aria-label="increase"
         >
@@ -169,8 +186,8 @@ export const BetCard: React.FC<Props> = ({ side }) => {
         {QUICK_AMOUNTS.map((v) => (
           <button
             key={v}
-            className="quick-amount-btn"
-            onClick={() => setSafeAmount(v)}
+            className={`quick-amount-btn ${lastQuickClick === v ? "last" : ""}`}
+            onClick={() => onQuickClick(v)}
             disabled={betted}
           >
             {v}

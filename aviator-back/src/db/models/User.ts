@@ -22,6 +22,13 @@ export interface UserDoc extends Document {
   banned: boolean;
   bannedReason?: string;
 
+  // Acquisition tracking (?sid=facebook in landing URL)
+  sid?: string;
+  // Referral graph (?ref=<userName> in landing URL)
+  referrer?: string;
+  // Cumulative INR rewarded TO this user from refs (own refs paying in)
+  referralEarned?: number;
+
   createdAt: Date;
   lastLoginAt?: Date;
 }
@@ -42,6 +49,10 @@ const UserSchema = new Schema<UserDoc>({
 
   banned: { type: Boolean, default: false, index: true },
   bannedReason: { type: String },
+
+  sid: { type: String, index: true, sparse: true },
+  referrer: { type: String, index: true, sparse: true },
+  referralEarned: { type: Number, default: 0 },
 
   createdAt: { type: Date, default: Date.now },
   lastLoginAt: { type: Date },
