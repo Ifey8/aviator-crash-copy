@@ -6,6 +6,7 @@ import { config } from "../config";
 import { getUsdtInrRate } from "../payment/pricer";
 import { pushToUser } from "../sockets";
 import { allocateAddress } from "../payment/wallet";
+import { getSetting } from "../settings";
 
 export const cryptoRouter = Router();
 
@@ -64,16 +65,16 @@ cryptoRouter.post("/create", requireAuth, async (req: Request, res: Response) =>
   const quote = await getUsdtInrRate();
   const amountUsdt = +(amountInr / quote.rate).toFixed(2);
 
-  if (amountUsdt < config.cryptoMinUsdt) {
+  if (amountUsdt < getSetting("cryptoMinUsdt")) {
     return res.status(400).json({
       status: false,
-      message: `Minimum recharge is ${config.cryptoMinUsdt} USDT (~${(config.cryptoMinUsdt * quote.rate).toFixed(2)} INR)`,
+      message: `Minimum recharge is ${getSetting("cryptoMinUsdt")} USDT (~${(getSetting("cryptoMinUsdt") * quote.rate).toFixed(2)} INR)`,
     });
   }
-  if (amountUsdt > config.cryptoMaxUsdt) {
+  if (amountUsdt > getSetting("cryptoMaxUsdt")) {
     return res.status(400).json({
       status: false,
-      message: `Maximum recharge is ${config.cryptoMaxUsdt} USDT`,
+      message: `Maximum recharge is ${getSetting("cryptoMaxUsdt")} USDT`,
     });
   }
 
@@ -118,7 +119,7 @@ cryptoRouter.post("/create", requireAuth, async (req: Request, res: Response) =>
     data: {
       ...orderToClient(doc),
       rateSource: quote.source,
-      minUsdt: config.cryptoMinUsdt,
+      minUsdt: getSetting("cryptoMinUsdt"),
     },
   });
 });

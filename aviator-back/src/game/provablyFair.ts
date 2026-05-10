@@ -1,5 +1,5 @@
 import { createHash, createHmac, randomBytes } from "crypto";
-import { config } from "../config";
+import { getSetting } from "../settings";
 
 /**
  * Provably-fair crash point generator. Standard Bustabit-style algorithm:
@@ -46,7 +46,7 @@ export const computeCrashPoint = (
   if (intVal % Math.floor(1 / houseEdge) === 0) return 1.0;
 
   const result = Math.floor((100 * e - intVal) / (e - intVal)) / 100;
-  return Math.max(1.0, Math.min(result, config.maxCrashMultiplier));
+  return Math.max(1.0, Math.min(result, getSetting("maxCrashMultiplier")));
 };
 
 export const buildRoundSeed = (

@@ -1,5 +1,6 @@
 import { EventEmitter } from "events";
 import { BettedUser, BetIndex } from "./types";
+import { getSetting } from "../settings";
 
 /**
  * BotManager — virtual players that bet + cash out alongside real users so
@@ -104,9 +105,11 @@ export class BotManager extends EventEmitter {
   beginRound(_realPlayerCount: number, betDurationMs: number): void {
     this.clearTimers();
     this.bots.clear();
-    // Always 5-15 bots regardless of real player count — the room should
-    // feel busy even with many real players.
-    const targetCount = 5 + Math.floor(Math.random() * 11); // [5, 15]
+    // Bot count range driven by admin Settings (default 5-15). Lets
+    // operators tune room liveliness without code changes.
+    const minN = getSetting("botMinCount");
+    const maxN = Math.max(minN, getSetting("botMaxCount"));
+    const targetCount = minN + Math.floor(Math.random() * (maxN - minN + 1));
     for (let i = 0; i < targetCount; i++) {
       // Stagger joins so the bet list grows over the BET phase, not all at once.
       const delay = Math.random() * (betDurationMs - 400);

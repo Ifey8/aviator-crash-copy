@@ -1,4 +1,5 @@
 import { config } from "../config";
+import { getSetting } from "../settings";
 
 /**
  * USDT → INR rate provider.
@@ -57,7 +58,7 @@ export const getUsdtInrRate = async (): Promise<RateQuote> => {
 
   // Fallback path — note the freshness window is shorter so we retry sooner.
   const fallback: RateQuote = {
-    rate: config.usdtInrRateFallback,
+    rate: getSetting("usdtInrRateFallback"),
     source: "env-fallback",
     fetchedAt: new Date(),
   };

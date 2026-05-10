@@ -2,6 +2,7 @@ import { Server, Socket } from "socket.io";
 import { engine } from "../game/engine";
 import { bots } from "../game/bots";
 import { config } from "../config";
+import { getSetting } from "../settings";
 import { authFromToken, authDevGuest } from "../auth/session";
 import { PlayerState, BetIndex } from "../game/types";
 import { emptySide } from "../game/types";
@@ -131,7 +132,10 @@ export const initSockets = (io: Server): void => {
     let userName: string | null = null;
     console.log(`[ws] connect ${socket.id}`);
 
-    socket.emit("getBetLimits", { max: config.maxBet, min: config.minBet });
+    socket.emit("getBetLimits", {
+      max: getSetting("maxBet"),
+      min: getSetting("minBet"),
+    });
 
     socket.on("enterRoom", async ({ token }: { token?: string }) => {
       let session = token ? await authFromToken(token) : null;
@@ -185,7 +189,7 @@ export const initSockets = (io: Server): void => {
       socket.emit("gameState", engine.statusSnapshot());
       socket.emit("bettedUserInfo", engine.bettedUsersSnapshot());
 
-      if (session.balance < config.minBet) socket.emit("recharge");
+      if (session.balance < getSetting("minBet")) socket.emit("recharge");
     });
 
     socket.on("playBet", async (data: BetPayload) => {

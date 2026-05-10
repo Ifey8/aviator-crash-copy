@@ -19,6 +19,7 @@ import { UserModel } from "../db/models/User";
 import { RoundModel } from "../db/models/Round";
 import { BetModel } from "../db/models/Bet";
 import { bots } from "./bots";
+import { getSetting } from "../settings";
 
 const TICK_MS = 100;
 
@@ -41,7 +42,7 @@ export class GameEngine extends EventEmitter {
     const initial = newServerSeed();
     this.nextSeed = newServerSeed();
     this.upcomingSeedHash = initial.serverSeedHash;
-    this.seed = buildRoundSeed(initial.serverSeed, "init", 0, config.houseEdge);
+    this.seed = buildRoundSeed(initial.serverSeed, "init", 0, getSetting("houseEdge"));
   }
 
   async start(): Promise<void> {
@@ -108,8 +109,10 @@ export class GameEngine extends EventEmitter {
     const p = this.players.get(userName);
     if (!p) return { ok: false, reason: "Player not in room" };
 
-    if (betAmount < config.minBet || betAmount > config.maxBet)
-      return { ok: false, reason: `Bet must be ${config.minBet}–${config.maxBet}` };
+    const minB = getSetting("minBet");
+    const maxB = getSetting("maxBet");
+    if (betAmount < minB || betAmount > maxB)
+      return { ok: false, reason: `Bet must be ${minB}–${maxB}` };
 
     if (p[index].betted) return { ok: false, reason: "Already betted this round" };
     if (p.balance < betAmount) return { ok: false, reason: "Insufficient balance" };
@@ -168,7 +171,7 @@ export class GameEngine extends EventEmitter {
     const sd = this.nextSeed;
     this.upcomingSeedHash = sd.serverSeedHash;
     const clientPool = [...this.players.keys()].sort().join(",") || "house";
-    this.seed = buildRoundSeed(sd.serverSeed, clientPool, this.roundId, config.houseEdge);
+    this.seed = buildRoundSeed(sd.serverSeed, clientPool, this.roundId, getSetting("houseEdge"));
     this.nextSeed = newServerSeed();
 
     // Schedule bot players to join during this BET phase. They appear in

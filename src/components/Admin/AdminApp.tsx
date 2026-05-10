@@ -5,7 +5,7 @@ import "./admin.scss";
 
 const apiBase = config.api.replace(/\/api$/, "/api");
 
-type Tab = "stats" | "users" | "rounds";
+type Tab = "stats" | "users" | "rounds" | "settings";
 
 interface Stats {
   engine: { phase: string; multiplier: number; players: number; historyLen: number };
@@ -68,6 +68,7 @@ export const AdminApp: React.FC = () => {
           <button className={tab === "stats" ? "active" : ""} onClick={() => setTab("stats")}>Stats</button>
           <button className={tab === "users" ? "active" : ""} onClick={() => setTab("users")}>Users</button>
           <button className={tab === "rounds" ? "active" : ""} onClick={() => setTab("rounds")}>Rounds</button>
+          <button className={tab === "settings" ? "active" : ""} onClick={() => setTab("settings")}>Settings</button>
         </nav>
         <div className="admin-user">
           <span>{user?.userName}</span>
@@ -79,6 +80,7 @@ export const AdminApp: React.FC = () => {
         {tab === "stats" && <StatsTab />}
         {tab === "users" && <UsersTab />}
         {tab === "rounds" && <RoundsTab />}
+        {tab === "settings" && <SettingsTab />}
       </main>
     </div>
   );
@@ -327,6 +329,133 @@ const RoundsTab: React.FC = () => {
           {items.length === 0 && <tr><td colSpan={8} className="empty">No rounds</td></tr>}
         </tbody>
       </table>
+    </div>
+  );
+};
+
+// --------------------------------- Settings -------------------------------
+
+interface SettingsData {
+  maxCrashMultiplier: number;
+  houseEdge: number;
+  minBet: number;
+  maxBet: number;
+  initialBalance: number;
+  cryptoMinUsdt: number;
+  cryptoMaxUsdt: number;
+  usdtInrRateFallback: number;
+  botMinCount: number;
+  botMaxCount: number;
+  updatedAt?: string;
+  updatedBy?: string;
+}
+
+const SETTINGS_FIELDS: { key: keyof SettingsData; label: string; hint: string; group: string }[] = [
+  { group: "Game", key: "maxCrashMultiplier", label: "Max crash multiplier", hint: "Cap on max payout (eg 100 = 100x). Lower = less variance for operator." },
+  { group: "Game", key: "houseEdge", label: "House edge", hint: "0.03 = 3%. Higher = better operator margin, lower player RTP." },
+  { group: "Game", key: "minBet", label: "Min bet (INR)", hint: "Smallest allowed wager." },
+  { group: "Game", key: "maxBet", label: "Max bet (INR)", hint: "Largest allowed wager per side." },
+  { group: "Game", key: "initialBalance", label: "Initial balance (new user)", hint: "Free balance new users start with. 0 to disable." },
+  { group: "Crypto", key: "cryptoMinUsdt", label: "Min crypto recharge (USDT)", hint: "Order rejected below this." },
+  { group: "Crypto", key: "cryptoMaxUsdt", label: "Max crypto recharge (USDT)", hint: "Order rejected above this." },
+  { group: "Crypto", key: "usdtInrRateFallback", label: "USDT/INR fallback rate", hint: "Used when CoinGecko unreachable." },
+  { group: "Bots", key: "botMinCount", label: "Bot min per round", hint: "Lower bound of random fake-player count." },
+  { group: "Bots", key: "botMaxCount", label: "Bot max per round", hint: "Upper bound (5-15 = lively, 0-0 = none)." },
+];
+
+const SettingsTab: React.FC = () => {
+  const api = useApi();
+  const [data, setData] = React.useState<SettingsData | null>(null);
+  const [draft, setDraft] = React.useState<Partial<SettingsData>>({});
+  const [error, setError] = React.useState<string | null>(null);
+  const [saving, setSaving] = React.useState(false);
+  const [saved, setSaved] = React.useState<string | null>(null);
+
+  const load = React.useCallback(async () => {
+    try {
+      const r = await api("/admin/settings");
+      setData(r.data);
+      setDraft({});
+    } catch (e) {
+      setError((e as Error).message);
+    }
+  }, [api]);
+
+  React.useEffect(() => { load(); }, [load]);
+
+  const save = async () => {
+    setError(null);
+    setSaving(true);
+    try {
+      const r = await api("/admin/settings", {
+        method: "PUT",
+        body: JSON.stringify(draft),
+      });
+      setData(r.data);
+      setDraft({});
+      setSaved(new Date().toLocaleTimeString());
+      setTimeout(() => setSaved(null), 2500);
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  if (!data) return <div className="admin-tab-body">Loading…</div>;
+
+  const groups = Array.from(new Set(SETTINGS_FIELDS.map((f) => f.group)));
+
+  const draftOrCurrent = (k: keyof SettingsData): number =>
+    draft[k] !== undefined ? (draft[k] as number) : (data[k] as number);
+
+  const dirty = Object.keys(draft).length > 0;
+
+  return (
+    <div className="admin-tab-body admin-settings">
+      <div className="admin-settings-meta">
+        Last updated {data.updatedAt ? new Date(data.updatedAt).toLocaleString() : "—"}
+        {data.updatedBy && ` by ${data.updatedBy}`}
+      </div>
+      {groups.map((g) => (
+        <section key={g} className="admin-settings-group">
+          <h3>{g}</h3>
+          <div className="admin-settings-grid">
+            {SETTINGS_FIELDS.filter((f) => f.group === g).map((f) => (
+              <label key={f.key} className="admin-settings-field">
+                <span className="admin-settings-label">{f.label}</span>
+                <input
+                  type="number"
+                  step="any"
+                  value={draftOrCurrent(f.key)}
+                  onChange={(e) =>
+                    setDraft((d) => ({ ...d, [f.key]: Number(e.target.value) }))
+                  }
+                />
+                <span className="admin-settings-hint">{f.hint}</span>
+              </label>
+            ))}
+          </div>
+        </section>
+      ))}
+      {error && <div className="admin-settings-error">{error}</div>}
+      <div className="admin-settings-actions">
+        <button
+          className="admin-btn-primary"
+          onClick={save}
+          disabled={!dirty || saving}
+        >
+          {saving ? "Saving…" : `Save${dirty ? ` (${Object.keys(draft).length} changed)` : ""}`}
+        </button>
+        <button
+          className="admin-btn"
+          onClick={() => { setDraft({}); setError(null); }}
+          disabled={!dirty}
+        >
+          Discard
+        </button>
+        {saved && <span className="admin-settings-saved">✓ saved at {saved}</span>}
+      </div>
     </div>
   );
 };

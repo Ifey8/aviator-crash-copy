@@ -1,4 +1,5 @@
 import { config } from "../config";
+import { getSetting } from "../settings";
 import { UserModel } from "../db/models/User";
 import { signToken, verifyToken, AuthPayload } from "./jwt";
 import { validateInitData } from "./telegram";
@@ -29,7 +30,7 @@ const upsertUser = async (input: {
       telegramId: input.telegramId,
       userName,
       avatar: input.avatar || `av-${Math.floor(Math.random() * 8) + 1}.png`,
-      balance: config.initialBalance,
+      balance: getSetting("initialBalance"),
     });
   }
   return user;

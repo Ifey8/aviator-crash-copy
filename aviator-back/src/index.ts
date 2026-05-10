@@ -13,6 +13,7 @@ import { rechargeRouter } from "./routes/recharge";
 import { cryptoRouter } from "./routes/crypto";
 import { startTronWatcher } from "./payment/providers/tron";
 import { startTelegramBot } from "./bot/telegram";
+import { loadSettings } from "./settings";
 
 const app = express();
 app.use(cors({ origin: true, credentials: true }));
@@ -42,6 +43,7 @@ const io = new Server(server, {
 
 const main = async () => {
   await connectDb();
+  await loadSettings();
   initSockets(io);
   await engine.start();
   await startTelegramBot();

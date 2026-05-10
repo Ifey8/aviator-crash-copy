@@ -5,9 +5,51 @@ import { RoundModel } from "../db/models/Round";
 import { requireAdmin } from "../middleware/requireAdmin";
 import { engine } from "../game/engine";
 import { config } from "../config";
+import { getAllSettings, updateSettings } from "../settings";
 
 export const adminRouter = Router();
 adminRouter.use(requireAdmin);
+
+// ---------- Settings ----------
+
+adminRouter.get("/settings", async (_req, res) => {
+  res.json({ status: true, data: getAllSettings() });
+});
+
+adminRouter.put("/settings", async (req, res) => {
+  const allowed = [
+    "maxCrashMultiplier", "houseEdge", "minBet", "maxBet", "initialBalance",
+    "cryptoMinUsdt", "cryptoMaxUsdt", "usdtInrRateFallback",
+    "botMinCount", "botMaxCount",
+  ] as const;
+  const patch: Record<string, number> = {};
+  for (const k of allowed) {
+    const v = req.body?.[k];
+    if (v !== undefined) {
+      const n = Number(v);
+      if (!isFinite(n)) {
+        return res.status(400).json({ status: false, message: `${k} must be a number` });
+      }
+      patch[k] = n;
+    }
+  }
+  if (Object.keys(patch).length === 0) {
+    return res.status(400).json({ status: false, message: "No valid fields in request" });
+  }
+  // Sanity: minBet <= maxBet, botMinCount <= botMaxCount, cryptoMin <= cryptoMax
+  const merged = { ...getAllSettings(), ...patch };
+  if (merged.minBet > merged.maxBet) {
+    return res.status(400).json({ status: false, message: "minBet > maxBet" });
+  }
+  if (merged.botMinCount > merged.botMaxCount) {
+    return res.status(400).json({ status: false, message: "botMinCount > botMaxCount" });
+  }
+  if (merged.cryptoMinUsdt > merged.cryptoMaxUsdt) {
+    return res.status(400).json({ status: false, message: "cryptoMinUsdt > cryptoMaxUsdt" });
+  }
+  const updated = await updateSettings(patch, req.adminUserName);
+  res.json({ status: true, data: updated });
+});
 
 // ---------- Users ----------
 
