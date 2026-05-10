@@ -267,6 +267,125 @@ Original mascot SVG generated via Claude Design from a custom prompt asking for 
 
 ---
 
+## 💸 Recharge → Wager → Withdrawal economy
+
+A money item lives in one of three buckets, tracked via `User.wagerRequired`:
+
+| Source                    | Balance | wagerRequired | Effect                                         |
+|---------------------------|---------|---------------|------------------------------------------------|
+| Initial balance (signup)  | +X      | 0             | Free, can be played AND withdrawn immediately  |
+| Recharge (fiat or crypto) | +X      | +X × `wagerMultiplier` | Locked behind playthrough               |
+| Cashout winnings          | +X      | 0             | Free                                           |
+| Referral reward (incoming) | +X     | +X × `wagerMultiplier` | Locked (anti ref-farm — see below)       |
+
+**Withdrawable** = `balance − wagerRequired`. Every bet placed decrements `wagerRequired` by the bet amount (regardless of win/loss), so playthrough naturally completes. Engine has 3 entry points to keep these atomic:
+- `engine.creditBalance(user, amount)` — referral / admin / refunds — does NOT add to wager
+- `engine.creditRecharge(user, amount)` — fiat + crypto recharge + referral payouts — DOES add to wager
+- `engine.placeBet(...)` — atomic `$inc balance, $max(0, wager - bet)` via aggregation pipeline updateOne
+
+`reserveForWithdrawal(user, deduct, net)` and `refundWithdrawal(user, amount)` handle the withdrawal hold + refund-on-fail cycle.
+
+### Withdrawal flow
+
+Two methods, mounted at `/api/withdrawal/*`:
+- **bank** — Indian bank transfer (account + IFSC + holder name) → `mockPayout` provider returns status=`processing` → admin marks paid/failed manually. Routes to `defaultPayoutProvider("bank")`, env `PAYOUT_BANK_PROVIDER` selects which provider when integrating Razorpay/Cashfree.
+- **usdt** — TRC20 USDT to user-supplied address. Hot wallet broadcasts. If hot wallet USDT < requested → `manual_queue` (admin tops up + marks paid). If `usdtAutoPayoutEnabled=1` AND amount < cap → server auto-broadcasts via `walletOps.autoBroadcastUsdtWithdrawal`.
+
+5% fee on TOP (user requests ₹1000 → balance −₹1050, recipient gets ₹1000). Status state machine: `pending → processing | manual_queue | review → paid | failed | cancelled`. The `review` status (added in `b12d8f8`) holds risky orders without calling the provider until admin clicks Approve.
+
+### Anti-abuse layers
+
+5 layers, all admin-tunable via Settings (live, no redeploy):
+
+1. **Initial balance** (admin Setting): set to 0–20 to kill free-money spam. Admin → Settings → Initial balance.
+2. **Wager lock** (`wagerMultiplier`): default 1×; recharge of ₹X must be wagered ₹X before becoming withdrawable. Engine enforces in `reserveForWithdrawal` via atomic `$expr` check on `balance − wagerRequired`.
+3. **Referral reward locked** (commit `b12d8f8`): the referrer's ₹100 reward is credited via `creditRecharge` not `creditBalance`, so it goes into the referrer's wagerRequired pool. Anti self-referral cycles must wager through.
+4. **Per-IP register limit** (`registerMaxPerIp24h`, default 3): hard cap on `/register` + `/telegram` + `/guest` from the same IP per 24h. Backed by `RegisterAttempt` collection (TTL 7d). Counts only successful new-user creates (TG re-logins of existing users don't count).
+5. **Withdrawal review queue** (`withdrawalReviewAboveInr` + `withdrawalReviewNewAccountHours`): orders ≥ ₹5000 OR from accounts < 24h old land in `review` status. Admin must Approve before provider call (auto-payout also bypassed). Reason recorded in `order.meta.reviewReason`.
+
+---
+
+## 🪙 SID + Referral system (acquisition tracking)
+
+### URL-driven first-touch attribution
+
+`?sid=facebook` and `?ref=<userName>` on the landing URL are captured by `src/acquisition.ts` BEFORE Telegram bootstrap reloads, persisted to `localStorage` (first-touch only — never overwritten), and forwarded to `/api/auth/{register, telegram, guest}` on signup. Server's `auth/session.ts` and `auth/password.ts` only persist `sid` + `referrer` on user CREATION; returning users keep their existing values.
+
+Telegram bots can't pass URL params, so we use `start_param` convention: `t.me/<bot>?start=ref_<userName>` → `telegram-bootstrap.ts` strips the `ref_`/`sid_` prefix.
+
+### Referral reward
+
+Each successful recharge OR payout fires `triggerReferralReward(referee, source)` from `payment/referral.ts`. Reward amount is `referralRewardInr` (admin Setting, default ₹100). Idempotency via `ReferralReward` collection's unique `(referrer, sourceType, sourceId)` index — webhook retries / watcher reclaims / admin re-marks all hit the same key, only first one credits.
+
+### Frontend share UI
+
+Top-right `⋯` button (`MobileHeader` → `mobile-header-menu`) opens `ShareSheet` with copy + native share + Telegram t.me deep-link. Out-of-balance modal also surfaces "Share & earn ₹100" CTA before "Top up".
+
+Top-left `🛩 AVIATOR` logo opens `AccountSheet` with username, balances breakdown (total / locked / withdrawable), admin panel link (admin role only), and Sign out.
+
+---
+
+## 🏦 Hot wallet operations
+
+### HD wallet (BIP44 `m/44'/195'/0'/0/N`)
+
+- **Index 0** = hot wallet — operator's main, holds USDT for outgoing user withdrawals + receives sweeps from sub-addresses.
+- **Index 1+** = per-order deposit addresses — each crypto recharge order gets a freshly-allocated derived address. Cooldown reuse (1h default via `cryptoAddressReuseCooldownMs`) recycles addresses across orders to keep the pool small + sweep gas low.
+- Master mnemonic: `aviator-back/.env` `CRYPTO_MASTER_MNEMONIC`. NEVER pushed to git.
+
+### Admin → Wallets tab (`e4020e1` + `ec99769`)
+
+The whole HD subsystem manageable from the UI:
+
+- **Stat cards**: hot USDT, hot TRX, total deposit USDT (un-swept), un-swept order count, network
+- **Hot wallet card**: full address, copy button, 88px QR thumbnail (click for 260px modal — Binance app scannable for top-ups), live balance
+- **Sub-addresses table**: index, address, USDT/TRX, paid count, un-swept count, total claimed (un-swept rows red-highlighted)
+- **Action bar**:
+  - `↻ Refresh balances` — bypass 30s in-memory cache, force fresh TronGrid fetch
+  - `Sweep dry-run` — alert preview of what would be swept
+  - `Run sweep (N)` — confirm + execute (auto top-up TRX gas + transfer USDT to hot)
+  - `Transfer out from hot…` — modal for manual outbound to operator's personal wallet (TronLink / exchange / hardware wallet). Currency switch (USDT / TRX) + dry-run + Tronscan link on success.
+
+All ops go through `aviator-back/src/payment/walletOps.ts` (`listWallets`, `transferOut`, `sweepAddresses`) — server-side TronWeb sign + send, master mnemonic NEVER leaves the api container. CLI fallback in `src/tools/{sweep-deposits,transfer-out}.ts` for SSH ops if UI is broken.
+
+### USDT auto-payout (commit `641dd46`)
+
+Opt-in from admin Settings → "Auto-payout" group:
+- `usdtAutoPayoutEnabled` (0/1, default 0 = OFF)
+- `usdtAutoPayoutMaxInr` (default ₹2000) — withdrawals ≥ this stay manual
+
+When enabled: USDT withdrawals that pass risk checks (not `review`, not `manual_queue`, under cap, hot wallet has ≥ amount USDT + ≥ 15 TRX) auto-broadcast via `walletOps.autoBroadcastUsdtWithdrawal` (fire-and-forget — user's HTTP response is immediate, broadcast result pushed via socket `withdrawalUpdate`). Tx hash stored, `meta.autoBroadcast=true`. Admin Withdrawals tab shows `⚡ AUTO` badge for auto-paid orders.
+
+Fallback: any failure (broadcast throws, hot wallet thinned by concurrent payouts) → status flips to `manual_queue`, admin tops up + retries. Bank withdrawals always remain manual.
+
+---
+
+## ⚙️ Live admin Settings (DB-backed singleton)
+
+All fields tunable from Admin → Settings, no redeploy. Stored in `Settings` Mongo doc (`_id="default"`), in-memory cache via `settings/index.ts` (`getSetting` throws if cache not loaded; `tryGetSetting(key, fallback)` for module-init paths).
+
+| Group        | Key                              | Default | Notes                                                          |
+|--------------|----------------------------------|---------|----------------------------------------------------------------|
+| Game         | `maxCrashMultiplier`             | 100     | Cap on payout                                                  |
+| Game         | `houseEdge`                      | 0.03    | 3%                                                             |
+| Game         | `minBet`                         | 1       |                                                                |
+| Game         | `maxBet`                         | 1000    |                                                                |
+| Game         | `initialBalance`                 | 1000    | Set 0–20 in prod to deter spam-register                        |
+| Crypto       | `cryptoMinUsdt` / `cryptoMaxUsdt`| 10/5000 |                                                                |
+| Crypto       | `usdtInrRateFallback`            | 83      | When CoinGecko unreachable                                     |
+| Bots         | `botMinCount` / `botMaxCount`    | 5/15    | Room liveliness                                                |
+| Referral     | `referralRewardInr`              | 100     | Per recharge/payout, 0 disables                                |
+| Withdrawal   | `withdrawalFeePct`               | 0.05    | 5% on top                                                      |
+| Withdrawal   | `withdrawalMinInr`               | 300     |                                                                |
+| Withdrawal   | `wagerMultiplier`                | 1.0     | 1× rollover on recharge AND incoming referral reward           |
+| Anti-abuse   | `withdrawalReviewAboveInr`       | 5000    | Auto-flag for admin review                                     |
+| Anti-abuse   | `withdrawalReviewNewAccountHours`| 24      | Account-age trigger for review                                 |
+| Anti-abuse   | `registerMaxPerIp24h`            | 3       | Hard cap, 0 disables                                           |
+| Auto-payout  | `usdtAutoPayoutEnabled`          | 0       | 0 = manual (default), 1 = auto                                 |
+| Auto-payout  | `usdtAutoPayoutMaxInr`           | 2000    | Auto only if amount < this                                     |
+
+---
+
 ## 📱 Mobile / Telegram MiniApp
 
 - `public/index.html` has `viewport-fit=cover`, `maximum-scale=1`, `user-scalable=no`, `viewport-fit=cover` and pulls in `https://telegram.org/js/telegram-web-app.js`.
@@ -333,6 +452,13 @@ npm test                    # 36 tests, 5 suites, ~110s
 - **CRA install** needs `--legacy-peer-deps` flag (peer-dep conflicts in old deps tree).
 - The legacy `Crash/`, `Main/`, `BetUsers/`, `Header/` folders are **dead code** — kept in repo but not imported by `app.tsx`. Don't accidentally edit them thinking they're live.
 - The legacy `context.tsx` finishGame handler still has the old auto-repeat logic guarded by `!user.f.betted` — it's a no-op (server sends pre-settle state). The active auto-repeat lives in the BET-phase `socket.on('gameState')` listener.
+- **Settings cache race**: `engine.ts` exports `engine = new GameEngine()` at module scope, so the constructor runs at import time, BEFORE `loadSettings()` is awaited in `main()`. ANY `getSetting` call reachable from the constructor (e.g. `provablyFair.computeCrashPoint`) will throw. Use `tryGetSetting(key, fallback)` from `settings/index.ts` instead. Two bugs of this kind already fixed: `engine` constructor's placeholder seed (uses `config.houseEdge`), and `provablyFair.computeCrashPoint` (uses `tryGetSetting("maxCrashMultiplier", ...)`).
+- **`docker-compose.yml` env precedence**: Compose's inline `environment:` block always wins over `env_file:`. Past bug — `ALLOW_DEV_AUTH: "true"` was hardcoded in the compose file → `.env`'s `false` was masked → server kept spawning `g*` guest users on every tokenless socket connect. Don't hardcode prod-sensitive flags in compose; let `.env` be the source of truth. Fix landed in `ab4427d`.
+- **`config.allowDevAuth` defaults to `false`** (since commit `7513d60`) — dev guest auto-creation OFF unless explicitly enabled. Previously `true`; visitors / TG previews / scrapers all got fresh `User` rows.
+- **Telegram start_param convention**: bot deep-link format `t.me/<bot>?start=ref_<userName>` or `?start=sid_<source>` — `telegram-bootstrap.ts` parses these prefixes and forwards as `ref` / `sid` to `/api/auth/telegram` so first-touch attribution works through Telegram link sharing.
+- **Initial balance was bypassing admin Settings**: `auth/password.ts` used `config.initialBalance` (env, default 1000) instead of `getSetting("initialBalance")`. Admin's value had no effect for password-registered users, so anyone could spam-register for free credits even after operator changed it. Fixed `7d6430b`. Telegram + dev-guest paths were already correct.
+- **`registerLimit` middleware needs `app.set("trust proxy", true)`** — otherwise `req.ip` returns the loopback when running behind nginx, defeating the per-IP cap.
+- **`update.sh` working-tree gotcha**: if `.env` is being un-tracked by an incoming commit AND the working tree has local edits, `git pull` refuses. The script's autostash doesn't catch this case (it stashes modifications, but the conflict is "file is being removed from index while working tree differs"). One-time recovery: `cp .env /tmp/x && git checkout .env && git pull && cp /tmp/x .env`.
 
 ---
 
@@ -351,6 +477,42 @@ b917a5c  Bet UX: full-width amount, plane-anchored FX, cashout sync
 91586a9  Better arc (multiplier-parametric), cruising motion, auto row redesign
 b966fc4  Concave-UP trajectory: low climb early, sharp rise top-right
 9efab7e  (reverted by next) Concave-DOWN
-a86aa02  Slightly faster early lift on the concave-UP arc  ← current curve
+a86aa02  Slightly faster early lift on the concave-UP arc
 9b0a784  Fix Auto bet: each-round repeat, parachute fx, AUTO ON pill
+... (production deploy + crypto recharge + admin Settings + cap 100x) ...
+e92bca0  Quick-bet accumulator + SID tracking + referral system + ./update.sh
+9ad096d  Withdrawals: bank + USDT, 5% fee on top, 1x recharge playthrough lock
+cb92947  Fix engine constructor calling getSetting before loadSettings
+598cef9  Make root update.sh executable
+7513d60  allowDevAuth defaults to false + startup log
+ab4427d  docker-compose: remove ALLOW_DEV_AUTH=true override
+fbb41f5  Fix second module-init getSetting (provablyFair) → tryGetSetting helper
+7d6430b  Logo→AccountSheet (incl. logout) + fix initialBalance ignoring admin Settings
+b12d8f8  Anti-abuse: lock referral reward + per-IP register limit + withdrawal review queue
+33802e2  Add transfer-out CLI: hot wallet → personal/external TRC20 address
+e4020e1  Admin Wallets tab: derived sub-addresses + hot wallet + manual transfer
+ec99769  Hot wallet: copy button + QR code (Binance-scannable)
+641dd46  USDT auto-payout: opt-in + amount cap + manual_queue fallback  ← latest
 ```
+
+### Day-end summary (2026-05-10)
+
+Today's session added the full money pipeline + acquisition machinery on top of yesterday's deployment:
+
+- **SID + referral**: URL `?sid=`/`?ref=` first-touch, `?` Telegram `start_param` convention, idempotent reward audit, Share modal (logo for account / `⋯` for share) — `e92bca0`
+- **Withdrawals**: bank + USDT, 5% fee on top, 1× wagering, balance reservation, refund-on-fail, mock provider + admin override, hot-wallet liquidity check — `9ad096d`
+- **Auth/runtime fixes**: 2× module-init `getSetting` race (`cb92947`, `fbb41f5`), `allowDevAuth` default false (`7513d60`) + compose override (`ab4427d`), `update.sh` permissions (`598cef9`), `initialBalance` honoring admin Settings (`7d6430b`)
+- **Account sheet**: logo click opens user info + balance breakdown + admin link + sign out (`7d6430b`)
+- **Anti-abuse 3 layers**: referral locked into wagerRequired, per-IP register limit, withdrawal review queue with admin Approve action (`b12d8f8`)
+- **Hot wallet ops in admin UI**: full Wallets tab with hot/sub-addresses balances, sweep dry-run + run, transfer-out modal — operator no longer needs SSH (`e4020e1`, `ec99769`)
+- **USDT auto-payout**: opt-in toggle + amount cap, fire-and-forget broadcast, manual_queue fallback, `⚡ AUTO` admin badge (`641dd46`)
+
+Production cycle: `./update.sh --skip-backup` from `easyenglish` SSH (147.93.152.15:/opt/aviator). Frontend domain `https://aviator.rummydeatly.com`. Telegram bot `@crashaviator2026bot`.
+
+**Next sessions might want**:
+- Real bank payout provider integration (Razorpay Payouts / Cashfree adapter implementing `PayoutProvider` interface; webhooks land at `/api/recharge/webhook/<provider>`-style)
+- Phone OTP for `/register` (further anti-spam beyond IP cap)
+- TRX staking script for hot wallet (cut sweep gas burn ~80%)
+- Per-referrer reward velocity caps (e.g. max 10 successful refs per 24h)
+- Migrate `tryGetSetting` to all module-init paths defensively
+- Tests for the new endpoints (recharge/withdrawal/admin/wallets) — current test suite (36) doesn't cover them
