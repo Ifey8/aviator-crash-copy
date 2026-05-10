@@ -135,32 +135,48 @@ log "✅ 前端构建完成 @ $PROJECT_ROOT/build"
 NGINX_AVAILABLE="/etc/nginx/sites-available/$DOMAIN"
 NGINX_ENABLED="/etc/nginx/sites-enabled/$DOMAIN"
 
-if [ ! -f "$NGINX_AVAILABLE" ]; then
-  log "🌐 写 nginx config @ $DOMAIN..."
-  sed "s|aviator\.example\.com|$DOMAIN|g" \
-    "$PROJECT_ROOT/infra/nginx/nginx.conf" > "$NGINX_AVAILABLE"
-  ln -sf "$NGINX_AVAILABLE" "$NGINX_ENABLED"
-  # 临时禁用 HTTPS block 让 certbot 先拿证书
-  sed -i 's|listen 443 ssl;|# listen 443 ssl;|' "$NGINX_AVAILABLE"
-  sed -i 's|ssl_certificate |# ssl_certificate |g' "$NGINX_AVAILABLE"
-  nginx -t
-  systemctl reload nginx
-  log "✅ nginx 在 :80 提供 $PROJECT_ROOT/build"
-else
-  skip "nginx config $NGINX_AVAILABLE 存在"
-fi
-
 # ============================================================
-# 8. Let's Encrypt (HTTPS)
+# 7. Nginx — write a temporary HTTP-only config so certbot can do the
+#    HTTP-01 challenge. We'll write the final HTTPS-enabled config in
+#    step 8 AFTER certbot has the cert files in place. This avoids the
+#    sed-and-pray dance with certbot --nginx that historically broke
+#    the conf (commented-out 443 block + duplicate redirects).
 # ============================================================
 if [ ! -d "/etc/letsencrypt/live/$DOMAIN" ]; then
+  log "🌐 写 nginx HTTP-only config (for certbot challenge)..."
+  cat > "$NGINX_AVAILABLE" <<EOF
+server {
+    listen 80;
+    server_name $DOMAIN;
+    root $PROJECT_ROOT/build;
+    location /.well-known/acme-challenge/ { root /var/www/certbot; }
+    location / { try_files \$uri \$uri/ /index.html; }
+}
+EOF
+  ln -sf "$NGINX_AVAILABLE" "$NGINX_ENABLED"
+  nginx -t
+  systemctl reload nginx
+  log "✅ nginx :80 临时配置就绪"
+
   log "🔐 申请 Let's Encrypt 证书..."
-  certbot --nginx -d "$DOMAIN" \
-    --non-interactive --agree-tos --email "$EMAIL" --redirect
-  log "✅ HTTPS 已激活 @ $DOMAIN"
+  certbot certonly --webroot -w /var/www/certbot -d "$DOMAIN" \
+    --non-interactive --agree-tos --email "$EMAIL"
+  mkdir -p /var/www/certbot
+  log "✅ 证书已签发"
 else
   skip "证书 /etc/letsencrypt/live/$DOMAIN 已存在"
 fi
+
+# ============================================================
+# 8. Final nginx config (HTTPS + reverse proxy + websocket).
+# ============================================================
+log "🌐 写最终 nginx config (HTTPS + /api + /socket.io)..."
+sed "s|aviator\.example\.com|$DOMAIN|g; s|/opt/aviator/build|$PROJECT_ROOT/build|g" \
+  "$PROJECT_ROOT/infra/nginx/nginx.conf" > "$NGINX_AVAILABLE"
+ln -sf "$NGINX_AVAILABLE" "$NGINX_ENABLED"
+nginx -t
+systemctl reload nginx
+log "✅ HTTPS 已激活 @ $DOMAIN"
 
 # ============================================================
 # Done
