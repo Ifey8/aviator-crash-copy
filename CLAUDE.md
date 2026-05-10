@@ -238,6 +238,35 @@ Original mascot SVG generated via Claude Design from a custom prompt asking for 
 
 ---
 
+## 🚀 Production deployment (easyenglish VPS)
+
+- **Host**: `easyenglish` SSH alias (IP `147.93.152.15`, root login)
+- **Repo on server**: `/opt/aviator` (this same git tree, deployed via git pull)
+- **Domain**: `https://aviator.rummydeatly.com` (Let's Encrypt cert via certbot)
+- **Telegram bot**: `@crashaviator2026bot`
+- **Update workflow** (operator just runs this — script does git pull + backup + rebuild + health check):
+  ```bash
+  ssh easyenglish
+  cd /opt/aviator
+  ./update.sh                      # full update
+  ./update.sh --skip-frontend      # backend only (faster, ~30s)
+  ./update.sh --skip-backup        # skip mongodump
+  ```
+- **Inspect / debug from SSH**:
+  ```bash
+  cd /opt/aviator/aviator-back
+  docker compose logs --tail=80 api
+  docker compose logs --tail=30 mongo
+  docker compose ps
+  curl https://aviator.rummydeatly.com/health
+  docker compose exec mongo mongosh aviator    # interactive Mongo
+  ```
+- **`.env` on server** (NEVER pushed to git): `aviator-back/.env` holds JWT, TG bot token, `CRYPTO_MASTER_MNEMONIC`, `ALLOW_DEV_AUTH=false` (must stay false on prod), Razorpay/payout creds when integrated. Frontend `.env` (root) holds `REACT_APP_API_URL=https://aviator.rummydeatly.com`.
+- **Critical gotcha (`docker-compose.yml` env precedence)**: Compose's inline `environment:` block **overrides** `env_file:`. Don't hard-code prod-sensitive flags (e.g. `ALLOW_DEV_AUTH`, `JWT_SECRET`) in compose's `environment:`; let `.env` be the source of truth. Past bug: `ALLOW_DEV_AUTH: "true"` was hardcoded → `.env`'s `false` was masked → server kept spawning `g*` guest users (commit `ab4427d` removed it).
+- **Settings cache + module-load init**: `engine.ts` is `export const engine = new GameEngine()` at module scope, so its constructor runs at import-time, BEFORE `main()` calls `loadSettings()`. Anything called from the constructor (e.g. `provablyFair.computeCrashPoint`) **must use `tryGetSetting(key, fallback)` instead of `getSetting(key)`**, otherwise the cache-not-loaded throw kills the container at boot. See commits `cb92947` (engine houseEdge) and the provablyFair fix.
+
+---
+
 ## 📱 Mobile / Telegram MiniApp
 
 - `public/index.html` has `viewport-fit=cover`, `maximum-scale=1`, `user-scalable=no`, `viewport-fit=cover` and pulls in `https://telegram.org/js/telegram-web-app.js`.

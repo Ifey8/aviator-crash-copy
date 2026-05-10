@@ -74,6 +74,18 @@ export const getSetting = <K extends SettingsKey>(key: K): SettingsDoc[K] => {
   return cache[key];
 };
 
+/**
+ * Soft variant — returns `fallback` if the cache isn't loaded yet, instead
+ * of throwing. Use this in code paths that may run at module-construction
+ * time (e.g. provablyFair.computeCrashPoint, called from new GameEngine()).
+ * The fallback should match the env-default so behaviour is consistent
+ * before loadSettings() arrives.
+ */
+export const tryGetSetting = <K extends SettingsKey>(
+  key: K,
+  fallback: SettingsDoc[K],
+): SettingsDoc[K] => (cache ? cache[key] : fallback);
+
 /** Read a settings snapshot (for /api/admin/settings GET). */
 export const getAllSettings = (): SettingsDoc => {
   if (!cache) throw new Error("[settings] cache not loaded");
