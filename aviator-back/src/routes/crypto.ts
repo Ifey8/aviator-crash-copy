@@ -5,6 +5,7 @@ import { requireAuth } from "../middleware/requireAuth";
 import { config } from "../config";
 import { getUsdtInrRate } from "../payment/pricer";
 import { pushToUser } from "../sockets";
+import { allocNextDepositIndex, deriveAccount } from "../payment/wallet";
 
 export const cryptoRouter = Router();
 
@@ -14,10 +15,12 @@ const orderToClient = (o: CryptoOrderDoc) => ({
   amountInr: o.amountInr,
   fxRate: o.fxRate,
   network: o.network,
-  receiver: o.receiver,
+  depositAddress: o.depositAddress,
   contractAddress: o.contractAddress,
   status: o.status,
   txHash: o.txHash,
+  actualUsdt: o.actualUsdt,
+  actualInr: o.actualInr,
   createdAt: o.createdAt,
   expiresAt: o.expiresAt,
   paidAt: o.paidAt,
@@ -35,16 +38,22 @@ const expireIfNeeded = async (
 
 // ---------------------------------------------------------------------------
 // POST /api/crypto/create — initiate a USDT-TRC20 top-up
+// Returns a UNIQUE deposit address; user can send any USDT amount to it.
 // ---------------------------------------------------------------------------
 cryptoRouter.post("/create", requireAuth, async (req: Request, res: Response) => {
   const userName = req.authUserName!;
   const amountInr = Number(req.body?.amountInr);
 
-  if (!config.tronNetwork || !config.tronReceiver || !config.tronContract) {
+  if (!config.tronNetwork || !config.tronContract) {
     return res.status(503).json({
       status: false,
-      message:
-        "Crypto recharge not configured. Set TRON_NETWORK + TRON_USDT_RECEIVER + TRON_USDT_CONTRACT.",
+      message: "Crypto recharge not configured. Set TRON_NETWORK + TRON_USDT_CONTRACT.",
+    });
+  }
+  if (!config.cryptoMasterMnemonic) {
+    return res.status(503).json({
+      status: false,
+      message: "Master wallet not configured. Generate via `node dist/tools/gen-master-seed.js`.",
     });
   }
 
@@ -53,9 +62,7 @@ cryptoRouter.post("/create", requireAuth, async (req: Request, res: Response) =>
   }
 
   const quote = await getUsdtInrRate();
-  const amountUsdtRaw = amountInr / quote.rate;
-  // USDT has 6 decimals on TRC20; clamp to that resolution.
-  const amountUsdt = +amountUsdtRaw.toFixed(2);
+  const amountUsdt = +(amountInr / quote.rate).toFixed(2);
 
   if (amountUsdt < config.cryptoMinUsdt) {
     return res.status(400).json({
@@ -70,7 +77,6 @@ cryptoRouter.post("/create", requireAuth, async (req: Request, res: Response) =>
     });
   }
 
-  // Limit pending crypto orders so we don't pile up matches.
   const pending = await CryptoOrderModel.countDocuments({
     userName,
     status: "pending",
@@ -83,6 +89,11 @@ cryptoRouter.post("/create", requireAuth, async (req: Request, res: Response) =>
     });
   }
 
+  // Allocate fresh deposit address for this order. Atomic counter ensures
+  // every concurrent createOrder gets a unique index.
+  const derivIndex = await allocNextDepositIndex();
+  const acct = deriveAccount(derivIndex);
+
   const orderId = randomUUID();
   const expiresAt = new Date(Date.now() + config.cryptoOrderTtlMs);
 
@@ -94,11 +105,12 @@ cryptoRouter.post("/create", requireAuth, async (req: Request, res: Response) =>
     fxRate: quote.rate,
     fxRateAt: quote.fetchedAt,
     network: config.tronNetwork,
-    receiver: config.tronReceiver,
+    depositAddress: acct.address,
+    derivIndex: acct.index,
     contractAddress: config.tronContract,
     status: "pending",
     expiresAt,
-    meta: { rateSource: quote.source },
+    meta: { rateSource: quote.source, derivPath: acct.path },
   });
 
   res.json({
@@ -106,13 +118,13 @@ cryptoRouter.post("/create", requireAuth, async (req: Request, res: Response) =>
     data: {
       ...orderToClient(doc),
       rateSource: quote.source,
-      minConfirmations: config.cryptoMinConfirmations,
+      minUsdt: config.cryptoMinUsdt,
     },
   });
 });
 
 // ---------------------------------------------------------------------------
-// GET /api/crypto/status/:orderId — poll status (owner only)
+// GET /api/crypto/status/:orderId
 // ---------------------------------------------------------------------------
 cryptoRouter.get("/status/:orderId", requireAuth, async (req: Request, res: Response) => {
   const userName = req.authUserName!;
@@ -125,7 +137,7 @@ cryptoRouter.get("/status/:orderId", requireAuth, async (req: Request, res: Resp
 });
 
 // ---------------------------------------------------------------------------
-// GET /api/crypto/orders — recent orders for the logged-in user
+// GET /api/crypto/orders
 // ---------------------------------------------------------------------------
 cryptoRouter.get("/orders", requireAuth, async (req: Request, res: Response) => {
   const userName = req.authUserName!;
@@ -138,9 +150,12 @@ cryptoRouter.get("/orders", requireAuth, async (req: Request, res: Response) => 
     data: orders.map((o) => ({
       orderId: o.orderId,
       amountUsdt: o.amountUsdt,
+      actualUsdt: o.actualUsdt,
       amountInr: o.amountInr,
+      actualInr: o.actualInr,
       status: o.status,
       network: o.network,
+      depositAddress: o.depositAddress,
       txHash: o.txHash,
       createdAt: o.createdAt,
       paidAt: o.paidAt,
@@ -149,7 +164,7 @@ cryptoRouter.get("/orders", requireAuth, async (req: Request, res: Response) => 
 });
 
 // ---------------------------------------------------------------------------
-// POST /api/crypto/cancel/:orderId — user cancels a pending order
+// POST /api/crypto/cancel/:orderId
 // ---------------------------------------------------------------------------
 cryptoRouter.post("/cancel/:orderId", requireAuth, async (req: Request, res: Response) => {
   const userName = req.authUserName!;

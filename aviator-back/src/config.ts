@@ -25,10 +25,14 @@ export const config = {
   // -------- Crypto (TRON / USDT-TRC20) recharge --------
   // Network: "shasta" (testnet) | "mainnet" | "" (disabled)
   tronNetwork: (process.env.TRON_NETWORK || "shasta") as "shasta" | "mainnet" | "",
-  /** Receiver wallet — your TronLink address. */
-  tronReceiver: process.env.TRON_USDT_RECEIVER || "",
   /** USDT TRC20 contract address. Shasta: your deployed MockUSDT. Mainnet: TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t. */
   tronContract: process.env.TRON_USDT_CONTRACT || "",
+  /** HD master mnemonic — derives every deposit address. KEEP SECRET. */
+  cryptoMasterMnemonic: process.env.CRYPTO_MASTER_MNEMONIC || "",
+  /** BIP44 index for the hot wallet (where sweeps land). 0 = first child. */
+  cryptoHotWalletIndex: num(process.env.CRYPTO_HOT_WALLET_INDEX, 0),
+  /** Min TRX to keep in deposit addresses for sweep gas (sweeper tops up to this if low). */
+  cryptoSweepGasReserveTrx: num(process.env.CRYPTO_SWEEP_GAS_RESERVE_TRX, 30),
   /** Optional TronGrid API key (improves rate limits). */
   trongridApiKey: process.env.TRONGRID_API_KEY || "",
   /** Watcher poll interval (ms). 30s default — fine for testnet. */

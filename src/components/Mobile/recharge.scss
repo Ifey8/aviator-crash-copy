@@ -409,6 +409,19 @@
   font-size: 11px;
   margin-left: 4px;
 }
+.cp-amount-hint {
+  margin-top: 4px;
+  font-size: 10px;
+  letter-spacing: 0.06em;
+  color: rgba(255, 200, 87, 0.55);
+  font-style: italic;
+}
+.cp-paid-meta {
+  font-size: 11px;
+  color: rgba(255, 245, 220, 0.55);
+  font-variant-numeric: tabular-nums;
+  margin: 4px 0 8px;
+}
 .cp-qr-wrap {
   display: flex;
   justify-content: center;

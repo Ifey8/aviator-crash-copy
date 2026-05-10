@@ -20,17 +20,22 @@ import { config } from "../../config";
 
 interface CryptoOrder {
   orderId: string;
-  amountUsdt: number;
-  amountInr: number;
+  amountUsdt: number;        // recommended (informational only)
+  amountInr: number;         // recommended (informational only)
   fxRate: number;
   network: string;
-  receiver: string;
+  /** Per-order unique deposit address derived from server HD master seed. */
+  depositAddress: string;
   contractAddress: string;
   status: string;
   txHash?: string;
+  /** What the user actually transferred (filled when paid). */
+  actualUsdt?: number;
+  actualInr?: number;
   expiresAt: string;
   paidAt?: string;
   rateSource?: string;
+  minUsdt?: number;
 }
 
 interface Props {
@@ -144,11 +149,47 @@ export const CryptoPayPanel: React.FC<Props> = ({ amountInr, onDone, onRetry }) 
   };
 
   const copyToClipboard = async (text: string, label: string): Promise<void> => {
+    // navigator.clipboard requires a secure context AND focused document.
+    // Fails silently in iframes (Telegram WebView, Claude Preview, etc), so
+    // we always wire up the textarea+execCommand fallback. document.execCommand
+    // is deprecated but still works everywhere as of 2026-05.
+    let ok = false;
     try {
-      await navigator.clipboard.writeText(text);
+      if (navigator.clipboard?.writeText) {
+        await navigator.clipboard.writeText(text);
+        ok = true;
+      }
+    } catch { /* fall through */ }
+    if (!ok) {
+      const ta = document.createElement("textarea");
+      ta.value = text;
+      ta.setAttribute("readonly", "");
+      ta.style.position = "fixed";
+      ta.style.top = "0";
+      ta.style.left = "0";
+      ta.style.width = "1px";
+      ta.style.height = "1px";
+      ta.style.opacity = "0";
+      ta.style.pointerEvents = "none";
+      document.body.appendChild(ta);
+      ta.focus();
+      ta.select();
+      ta.setSelectionRange(0, text.length);
+      try {
+        ok = document.execCommand("copy");
+      } catch {
+        ok = false;
+      }
+      document.body.removeChild(ta);
+    }
+    if (ok) {
       setCopied(label);
       setTimeout(() => setCopied(null), 1500);
-    } catch { /* fallback below */ }
+    } else {
+      // Last resort: show a prompt the user can manually copy from.
+      // eslint-disable-next-line no-alert
+      window.prompt("Copy this:", text);
+    }
   };
 
   if (step === "creating") {
@@ -172,11 +213,19 @@ export const CryptoPayPanel: React.FC<Props> = ({ amountInr, onDone, onRetry }) 
   }
 
   if (step === "success" && order) {
+    const credited = order.actualInr ?? order.amountInr;
+    const paidUsdt = order.actualUsdt ?? order.amountUsdt;
     return (
       <div className="rs-success">
         <div className="rs-check">✓</div>
         <h3 className="rs-title">Recharge complete</h3>
-        <p className="rs-sub">+₹{order.amountInr.toLocaleString("en-IN")} added to your balance</p>
+        <p className="rs-sub">
+          +₹{credited.toLocaleString("en-IN", { maximumFractionDigits: 2 })} added
+          to your balance
+        </p>
+        <p className="cp-paid-meta">
+          {paidUsdt.toFixed(2)} USDT received @ {order.fxRate.toFixed(2)} INR/USDT
+        </p>
         {order.txHash && (
           <p className="cp-txhash">tx: {order.txHash.slice(0, 12)}…{order.txHash.slice(-6)}</p>
         )}
@@ -187,11 +236,12 @@ export const CryptoPayPanel: React.FC<Props> = ({ amountInr, onDone, onRetry }) 
 
   if (!order) return null;
 
-  // Pending — show QR + address + amount + countdown
+  // Pending — show QR + per-order deposit address + recommended amount.
+  // User can pay ANY amount; we credit actual_received × locked rate.
   return (
     <div className="cp-pending">
       <div className="cp-network-badge">{order.network.toUpperCase()} · USDT-TRC20</div>
-      <h3 className="rs-title">Send USDT to complete</h3>
+      <h3 className="rs-title">Send USDT to deposit address</h3>
 
       <div className="cp-amount-row">
         <div className="cp-amount-usdt">
@@ -201,11 +251,12 @@ export const CryptoPayPanel: React.FC<Props> = ({ amountInr, onDone, onRetry }) 
         <div className="cp-amount-inr">
           ≈ ₹{order.amountInr.toLocaleString("en-IN")} <span className="cp-rate">@ {order.fxRate.toFixed(2)}</span>
         </div>
+        <div className="cp-amount-hint">recommended · pay any amount, get equivalent INR</div>
       </div>
 
       <div className="cp-qr-wrap">
         <QRCodeSVG
-          value={order.receiver}
+          value={order.depositAddress}
           size={176}
           level="M"
           marginSize={2}
@@ -215,12 +266,12 @@ export const CryptoPayPanel: React.FC<Props> = ({ amountInr, onDone, onRetry }) 
       </div>
 
       <div className="cp-field">
-        <span className="cp-field-label">Receiver address</span>
+        <span className="cp-field-label">Deposit address (unique to this order)</span>
         <div className="cp-field-value">
-          <code>{order.receiver}</code>
+          <code>{order.depositAddress}</code>
           <button
             className="cp-copy-btn"
-            onClick={() => copyToClipboard(order.receiver, "address")}
+            onClick={() => copyToClipboard(order.depositAddress, "address")}
             type="button"
           >
             {copied === "address" ? "✓ Copied" : "Copy"}
@@ -229,7 +280,7 @@ export const CryptoPayPanel: React.FC<Props> = ({ amountInr, onDone, onRetry }) 
       </div>
 
       <div className="cp-field">
-        <span className="cp-field-label">Exact amount (USDT)</span>
+        <span className="cp-field-label">Recommended amount (USDT)</span>
         <div className="cp-field-value">
           <code>{order.amountUsdt.toFixed(2)}</code>
           <button
@@ -248,7 +299,9 @@ export const CryptoPayPanel: React.FC<Props> = ({ amountInr, onDone, onRetry }) 
       />
 
       <p className="cp-warn">
-        ⚠ Send <b>EXACTLY {order.amountUsdt.toFixed(2)} USDT</b> over the {order.network === "shasta" ? "Shasta testnet" : "TRON network"}. Different amounts won't be detected. Network transactions are final.
+        ⚠ Send <b>USDT (TRC-20)</b> over the {order.network === "shasta" ? "Shasta testnet" : "TRON network"} ONLY.
+        This address is unique to your order — any USDT amount ≥ <b>{(order.minUsdt ?? 10)} USDT</b> credits
+        you the equivalent INR at <b>{order.fxRate.toFixed(2)}</b>. Network transactions are final.
       </p>
 
       <button className="rs-link" onClick={cancelOrder}>Cancel order</button>
