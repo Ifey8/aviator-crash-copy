@@ -42,7 +42,12 @@ export class GameEngine extends EventEmitter {
     const initial = newServerSeed();
     this.nextSeed = newServerSeed();
     this.upcomingSeedHash = initial.serverSeedHash;
-    this.seed = buildRoundSeed(initial.serverSeed, "init", 0, getSetting("houseEdge"));
+    // Placeholder seed only — start() → beginBetPhase() rebuilds with the
+    // live houseEdge setting before the first round actually runs. The
+    // settings cache may not be loaded yet at module-construction time
+    // (engine is `export const engine = new GameEngine()` at top-level),
+    // so we bootstrap from config (env). Live settings take over on tick 1.
+    this.seed = buildRoundSeed(initial.serverSeed, "init", 0, config.houseEdge);
   }
 
   async start(): Promise<void> {
