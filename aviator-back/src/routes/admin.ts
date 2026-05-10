@@ -2,10 +2,14 @@ import { Router } from "express";
 import { UserModel } from "../db/models/User";
 import { BetModel } from "../db/models/Bet";
 import { RoundModel } from "../db/models/Round";
+import { WithdrawalOrderModel } from "../db/models/WithdrawalOrder";
 import { requireAdmin } from "../middleware/requireAdmin";
 import { engine } from "../game/engine";
 import { config } from "../config";
 import { getAllSettings, updateSettings } from "../settings";
+import { pushToUser, pushUserMyInfo } from "../sockets";
+import { triggerReferralReward } from "../payment/referral";
+import { getHotWalletBalance } from "../payment/hotWallet";
 
 export const adminRouter = Router();
 adminRouter.use(requireAdmin);
@@ -22,6 +26,7 @@ adminRouter.put("/settings", async (req, res) => {
     "cryptoMinUsdt", "cryptoMaxUsdt", "usdtInrRateFallback",
     "botMinCount", "botMaxCount",
     "referralRewardInr",
+    "withdrawalFeePct", "withdrawalMinInr", "wagerMultiplier",
   ] as const;
   const patch: Record<string, number> = {};
   for (const k of allowed) {
@@ -90,6 +95,7 @@ adminRouter.get("/users", async (req, res) => {
       sid: u.sid,
       referrer: u.referrer,
       referralEarned: u.referralEarned || 0,
+      wagerRequired: u.wagerRequired || 0,
       createdAt: u.createdAt,
       lastLoginAt: u.lastLoginAt,
     })),
@@ -196,4 +202,143 @@ adminRouter.get("/stats", async (_req, res) => {
       betDurationMs: config.betDurationMs,
     },
   });
+});
+
+// ---------- Withdrawals ----------
+
+const withdrawalForAdmin = (o: any) => ({
+  orderId: o.orderId,
+  userName: o.userName,
+  method: o.method,
+  status: o.status,
+  grossAmount: o.grossAmount,
+  feeAmount: o.feeAmount,
+  totalDebitInr: o.totalDebitInr,
+  bankAccount: o.bankAccount,
+  ifsc: o.ifsc,
+  holderName: o.holderName,
+  trc20Address: o.trc20Address,
+  fxRate: o.fxRate,
+  txHash: o.txHash,
+  provider: o.provider,
+  providerRef: o.providerRef,
+  failedReason: o.failedReason,
+  createdAt: o.createdAt,
+  paidAt: o.paidAt,
+  failedAt: o.failedAt,
+  cancelledAt: o.cancelledAt,
+});
+
+adminRouter.get("/withdrawals", async (req, res) => {
+  const status = ((req.query.status as string) || "").trim();
+  const userName = ((req.query.userName as string) || "").trim();
+  const limit = Math.min(Number(req.query.limit) || 50, 200);
+  const skip = Math.max(Number(req.query.skip) || 0, 0);
+
+  const filter: any = {};
+  if (status) filter.status = status;
+  if (userName) filter.userName = userName;
+
+  const [items, total, pendingCount] = await Promise.all([
+    WithdrawalOrderModel.find(filter).sort({ createdAt: -1 }).skip(skip).limit(limit).lean(),
+    WithdrawalOrderModel.countDocuments(filter),
+    WithdrawalOrderModel.countDocuments({
+      status: { $in: ["pending", "processing", "manual_queue"] },
+    }),
+  ]);
+
+  res.json({
+    status: true,
+    total,
+    pendingCount,
+    items: items.map(withdrawalForAdmin),
+  });
+});
+
+/** Admin force-success: mark order paid, record txHash if USDT, fire referral. */
+adminRouter.post("/withdrawals/:orderId/mark-paid", async (req, res) => {
+  const { orderId } = req.params;
+  const txHash: string | undefined = req.body?.txHash;
+  const order = await WithdrawalOrderModel.findOne({ orderId });
+  if (!order) return res.status(404).json({ status: false, message: "Order not found" });
+  if (!["pending", "processing", "manual_queue"].includes(order.status)) {
+    return res.status(400).json({
+      status: false,
+      message: `Cannot mark paid — order is ${order.status}`,
+    });
+  }
+  // Atomic flip
+  const flipped = await WithdrawalOrderModel.findOneAndUpdate(
+    {
+      orderId,
+      status: { $in: ["pending", "processing", "manual_queue"] },
+    },
+    {
+      $set: {
+        status: "paid",
+        paidAt: new Date(),
+        txHash: order.method === "usdt" ? txHash : undefined,
+      },
+    },
+    { new: true },
+  );
+  if (!flipped) return res.status(409).json({ status: false, message: "Order state changed" });
+
+  // Trigger referral reward (idempotent on orderId)
+  await triggerReferralReward(order.userName, {
+    type: "payout",
+    id: order.providerRef || order.orderId,
+    amountInr: order.grossAmount,
+  });
+
+  pushToUser(order.userName, "withdrawalUpdate", {
+    orderId: order.orderId,
+    status: "paid",
+    txHash: flipped.txHash,
+  });
+  pushUserMyInfo(order.userName);
+
+  res.json({ status: true, data: withdrawalForAdmin(flipped) });
+});
+
+/** Admin force-failure: mark order failed + refund balance. */
+adminRouter.post("/withdrawals/:orderId/mark-failed", async (req, res) => {
+  const { orderId } = req.params;
+  const reason: string = (req.body?.reason || "Admin marked failed").toString().slice(0, 200);
+  const order = await WithdrawalOrderModel.findOne({ orderId });
+  if (!order) return res.status(404).json({ status: false, message: "Order not found" });
+  if (!["pending", "processing", "manual_queue"].includes(order.status)) {
+    return res.status(400).json({
+      status: false,
+      message: `Cannot mark failed — order is ${order.status}`,
+    });
+  }
+  const flipped = await WithdrawalOrderModel.findOneAndUpdate(
+    {
+      orderId,
+      status: { $in: ["pending", "processing", "manual_queue"] },
+    },
+    {
+      $set: { status: "failed", failedAt: new Date(), failedReason: reason },
+    },
+    { new: true },
+  );
+  if (!flipped) return res.status(409).json({ status: false, message: "Order state changed" });
+
+  await engine.refundWithdrawal(order.userName, order.totalDebitInr);
+  pushToUser(order.userName, "withdrawalUpdate", {
+    orderId: order.orderId,
+    status: "failed",
+    failedReason: reason,
+  });
+  pushUserMyInfo(order.userName);
+
+  res.json({ status: true, data: withdrawalForAdmin(flipped) });
+});
+
+// ---------- Hot wallet status (USDT liquidity gauge) ----------
+
+adminRouter.get("/wallet-status", async (_req, res) => {
+  const balance = await getHotWalletBalance();
+  res.json({ status: true, data: balance });
 });

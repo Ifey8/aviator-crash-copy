@@ -200,6 +200,7 @@ export const Provider = ({ children }: any) => {
     socket.on("myInfo", (user: UserType) => {
       let attrs = state;
       attrs.userInfo.balance = user.balance;
+      attrs.userInfo.wagerRequired = (user as any).wagerRequired || 0;
       attrs.userInfo.userType = user.userType;
       attrs.userInfo.userName = user.userName;
       // Sync the server-authoritative cashout/bet state into state.userInfo.f/s
@@ -226,6 +227,7 @@ export const Provider = ({ children }: any) => {
         const next = {
           ...prev,
           balance: user.balance,
+          wagerRequired: (user as any).wagerRequired || 0,
           userType: user.userType,
           userName: user.userName,
           avatar: (user as any).avatar ?? prev.avatar,

@@ -29,6 +29,16 @@ export interface UserDoc extends Document {
   // Cumulative INR rewarded TO this user from refs (own refs paying in)
   referralEarned?: number;
 
+  // ── Wagering / withdrawal ──
+  /**
+   * Outstanding playthrough requirement (INR). Increases on every recharge by
+   * (amount × wagerMultiplier); decreases by every bet placed (regardless of
+   * win/loss). Withdrawable balance = balance − wagerRequired.
+   *
+   * Initial balance, referral rewards, and round winnings do NOT add to this.
+   */
+  wagerRequired: number;
+
   createdAt: Date;
   lastLoginAt?: Date;
 }
@@ -53,6 +63,8 @@ const UserSchema = new Schema<UserDoc>({
   sid: { type: String, index: true, sparse: true },
   referrer: { type: String, index: true, sparse: true },
   referralEarned: { type: Number, default: 0 },
+
+  wagerRequired: { type: Number, default: 0, min: 0 },
 
   createdAt: { type: Date, default: Date.now },
   lastLoginAt: { type: Date },

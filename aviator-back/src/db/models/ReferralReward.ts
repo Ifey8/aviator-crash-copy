@@ -13,7 +13,7 @@ import { Schema, model } from "mongoose";
 export interface ReferralRewardDoc {
   referrer: string;       // userName who received the reward
   referee: string;        // userName whose action triggered it
-  sourceType: "recharge" | "crypto";
+  sourceType: "recharge" | "crypto" | "payout";
   sourceId: string;       // unique key per source event
   amountInr: number;      // cents-precise INR credited
   refereeAmountInr: number; // size of the referee's recharge (for context)
@@ -24,7 +24,7 @@ const ReferralRewardSchema = new Schema<ReferralRewardDoc>(
   {
     referrer: { type: String, required: true, index: true },
     referee: { type: String, required: true, index: true },
-    sourceType: { type: String, required: true, enum: ["recharge", "crypto"] },
+    sourceType: { type: String, required: true, enum: ["recharge", "crypto", "payout"] },
     sourceId: { type: String, required: true },
     amountInr: { type: Number, required: true, min: 0 },
     refereeAmountInr: { type: Number, required: true, min: 0 },

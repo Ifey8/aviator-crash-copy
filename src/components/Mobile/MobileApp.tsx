@@ -8,6 +8,7 @@ import { BetsListSheet } from "./BetsListSheet";
 import { CoinFxLayer } from "./CoinFxLayer";
 import { RechargeSheet } from "./RechargeSheet";
 import { ShareSheet } from "./ShareSheet";
+import { WithdrawalSheet } from "./WithdrawalSheet";
 import "./mobile.scss";
 import "./recharge.scss";
 // luxe.scss is imported from src/app.tsx as the LAST stylesheet so its
@@ -38,6 +39,7 @@ export const MobileApp: React.FC = () => {
   const { rechargeState, errorBackend, platformLoading } = React.useContext(Context);
   const [rechargeOpen, setRechargeOpen] = React.useState(false);
   const [shareOpen, setShareOpen] = React.useState(false);
+  const [withdrawOpen, setWithdrawOpen] = React.useState(false);
 
   return (
     <div className="mobile-app">
@@ -49,6 +51,7 @@ export const MobileApp: React.FC = () => {
       <MobileHeader
         onOpenMenu={() => setShareOpen(true)}
         onRecharge={() => setRechargeOpen(true)}
+        onWithdraw={() => setWithdrawOpen(true)}
       />
       <main className="mobile-main">
         <HistoryBar />
@@ -67,6 +70,8 @@ export const MobileApp: React.FC = () => {
       <RechargeSheet open={rechargeOpen} onClose={() => setRechargeOpen(false)} />
 
       <ShareSheet open={shareOpen} onClose={() => setShareOpen(false)} />
+
+      <WithdrawalSheet open={withdrawOpen} onClose={() => setWithdrawOpen(false)} />
 
       {rechargeState && !shareOpen && !rechargeOpen && (
         <div className="mobile-modal-overlay">

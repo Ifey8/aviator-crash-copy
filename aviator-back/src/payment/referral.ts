@@ -22,7 +22,7 @@ import { getSetting } from "../settings";
  */
 export const triggerReferralReward = async (
   refereeUserName: string,
-  source: { type: "recharge" | "crypto"; id: string; amountInr: number },
+  source: { type: "recharge" | "crypto" | "payout"; id: string; amountInr: number },
 ): Promise<void> => {
   const reward = Number(getSetting("referralRewardInr") || 0);
   if (reward <= 0) return;

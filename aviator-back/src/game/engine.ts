@@ -74,7 +74,10 @@ export class GameEngine extends EventEmitter {
   }
 
   /**
-   * Credit `amount` to a user's balance (for recharge / admin grant).
+   * Credit `amount` to a user's balance (for referral reward / admin grant /
+   * withdrawal refund). Does NOT add to wagerRequired — those credits are
+   * freely withdrawable.
+   *
    * Updates in-memory PlayerState if they're online AND persists to Mongo.
    * Returns the new balance, or null if the user does not exist in Mongo.
    *
@@ -83,6 +86,78 @@ export class GameEngine extends EventEmitter {
    * the source of credit here.
    */
   async creditBalance(userName: string, amount: number): Promise<number | null> {
+    if (amount <= 0) return null;
+    const updated = await UserModel.findOneAndUpdate(
+      { userName },
+      { $inc: { balance: amount } },
+      { new: true },
+    );
+    if (!updated) return null;
+    const p = this.players.get(userName);
+    if (p) p.balance = updated.balance;
+    return updated.balance;
+  }
+
+  /**
+   * Credit a recharge: balance += amount AND wagerRequired += amount × multiplier.
+   * The recharged money is locked behind playthrough; only after the user
+   * wagers `amount × multiplier` does it become withdrawable.
+   *
+   * Idempotency is the caller's responsibility (recharge order status flip).
+   */
+  async creditRecharge(userName: string, amount: number): Promise<number | null> {
+    if (amount <= 0) return null;
+    const wagerAdd = +(amount * Number(getSetting("wagerMultiplier") || 1)).toFixed(2);
+    const updated = await UserModel.findOneAndUpdate(
+      { userName },
+      { $inc: { balance: amount, wagerRequired: wagerAdd } },
+      { new: true },
+    );
+    if (!updated) return null;
+    const p = this.players.get(userName);
+    if (p) {
+      p.balance = updated.balance;
+      p.wagerRequired = updated.wagerRequired || 0;
+    }
+    return updated.balance;
+  }
+
+  /**
+   * Atomically debit a user's balance for a pending withdrawal. Reserves the
+   * funds so subsequent bets can't double-spend the same money.
+   *
+   *   • Checks balance >= deduct AND withdrawable (= balance − wagerRequired) >= net
+   *   • On success: balance -= deduct, returns new balance
+   *   • On insufficient: returns null (caller surfaces the right reason)
+   *
+   * The split between `deduct` (gross + fee) and `net` (gross) lets the caller
+   * apply different rules — currently both must be ≤ withdrawable.
+   */
+  async reserveForWithdrawal(
+    userName: string,
+    deduct: number,
+    net: number,
+  ): Promise<{ balance: number; wagerRequired: number } | null> {
+    if (deduct <= 0 || net <= 0) return null;
+    // Withdrawable = balance − wagerRequired ≥ deduct (gross + fee).
+    // Using aggregation-pipeline updateOne for atomic check+set.
+    const result = await UserModel.findOneAndUpdate(
+      {
+        userName,
+        balance: { $gte: deduct },
+        $expr: { $gte: [{ $subtract: ["$balance", "$wagerRequired"] }, deduct] },
+      },
+      { $inc: { balance: -deduct } },
+      { new: true },
+    );
+    if (!result) return null;
+    const p = this.players.get(userName);
+    if (p) p.balance = result.balance;
+    return { balance: result.balance, wagerRequired: result.wagerRequired || 0 };
+  }
+
+  /** Refund a previously-reserved withdrawal (on cancel / failure). */
+  async refundWithdrawal(userName: string, amount: number): Promise<number | null> {
     if (amount <= 0) return null;
     const updated = await UserModel.findOneAndUpdate(
       { userName },
@@ -118,6 +193,7 @@ export class GameEngine extends EventEmitter {
     if (p.balance < betAmount) return { ok: false, reason: "Insufficient balance" };
 
     p.balance -= betAmount;
+    p.wagerRequired = Math.max(0, +(p.wagerRequired - betAmount).toFixed(2));
     p[index] = {
       ...emptySide(),
       betted: true,
@@ -126,7 +202,18 @@ export class GameEngine extends EventEmitter {
       auto,
     };
 
-    await UserModel.updateOne({ userName }, { $set: { balance: p.balance } });
+    // Aggregation-pipeline update: balance := new balance,
+    // wagerRequired := max(0, old - betAmount). Single atomic write.
+    await UserModel.updateOne({ userName }, [
+      {
+        $set: {
+          balance: p.balance,
+          wagerRequired: {
+            $max: [0, { $subtract: ["$wagerRequired", betAmount] }],
+          },
+        },
+      },
+    ]);
     this.emit("betPlaced", p);
     return { ok: true };
   }

@@ -16,6 +16,8 @@ export interface PlayerState {
   userName: string;
   avatar: string;
   balance: number;
+  /** Outstanding playthrough requirement (INR). Withdrawable = balance − wagerRequired. */
+  wagerRequired: number;
   userType: boolean;
   token: string;
   f: BetSide;

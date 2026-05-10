@@ -112,7 +112,7 @@ const claim = async (order: CryptoOrderDoc, tx: Trc20Tx): Promise<void> => {
   }
   if (!updated) return; // already paid by another worker
 
-  const newBalance = await engine.creditBalance(order.userName, actualInr);
+  const newBalance = await engine.creditRecharge(order.userName, actualInr);
   if (newBalance != null) {
     updated.balanceAfter = newBalance;
     await updated.save();

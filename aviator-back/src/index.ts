@@ -11,6 +11,7 @@ import { userRouter } from "./routes/user";
 import { adminRouter } from "./routes/admin";
 import { rechargeRouter } from "./routes/recharge";
 import { cryptoRouter } from "./routes/crypto";
+import { withdrawalRouter } from "./routes/withdrawal";
 import { startTronWatcher } from "./payment/providers/tron";
 import { startTelegramBot } from "./bot/telegram";
 import { loadSettings } from "./settings";
@@ -33,6 +34,7 @@ app.use("/api/auth", authRouter);
 app.use("/api/admin", adminRouter);
 app.use("/api/recharge", rechargeRouter);
 app.use("/api/crypto", cryptoRouter);
+app.use("/api/withdrawal", withdrawalRouter);
 app.use("/api", userRouter);
 
 const server = http.createServer(app);

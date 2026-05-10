@@ -293,6 +293,25 @@
   &.admin  { background: rgba(255, 200, 87, 0.18); color: var(--admin-gold); }
   &.tg     { background: rgba(56, 210, 255, 0.18); color: var(--admin-blue); }
   &.banned { background: rgba(255, 84, 104, 0.18); color: var(--admin-bad); }
+  &.status-pending,
+  &.status-processing,
+  &.status-manual_queue { background: rgba(255, 200, 87, 0.18); color: var(--admin-gold); }
+  &.status-paid          { background: rgba(86, 224, 154, 0.18); color: #56e09a; }
+  &.status-failed,
+  &.status-cancelled     { background: rgba(255, 84, 104, 0.18); color: var(--admin-bad); }
+}
+
+.admin-withdrawals-hot {
+  font-size: 11px;
+  color: var(--admin-text-muted, rgba(255, 245, 220, 0.55));
+  margin-top: 4px;
+  code {
+    background: rgba(255, 200, 87, 0.06);
+    padding: 1px 5px;
+    border-radius: 4px;
+    font-size: 10.5px;
+    letter-spacing: 0.02em;
+  }
 }
 
 /* ----- Edit modal ----- */

@@ -5,7 +5,7 @@ import "./admin.scss";
 
 const apiBase = config.api.replace(/\/api$/, "/api");
 
-type Tab = "stats" | "users" | "rounds" | "settings";
+type Tab = "stats" | "users" | "rounds" | "withdrawals" | "settings";
 
 interface Stats {
   engine: { phase: string; multiplier: number; players: number; historyLen: number };
@@ -71,6 +71,7 @@ export const AdminApp: React.FC = () => {
           <button className={tab === "stats" ? "active" : ""} onClick={() => setTab("stats")}>Stats</button>
           <button className={tab === "users" ? "active" : ""} onClick={() => setTab("users")}>Users</button>
           <button className={tab === "rounds" ? "active" : ""} onClick={() => setTab("rounds")}>Rounds</button>
+          <button className={tab === "withdrawals" ? "active" : ""} onClick={() => setTab("withdrawals")}>Withdrawals</button>
           <button className={tab === "settings" ? "active" : ""} onClick={() => setTab("settings")}>Settings</button>
         </nav>
         <div className="admin-user">
@@ -83,6 +84,7 @@ export const AdminApp: React.FC = () => {
         {tab === "stats" && <StatsTab />}
         {tab === "users" && <UsersTab />}
         {tab === "rounds" && <RoundsTab />}
+        {tab === "withdrawals" && <WithdrawalsTab />}
         {tab === "settings" && <SettingsTab />}
       </main>
     </div>
@@ -354,6 +356,9 @@ interface SettingsData {
   botMinCount: number;
   botMaxCount: number;
   referralRewardInr: number;
+  withdrawalFeePct: number;
+  withdrawalMinInr: number;
+  wagerMultiplier: number;
   updatedAt?: string;
   updatedBy?: string;
 }
@@ -369,7 +374,10 @@ const SETTINGS_FIELDS: { key: keyof SettingsData; label: string; hint: string; g
   { group: "Crypto", key: "usdtInrRateFallback", label: "USDT/INR fallback rate", hint: "Used when CoinGecko unreachable." },
   { group: "Bots", key: "botMinCount", label: "Bot min per round", hint: "Lower bound of random fake-player count." },
   { group: "Bots", key: "botMaxCount", label: "Bot max per round", hint: "Upper bound (5-15 = lively, 0-0 = none)." },
-  { group: "Referral", key: "referralRewardInr", label: "Reward per recharge (INR)", hint: "Credited to referrer EACH TIME a referred user recharges. 0 to disable referrals." },
+  { group: "Referral", key: "referralRewardInr", label: "Reward per recharge/payout (INR)", hint: "Credited to referrer EACH TIME a referred user recharges OR withdraws. 0 to disable referrals." },
+  { group: "Withdrawal", key: "withdrawalFeePct", label: "Fee on top (%)", hint: "0.05 = 5%. Charged ON TOP of withdrawal amount: user requests ₹1000 → balance −₹1050." },
+  { group: "Withdrawal", key: "withdrawalMinInr", label: "Minimum (INR)", hint: "Smallest gross withdrawal accepted." },
+  { group: "Withdrawal", key: "wagerMultiplier", label: "Wager multiplier", hint: "1.0 = recharge of ₹X must be wagered ₹X before becoming withdrawable. 0 disables playthrough lock." },
 ];
 
 const SettingsTab: React.FC = () => {
@@ -465,6 +473,198 @@ const SettingsTab: React.FC = () => {
         </button>
         {saved && <span className="admin-settings-saved">✓ saved at {saved}</span>}
       </div>
+    </div>
+  );
+};
+
+// -------------------------------- Withdrawals -----------------------------
+
+interface WithdrawalRow {
+  orderId: string;
+  userName: string;
+  method: "bank" | "usdt";
+  status: string;
+  grossAmount: number;
+  feeAmount: number;
+  totalDebitInr: number;
+  bankAccount?: string;
+  ifsc?: string;
+  holderName?: string;
+  trc20Address?: string;
+  fxRate?: number;
+  txHash?: string;
+  provider?: string;
+  failedReason?: string;
+  createdAt: string;
+  paidAt?: string;
+}
+
+interface HotWalletData {
+  address: string;
+  network: string;
+  trxBalance: number;
+  usdtBalance: number;
+}
+
+const WithdrawalsTab: React.FC = () => {
+  const api = useApi();
+  const [items, setItems] = React.useState<WithdrawalRow[]>([]);
+  const [pendingCount, setPendingCount] = React.useState(0);
+  const [statusFilter, setStatusFilter] = React.useState<string>("");
+  const [error, setError] = React.useState<string | null>(null);
+  const [hot, setHot] = React.useState<HotWalletData | null>(null);
+  const [busyOrder, setBusyOrder] = React.useState<string | null>(null);
+
+  const load = React.useCallback(() => {
+    const qs = statusFilter ? `?status=${statusFilter}` : "";
+    api(`/admin/withdrawals${qs}`)
+      .then((r) => { setItems(r.items); setPendingCount(r.pendingCount); })
+      .catch((e) => setError(e.message));
+    api(`/admin/wallet-status`)
+      .then((r) => setHot(r.data))
+      .catch(() => { /* tron may be off */ });
+  }, [api, statusFilter]);
+
+  React.useEffect(() => { load(); }, [load]);
+  React.useEffect(() => {
+    const id = setInterval(load, 8000);
+    return () => clearInterval(id);
+  }, [load]);
+
+  const markPaid = async (row: WithdrawalRow) => {
+    let txHash: string | undefined;
+    if (row.method === "usdt") {
+      const inp = window.prompt("TX hash (paste from your wallet, or leave blank if marked outside Tron)?");
+      if (inp === null) return;
+      txHash = inp.trim() || undefined;
+    } else {
+      if (!window.confirm(`Mark ${row.userName}'s ₹${row.grossAmount} bank transfer as PAID?`)) return;
+    }
+    setBusyOrder(row.orderId);
+    try {
+      await api(`/admin/withdrawals/${row.orderId}/mark-paid`, {
+        method: "POST",
+        body: JSON.stringify({ txHash }),
+      });
+      load();
+    } catch (e) { alert((e as Error).message); }
+    finally { setBusyOrder(null); }
+  };
+
+  const markFailed = async (row: WithdrawalRow) => {
+    const reason = window.prompt(`Reason for failing ${row.userName}'s withdrawal? (will refund ₹${row.totalDebitInr})`);
+    if (!reason) return;
+    setBusyOrder(row.orderId);
+    try {
+      await api(`/admin/withdrawals/${row.orderId}/mark-failed`, {
+        method: "POST",
+        body: JSON.stringify({ reason }),
+      });
+      load();
+    } catch (e) { alert((e as Error).message); }
+    finally { setBusyOrder(null); }
+  };
+
+  if (error) return <div className="admin-error">⚠ {error}</div>;
+
+  return (
+    <div className="admin-withdrawals">
+      <section className="stat-grid">
+        <Stat label="Pending withdrawals" value={String(pendingCount)} accent={pendingCount > 0 ? "warn" : undefined} />
+        {hot && (
+          <>
+            <Stat label="Hot wallet USDT" value={hot.usdtBalance.toFixed(2)} accent={hot.usdtBalance < 50 ? "warn" : "ok"} />
+            <Stat label="Hot wallet TRX" value={hot.trxBalance.toFixed(2)} />
+            <Stat label="Network" value={hot.network} />
+          </>
+        )}
+      </section>
+      {hot && (
+        <div className="admin-withdrawals-hot">
+          Hot wallet: <code>{hot.address}</code>
+        </div>
+      )}
+
+      <div className="users-toolbar" style={{ marginTop: 12 }}>
+        <select
+          value={statusFilter}
+          onChange={(e) => setStatusFilter(e.target.value)}
+          style={{ padding: 6, background: "transparent", color: "inherit", borderRadius: 6 }}
+        >
+          <option value="">All statuses</option>
+          <option value="pending">pending</option>
+          <option value="processing">processing</option>
+          <option value="manual_queue">manual_queue</option>
+          <option value="paid">paid</option>
+          <option value="failed">failed</option>
+          <option value="cancelled">cancelled</option>
+        </select>
+      </div>
+
+      <table className="admin-table">
+        <thead>
+          <tr>
+            <th>When</th><th>User</th><th>Method</th>
+            <th>Gross</th><th>Fee</th><th>Total deduct</th>
+            <th>Destination</th><th>Status</th><th>Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+          {items.map((r) => {
+            const canAct = ["pending", "processing", "manual_queue"].includes(r.status);
+            return (
+              <tr key={r.orderId}>
+                <td>{new Date(r.createdAt).toLocaleString()}</td>
+                <td>{r.userName}</td>
+                <td>{r.method.toUpperCase()}</td>
+                <td className="num">
+                  {r.method === "bank" ? `₹${r.grossAmount.toFixed(2)}` : `${r.grossAmount.toFixed(4)} USDT`}
+                </td>
+                <td className="num">₹{r.feeAmount.toFixed(2)}</td>
+                <td className="num">₹{r.totalDebitInr.toFixed(2)}</td>
+                <td className="seed">
+                  {r.method === "bank" ? (
+                    <>
+                      <div>A/C: {r.bankAccount}</div>
+                      <div>{r.ifsc} · {r.holderName}</div>
+                    </>
+                  ) : (
+                    <>
+                      <div>{r.trc20Address}</div>
+                      {r.txHash && <div>TX: {r.txHash.slice(0, 16)}…</div>}
+                      {r.fxRate && <div>@ ₹{r.fxRate.toFixed(2)}/USDT</div>}
+                    </>
+                  )}
+                </td>
+                <td>
+                  <span className={`tag status-${r.status}`}>{r.status}</span>
+                  {r.failedReason && <div className="seed">{r.failedReason}</div>}
+                </td>
+                <td>
+                  {canAct ? (
+                    <>
+                      <button
+                        onClick={() => markPaid(r)}
+                        disabled={busyOrder === r.orderId}
+                        style={{ marginRight: 4 }}
+                      >
+                        Paid
+                      </button>
+                      <button
+                        onClick={() => markFailed(r)}
+                        disabled={busyOrder === r.orderId}
+                      >
+                        Fail
+                      </button>
+                    </>
+                  ) : "—"}
+                </td>
+              </tr>
+            );
+          })}
+          {items.length === 0 && <tr><td colSpan={9} className="empty">No withdrawals</td></tr>}
+        </tbody>
+      </table>
     </div>
   );
 };

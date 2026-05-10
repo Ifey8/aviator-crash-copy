@@ -30,8 +30,20 @@ export interface SettingsDoc {
   botMaxCount: number;
 
   // ── Referral ──
-  /** INR credited to referrer EACH TIME a referred user successfully recharges. */
+  /** INR credited to referrer EACH TIME a referred user successfully recharges OR withdraws. */
   referralRewardInr: number;
+
+  // ── Withdrawal ──
+  /** Fee added ON TOP of withdrawal amount. 0.05 = 5%. user requests ₹1000 → balance −1050. */
+  withdrawalFeePct: number;
+  /** Minimum gross withdrawal amount (INR). */
+  withdrawalMinInr: number;
+  /**
+   * 1x = recharge of ₹X requires ₹X wagered before that ₹X becomes withdrawable.
+   * Initial balance / cashout winnings / referral rewards do NOT count toward
+   * wagerRequired — only fiat + crypto recharges do.
+   */
+  wagerMultiplier: number;
 
   updatedAt: Date;
   updatedBy?: string;
@@ -51,6 +63,9 @@ const SettingsSchema = new Schema<SettingsDoc>(
     botMinCount: { type: Number, required: true, min: 0, max: 50 },
     botMaxCount: { type: Number, required: true, min: 0, max: 100 },
     referralRewardInr: { type: Number, required: true, min: 0 },
+    withdrawalFeePct: { type: Number, required: true, min: 0, max: 0.5 },
+    withdrawalMinInr: { type: Number, required: true, min: 0 },
+    wagerMultiplier: { type: Number, required: true, min: 0, max: 10 },
     updatedAt: { type: Date, default: Date.now },
     updatedBy: { type: String },
   },

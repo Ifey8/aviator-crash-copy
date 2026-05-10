@@ -22,7 +22,10 @@ type SettingsKey =
   | "usdtInrRateFallback"
   | "botMinCount"
   | "botMaxCount"
-  | "referralRewardInr";
+  | "referralRewardInr"
+  | "withdrawalFeePct"
+  | "withdrawalMinInr"
+  | "wagerMultiplier";
 
 let cache: SettingsDoc | null = null;
 
@@ -38,6 +41,9 @@ const defaultsFromEnv = (): Omit<SettingsDoc, "_id" | "updatedAt" | "updatedBy">
   botMinCount: 5,
   botMaxCount: 15,
   referralRewardInr: 100,
+  withdrawalFeePct: 0.05,
+  withdrawalMinInr: 300,
+  wagerMultiplier: 1.0,
 });
 
 /**

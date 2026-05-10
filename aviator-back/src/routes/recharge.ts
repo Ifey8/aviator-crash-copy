@@ -183,7 +183,9 @@ const markPaidAndCredit = async (
     return { ok: false, reason: "Order not found or not pending" };
   }
 
-  const newBalance = await engine.creditBalance(order.userName, order.amount);
+  // Recharges add to wagerRequired (1x by default — admin-tunable). Bonuses
+  // (referral / admin / cashout winnings) go through creditBalance which does NOT.
+  const newBalance = await engine.creditRecharge(order.userName, order.amount);
   if (newBalance == null) {
     // User vanished — leave order as paid (Mongo source of truth) but log.
     console.warn(`[recharge] paid order ${order.orderId} for missing user ${order.userName}`);

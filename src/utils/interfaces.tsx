@@ -19,6 +19,8 @@ export interface BetResults {
 
 export interface UserType {
     balance: number;
+    /** Outstanding playthrough requirement (INR). Withdrawable = balance − wagerRequired. */
+    wagerRequired?: number;
     userType: boolean;
     avatar: string;
     userId: string;

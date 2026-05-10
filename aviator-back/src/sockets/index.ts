@@ -23,6 +23,7 @@ interface CashOutPayload {
 const userToFrontend = (p: PlayerState) => ({
   userName: p.userName,
   balance: +p.balance.toFixed(2),
+  wagerRequired: +(p.wagerRequired || 0).toFixed(2),
   avatar: p.avatar,
   userType: p.userType,
   token: p.token,
@@ -161,6 +162,11 @@ export const initSockets = (io: Server): void => {
       }
       set.add(socket);
 
+      // Always pull the freshest wagerRequired from Mongo on (re)connect —
+      // recharge / withdrawal can move it while the user is offline.
+      const fresh = await UserModel.findOne({ userName }).select("wagerRequired").lean();
+      const wagerRequired = +(fresh?.wagerRequired || 0);
+
       const existing = engine.getPlayer(userName);
       if (existing) {
         existing.userId = socket.id;
@@ -168,6 +174,7 @@ export const initSockets = (io: Server): void => {
         // Refresh balance/avatar in case Mongo changed (e.g. recharge credit
         // happened while disconnected).
         existing.balance = session.balance;
+        existing.wagerRequired = wagerRequired;
         existing.avatar = session.avatar;
         socket.emit("myInfo", userToFrontend(existing));
       } else {
@@ -176,6 +183,7 @@ export const initSockets = (io: Server): void => {
           userName: session.userName,
           avatar: session.avatar,
           balance: session.balance,
+          wagerRequired,
           userType: session.userType,
           token: session.token,
           f: emptySide(),

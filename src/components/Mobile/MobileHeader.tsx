@@ -47,9 +47,10 @@ const useDisplayBalance = (real: number): number => {
 interface HeaderProps {
   onOpenMenu: () => void;
   onRecharge?: () => void;
+  onWithdraw?: () => void;
 }
 
-export const MobileHeader: React.FC<HeaderProps> = ({ onOpenMenu, onRecharge }) => {
+export const MobileHeader: React.FC<HeaderProps> = ({ onOpenMenu, onRecharge, onWithdraw }) => {
   const { userInfo, errorBackend } = React.useContext(Context);
   const balanceServer = Number(userInfo?.balance || 0);
   const balance = useDisplayBalance(balanceServer);
@@ -75,6 +76,15 @@ export const MobileHeader: React.FC<HeaderProps> = ({ onOpenMenu, onRecharge }) 
             aria-label="Top up balance"
           >
             + ADD
+          </button>
+        )}
+        {onWithdraw && (
+          <button
+            className="mobile-header-withdraw"
+            onClick={onWithdraw}
+            aria-label="Withdraw balance"
+          >
+            ⊖ OUT
           </button>
         )}
         <button className="mobile-header-menu" onClick={onOpenMenu} aria-label="menu">
