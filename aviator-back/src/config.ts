@@ -62,5 +62,8 @@ export const config = {
   betDurationMs: num(process.env.BET_DURATION_MS, 5000),
   settleDurationMs: num(process.env.SETTLE_DURATION_MS, 3000),
   houseEdge: num(process.env.HOUSE_EDGE, 0.03),
+  /** Hard cap on crash multiplier. 100x ≈ 80s round; few players sit that
+   * long, and the long tail causes huge variance for the operator. */
+  maxCrashMultiplier: num(process.env.MAX_CRASH_MULTIPLIER, 100),
   historyLength: 30,
 };

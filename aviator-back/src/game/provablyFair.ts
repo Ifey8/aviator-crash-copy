@@ -1,9 +1,15 @@
 import { createHash, createHmac, randomBytes } from "crypto";
+import { config } from "../config";
 
 /**
  * Provably-fair crash point generator. Standard Bustabit-style algorithm:
  * HMAC-SHA256(serverSeed, clientSeed:nonce), take first 13 hex chars,
  * convert to uint52, then map to a multiplier with configurable house edge.
+ *
+ * Crash point is clamped at config.maxCrashMultiplier (default 100x). The
+ * long tail of the Bustabit distribution puts ~1% of rounds above 100x
+ * which adds huge variance to operator P&L without much player upside —
+ * essentially nobody waits past 100x anyway.
  */
 
 export interface RoundSeed {
@@ -40,7 +46,7 @@ export const computeCrashPoint = (
   if (intVal % Math.floor(1 / houseEdge) === 0) return 1.0;
 
   const result = Math.floor((100 * e - intVal) / (e - intVal)) / 100;
-  return Math.max(1.0, Math.min(result, 1000));
+  return Math.max(1.0, Math.min(result, config.maxCrashMultiplier));
 };
 
 export const buildRoundSeed = (
