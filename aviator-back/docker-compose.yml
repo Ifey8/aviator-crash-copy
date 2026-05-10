@@ -36,7 +36,9 @@ services:
       JWT_SECRET: ${JWT_SECRET:-dev-secret-change-me}
       TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN:-}
       TELEGRAM_WEBAPP_URL: ${TELEGRAM_WEBAPP_URL:-http://localhost:18803}
-      ALLOW_DEV_AUTH: "true"
+      # ALLOW_DEV_AUTH intentionally NOT set here — it's read from .env so
+      # prod can set =false (default) without touching this file. Setting
+      # it to "true" here would override .env and spawn guest users on prod.
       INITIAL_BALANCE: 1000
       MIN_BET: 1
       MAX_BET: 1000
