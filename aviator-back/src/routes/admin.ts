@@ -10,6 +10,7 @@ import { getAllSettings, updateSettings } from "../settings";
 import { pushToUser, pushUserMyInfo } from "../sockets";
 import { triggerReferralReward } from "../payment/referral";
 import { getHotWalletBalance } from "../payment/hotWallet";
+import { listWallets, transferOut, sweepAddresses } from "../payment/walletOps";
 
 export const adminRouter = Router();
 adminRouter.use(requireAdmin);
@@ -426,4 +427,59 @@ adminRouter.post("/withdrawals/:orderId/approve-review", async (req, res) => {
 adminRouter.get("/wallet-status", async (_req, res) => {
   const balance = await getHotWalletBalance();
   res.json({ status: true, data: balance });
+});
+
+// ---------- Wallets (hot + derived sub-addresses) ----------
+
+/**
+ * GET /admin/wallets — full list with live TRX + USDT balances.
+ * Cached 30s server-side; pass ?fresh=1 to force refetch.
+ */
+adminRouter.get("/wallets", async (req, res) => {
+  const useCache = req.query.fresh !== "1";
+  try {
+    const r = await listWallets(useCache);
+    res.json({ status: true, data: r });
+  } catch (e) {
+    res.status(502).json({ status: false, message: (e as Error).message });
+  }
+});
+
+/**
+ * POST /admin/wallets/transfer-out — manual transfer from hot wallet to
+ * an external address. Body:
+ *   { to: string, amountUsdt?: number, amountTrx?: number, dryRun?: bool }
+ * Wraps walletOps.transferOut so the operator never has to handle keys.
+ */
+adminRouter.post("/wallets/transfer-out", async (req, res) => {
+  const { to, amountUsdt, amountTrx, dryRun } = req.body || {};
+  try {
+    const r = await transferOut({
+      to,
+      amountUsdt: amountUsdt != null ? Number(amountUsdt) : undefined,
+      amountTrx: amountTrx != null ? Number(amountTrx) : undefined,
+      dryRun: !!dryRun,
+    });
+    if (!r.ok) return res.status(400).json({ status: false, ...r });
+    res.json({ status: true, data: r });
+  } catch (e) {
+    res.status(502).json({ status: false, message: (e as Error).message });
+  }
+});
+
+/**
+ * POST /admin/wallets/sweep — run the sweep operation on paid+un-swept
+ * deposit addresses → hot wallet. Optional body.addresses limits scope.
+ */
+adminRouter.post("/wallets/sweep", async (req, res) => {
+  const { addresses, dryRun } = req.body || {};
+  try {
+    const r = await sweepAddresses({
+      addresses: Array.isArray(addresses) ? addresses : undefined,
+      dryRun: !!dryRun,
+    });
+    res.json({ status: true, data: r });
+  } catch (e) {
+    res.status(502).json({ status: false, message: (e as Error).message });
+  }
 });

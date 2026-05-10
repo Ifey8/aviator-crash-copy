@@ -5,7 +5,7 @@ import "./admin.scss";
 
 const apiBase = config.api.replace(/\/api$/, "/api");
 
-type Tab = "stats" | "users" | "rounds" | "withdrawals" | "settings";
+type Tab = "stats" | "users" | "rounds" | "withdrawals" | "wallets" | "settings";
 
 interface Stats {
   engine: { phase: string; multiplier: number; players: number; historyLen: number };
@@ -72,6 +72,7 @@ export const AdminApp: React.FC = () => {
           <button className={tab === "users" ? "active" : ""} onClick={() => setTab("users")}>Users</button>
           <button className={tab === "rounds" ? "active" : ""} onClick={() => setTab("rounds")}>Rounds</button>
           <button className={tab === "withdrawals" ? "active" : ""} onClick={() => setTab("withdrawals")}>Withdrawals</button>
+          <button className={tab === "wallets" ? "active" : ""} onClick={() => setTab("wallets")}>Wallets</button>
           <button className={tab === "settings" ? "active" : ""} onClick={() => setTab("settings")}>Settings</button>
         </nav>
         <div className="admin-user">
@@ -85,6 +86,7 @@ export const AdminApp: React.FC = () => {
         {tab === "users" && <UsersTab />}
         {tab === "rounds" && <RoundsTab />}
         {tab === "withdrawals" && <WithdrawalsTab />}
+        {tab === "wallets" && <WalletsTab />}
         {tab === "settings" && <SettingsTab />}
       </main>
     </div>
@@ -700,6 +702,263 @@ const WithdrawalsTab: React.FC = () => {
           {items.length === 0 && <tr><td colSpan={9} className="empty">No withdrawals</td></tr>}
         </tbody>
       </table>
+    </div>
+  );
+};
+
+// -------------------------------- Wallets ---------------------------------
+
+interface WalletEntry {
+  role: "hot" | "deposit";
+  index: number;
+  address: string;
+  trxBalance: number;
+  usdtBalance: number;
+  paidOrderCount?: number;
+  unsweptOrderCount?: number;
+  totalUsdtClaimed?: number;
+}
+
+interface WalletsListData {
+  network: string;
+  contract: string;
+  fetchedAt: string;
+  cached: boolean;
+  wallets: WalletEntry[];
+  totals: {
+    hotTrx: number;
+    hotUsdt: number;
+    depositTrx: number;
+    depositUsdt: number;
+    unsweptOrders: number;
+  };
+}
+
+const WalletsTab: React.FC = () => {
+  const api = useApi();
+  const [data, setData] = React.useState<WalletsListData | null>(null);
+  const [error, setError] = React.useState<string | null>(null);
+  const [loading, setLoading] = React.useState(false);
+  const [transferOpen, setTransferOpen] = React.useState(false);
+  const [sweeping, setSweeping] = React.useState(false);
+
+  const load = React.useCallback(async (fresh = false) => {
+    setLoading(true);
+    try {
+      const r = await api(`/admin/wallets${fresh ? "?fresh=1" : ""}`);
+      setData(r.data);
+      setError(null);
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setLoading(false);
+    }
+  }, [api]);
+
+  React.useEffect(() => { load(); }, [load]);
+
+  const runSweep = async () => {
+    if (!window.confirm(
+      `Sweep ${data?.totals.unsweptOrders || 0} un-swept order(s)? ` +
+      `This sends USDT from sub-addresses to the hot wallet (each takes ~13-30 TRX gas).`,
+    )) return;
+    setSweeping(true);
+    try {
+      const r = await api(`/admin/wallets/sweep`, {
+        method: "POST",
+        body: JSON.stringify({ dryRun: false }),
+      });
+      const d = r.data;
+      alert(
+        `Sweep complete:\n` +
+        `Attempted: ${d.attempted}\n` +
+        `Swept: ${d.swept}\n` +
+        `Total USDT swept: ${d.totalUsdt.toFixed(4)}\n\n` +
+        `Details:\n${d.details.map((x: any) =>
+          `${x.address.slice(0, 12)}…  ${x.action}` +
+          (x.txHash ? ` [${x.txHash.slice(0, 10)}…]` : "") +
+          (x.error ? ` ERROR: ${x.error}` : "")
+        ).join("\n")}`,
+      );
+      load(true);
+    } catch (e) {
+      alert("Sweep failed: " + (e as Error).message);
+    } finally {
+      setSweeping(false);
+    }
+  };
+
+  const dryRunSweep = async () => {
+    try {
+      const r = await api(`/admin/wallets/sweep`, {
+        method: "POST",
+        body: JSON.stringify({ dryRun: true }),
+      });
+      const d = r.data;
+      alert(
+        `Sweep DRY-RUN preview:\n` +
+        `Would attempt: ${d.attempted} address(es)\n` +
+        `Total USDT to sweep: ${d.totalUsdt.toFixed(4)}\n\n` +
+        d.details.map((x: any) =>
+          `${x.address.slice(0, 12)}…  ${x.action}  USDT=${x.onChainUsdt.toFixed(2)}  TRX=${x.onChainTrx.toFixed(2)}`
+        ).join("\n"),
+      );
+    } catch (e) {
+      alert("Dry-run failed: " + (e as Error).message);
+    }
+  };
+
+  if (error && !data) return <div className="admin-error">⚠ {error}</div>;
+  if (!data) return <div className="admin-tab-body">Loading wallets…</div>;
+
+  const hot = data.wallets.find((w) => w.role === "hot");
+  const deposits = data.wallets.filter((w) => w.role === "deposit");
+
+  return (
+    <div className="admin-wallets">
+      <section className="stat-grid">
+        <Stat label="Hot USDT" value={data.totals.hotUsdt.toFixed(2)} accent={data.totals.hotUsdt < 50 ? "warn" : "ok"} />
+        <Stat label="Hot TRX" value={data.totals.hotTrx.toFixed(2)} accent={data.totals.hotTrx < 50 ? "warn" : "ok"} />
+        <Stat label="Deposit USDT (un-swept)" value={data.totals.depositUsdt.toFixed(2)} accent={data.totals.depositUsdt > 0 ? "warn" : undefined} />
+        <Stat label="Un-swept orders" value={String(data.totals.unsweptOrders)} accent={data.totals.unsweptOrders > 0 ? "warn" : undefined} />
+        <Stat label="Network" value={data.network || "—"} />
+      </section>
+
+      <div className="admin-wallets-actions" style={{ display: "flex", gap: 8, marginTop: 12, alignItems: "center", flexWrap: "wrap" }}>
+        <button onClick={() => load(true)} disabled={loading}>↻ Refresh balances</button>
+        <button onClick={dryRunSweep}>Sweep dry-run</button>
+        <button onClick={runSweep} disabled={sweeping || data.totals.unsweptOrders === 0}>
+          {sweeping ? "Sweeping…" : `Run sweep (${data.totals.unsweptOrders})`}
+        </button>
+        <button className="primary" onClick={() => setTransferOpen(true)}>
+          Transfer out from hot…
+        </button>
+        <span style={{ marginLeft: "auto", fontSize: 11, opacity: 0.55 }}>
+          Last fetched: {new Date(data.fetchedAt).toLocaleTimeString()}
+          {data.cached && " (cached)"}
+        </span>
+      </div>
+
+      {hot && (
+        <div className="admin-wallets-hot" style={{ marginTop: 16 }}>
+          <h3 style={{ fontSize: 14, margin: "0 0 8px" }}>Hot wallet (index {hot.index})</h3>
+          <div className="admin-withdrawals-hot">
+            <code>{hot.address}</code>
+          </div>
+          <div style={{ fontSize: 12, marginTop: 4 }}>
+            <strong style={{ color: "#ffc857" }}>{hot.usdtBalance.toFixed(4)} USDT</strong>
+            {" · "}
+            <strong>{hot.trxBalance.toFixed(4)} TRX</strong>
+          </div>
+        </div>
+      )}
+
+      <h3 style={{ fontSize: 14, margin: "20px 0 8px" }}>Deposit sub-addresses ({deposits.length})</h3>
+      <table className="admin-table">
+        <thead>
+          <tr>
+            <th>Index</th><th>Address</th>
+            <th>USDT</th><th>TRX</th>
+            <th>Paid</th><th>Un-swept</th><th>Total claimed</th>
+          </tr>
+        </thead>
+        <tbody>
+          {deposits.map((w) => (
+            <tr key={w.address} className={w.unsweptOrderCount && w.unsweptOrderCount > 0 ? "row-banned" : ""}>
+              <td>{w.index}</td>
+              <td className="seed">{w.address}</td>
+              <td className="num">{w.usdtBalance.toFixed(4)}</td>
+              <td className="num">{w.trxBalance.toFixed(4)}</td>
+              <td className="num">{w.paidOrderCount}</td>
+              <td className="num">{w.unsweptOrderCount}</td>
+              <td className="num">{w.totalUsdtClaimed?.toFixed(2)}</td>
+            </tr>
+          ))}
+          {deposits.length === 0 && <tr><td colSpan={7} className="empty">No deposit addresses yet</td></tr>}
+        </tbody>
+      </table>
+
+      {transferOpen && (
+        <TransferOutModal onClose={() => setTransferOpen(false)} onDone={() => { setTransferOpen(false); load(true); }} hotUsdt={hot?.usdtBalance || 0} hotTrx={hot?.trxBalance || 0} />
+      )}
+    </div>
+  );
+};
+
+const TransferOutModal: React.FC<{ onClose: () => void; onDone: () => void; hotUsdt: number; hotTrx: number }> = ({ onClose, onDone, hotUsdt, hotTrx }) => {
+  const api = useApi();
+  const [to, setTo] = React.useState("");
+  const [amount, setAmount] = React.useState("");
+  const [currency, setCurrency] = React.useState<"USDT" | "TRX">("USDT");
+  const [busy, setBusy] = React.useState(false);
+  const [result, setResult] = React.useState<string | null>(null);
+  const [error, setError] = React.useState<string | null>(null);
+
+  const TRC20_RE = /^T[1-9A-HJ-NP-Za-km-z]{33}$/;
+  const valid = TRC20_RE.test(to.trim()) && Number(amount) > 0;
+
+  const submit = async (dryRun: boolean) => {
+    setBusy(true); setError(null); setResult(null);
+    try {
+      const body: any = { to: to.trim(), dryRun };
+      if (currency === "USDT") body.amountUsdt = Number(amount);
+      else body.amountTrx = Number(amount);
+      const r = await api(`/admin/wallets/transfer-out`, { method: "POST", body: JSON.stringify(body) });
+      const d = r.data;
+      if (dryRun) {
+        setResult(`✓ Dry-run OK\nFrom: ${d.from.slice(0, 12)}…\nTo: ${d.to.slice(0, 12)}…\n${d.amount} ${d.currency}`);
+      } else {
+        setResult(`✓ Sent\nTX: ${d.txHash}\nView on Tronscan: https://tronscan.org/#/transaction/${d.txHash}`);
+        setTimeout(onDone, 3500);
+      }
+    } catch (e: any) {
+      // The API also returns reason via 400 body; fetch it
+      setError(e.message || "Transfer failed");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <div className="admin-modal-overlay" onClick={onClose}>
+      <div className="admin-modal" onClick={(e) => e.stopPropagation()}>
+        <h3>Transfer out from hot wallet</h3>
+        <p style={{ fontSize: 11, opacity: 0.7, marginTop: -8 }}>
+          Available: {hotUsdt.toFixed(4)} USDT · {hotTrx.toFixed(4)} TRX
+        </p>
+
+        <label>
+          <span>Destination (TRC20)</span>
+          <input type="text" placeholder="T..." value={to} onChange={(e) => setTo(e.target.value.trim())} maxLength={34} />
+        </label>
+
+        <label>
+          <span>Currency</span>
+          <select value={currency} onChange={(e) => setCurrency(e.target.value as any)}>
+            <option value="USDT">USDT</option>
+            <option value="TRX">TRX</option>
+          </select>
+        </label>
+
+        <label>
+          <span>Amount ({currency})</span>
+          <input type="text" inputMode="decimal" placeholder="0.0" value={amount} onChange={(e) => setAmount(e.target.value.replace(/[^\d.]/g, ""))} />
+        </label>
+
+        {result && <pre style={{ background: "rgba(86,224,154,0.1)", padding: 8, borderRadius: 6, fontSize: 11, whiteSpace: "pre-wrap", wordBreak: "break-all" }}>{result}</pre>}
+        {error && <div className="admin-error">⚠ {error}</div>}
+
+        <div className="admin-modal-actions">
+          <button onClick={onClose} disabled={busy}>Close</button>
+          <button onClick={() => submit(true)} disabled={!valid || busy}>Dry-run</button>
+          <button className="primary" onClick={() => {
+            if (!window.confirm(`Send ${amount} ${currency} to ${to}? This is irreversible.`)) return;
+            submit(false);
+          }} disabled={!valid || busy}>
+            {busy ? "Sending…" : "Send for real"}
+          </button>
+        </div>
+      </div>
     </div>
   );
 };
