@@ -33,10 +33,21 @@ PROJECT_ROOT="/opt/aviator"
 # ============================================================
 # 1. 系统包
 # ============================================================
-log "📦 安装系统依赖 (docker, nginx, certbot, ufw)..."
+# Skip docker/compose if already installed (e.g. server pre-provisioned
+# with Docker official repo — newer than the apt versions and would
+# conflict with docker.io ↔ docker-compose-plugin packages).
+if command -v docker >/dev/null 2>&1 && docker compose version >/dev/null 2>&1; then
+  skip "docker $(docker --version | awk '{print $3}' | tr -d ',') + compose $(docker compose version --short) already installed"
+  DOCKER_PKGS=""
+else
+  DOCKER_PKGS="docker.io docker-compose-plugin"
+fi
+
+log "📦 安装系统依赖 (nginx, certbot, ufw${DOCKER_PKGS:+, docker})..."
 apt update -qq
+# shellcheck disable=SC2086
 DEBIAN_FRONTEND=noninteractive apt install -y -qq \
-  docker.io docker-compose-plugin \
+  $DOCKER_PKGS \
   nginx certbot python3-certbot-nginx \
   ufw curl git
 log "✅ apt 包已安装"
