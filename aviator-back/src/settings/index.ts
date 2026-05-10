@@ -25,7 +25,10 @@ type SettingsKey =
   | "referralRewardInr"
   | "withdrawalFeePct"
   | "withdrawalMinInr"
-  | "wagerMultiplier";
+  | "wagerMultiplier"
+  | "withdrawalReviewAboveInr"
+  | "withdrawalReviewNewAccountHours"
+  | "registerMaxPerIp24h";
 
 let cache: SettingsDoc | null = null;
 
@@ -44,6 +47,9 @@ const defaultsFromEnv = (): Omit<SettingsDoc, "_id" | "updatedAt" | "updatedBy">
   withdrawalFeePct: 0.05,
   withdrawalMinInr: 300,
   wagerMultiplier: 1.0,
+  withdrawalReviewAboveInr: 5000,
+  withdrawalReviewNewAccountHours: 24,
+  registerMaxPerIp24h: 3,
 });
 
 /**

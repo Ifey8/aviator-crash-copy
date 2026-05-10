@@ -40,10 +40,29 @@ export interface SettingsDoc {
   withdrawalMinInr: number;
   /**
    * 1x = recharge of ₹X requires ₹X wagered before that ₹X becomes withdrawable.
-   * Initial balance / cashout winnings / referral rewards do NOT count toward
-   * wagerRequired — only fiat + crypto recharges do.
+   * Initial balance / cashout winnings do NOT count toward wagerRequired.
+   * (Referral rewards DO — credited via creditRecharge — to deter ref farming.)
    */
   wagerMultiplier: number;
+  /**
+   * Withdrawals at or above this gross INR auto-flagged for admin review
+   * (held in `review` status; admin must Approve or Fail). 0 disables.
+   * Catches outsized cashouts regardless of account age.
+   */
+  withdrawalReviewAboveInr: number;
+  /**
+   * If account age (hours) is below this AND the user is withdrawing,
+   * auto-flag for review regardless of amount. 0 disables.
+   */
+  withdrawalReviewNewAccountHours: number;
+
+  // ── Anti-abuse: registration ──
+  /**
+   * Max successful new-user registrations from a single IP per 24h.
+   * Counts /register + /telegram + /guest. 0 disables the limit.
+   * Real users virtually never create 3+ accounts/day; bot farms do.
+   */
+  registerMaxPerIp24h: number;
 
   updatedAt: Date;
   updatedBy?: string;
@@ -66,6 +85,9 @@ const SettingsSchema = new Schema<SettingsDoc>(
     withdrawalFeePct: { type: Number, required: true, min: 0, max: 0.5 },
     withdrawalMinInr: { type: Number, required: true, min: 0 },
     wagerMultiplier: { type: Number, required: true, min: 0, max: 10 },
+    withdrawalReviewAboveInr: { type: Number, required: true, min: 0 },
+    withdrawalReviewNewAccountHours: { type: Number, required: true, min: 0 },
+    registerMaxPerIp24h: { type: Number, required: true, min: 0, max: 100 },
     updatedAt: { type: Date, default: Date.now },
     updatedBy: { type: String },
   },

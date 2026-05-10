@@ -27,6 +27,8 @@ adminRouter.put("/settings", async (req, res) => {
     "botMinCount", "botMaxCount",
     "referralRewardInr",
     "withdrawalFeePct", "withdrawalMinInr", "wagerMultiplier",
+    "withdrawalReviewAboveInr", "withdrawalReviewNewAccountHours",
+    "registerMaxPerIp24h",
   ] as const;
   const patch: Record<string, number> = {};
   for (const k of allowed) {
@@ -223,6 +225,7 @@ const withdrawalForAdmin = (o: any) => ({
   provider: o.provider,
   providerRef: o.providerRef,
   failedReason: o.failedReason,
+  meta: o.meta,
   createdAt: o.createdAt,
   paidAt: o.paidAt,
   failedAt: o.failedAt,
@@ -261,7 +264,7 @@ adminRouter.post("/withdrawals/:orderId/mark-paid", async (req, res) => {
   const txHash: string | undefined = req.body?.txHash;
   const order = await WithdrawalOrderModel.findOne({ orderId });
   if (!order) return res.status(404).json({ status: false, message: "Order not found" });
-  if (!["pending", "processing", "manual_queue"].includes(order.status)) {
+  if (!["pending", "processing", "manual_queue", "review"].includes(order.status)) {
     return res.status(400).json({
       status: false,
       message: `Cannot mark paid — order is ${order.status}`,
@@ -271,7 +274,7 @@ adminRouter.post("/withdrawals/:orderId/mark-paid", async (req, res) => {
   const flipped = await WithdrawalOrderModel.findOneAndUpdate(
     {
       orderId,
-      status: { $in: ["pending", "processing", "manual_queue"] },
+      status: { $in: ["pending", "processing", "manual_queue", "review"] },
     },
     {
       $set: {
@@ -307,7 +310,7 @@ adminRouter.post("/withdrawals/:orderId/mark-failed", async (req, res) => {
   const reason: string = (req.body?.reason || "Admin marked failed").toString().slice(0, 200);
   const order = await WithdrawalOrderModel.findOne({ orderId });
   if (!order) return res.status(404).json({ status: false, message: "Order not found" });
-  if (!["pending", "processing", "manual_queue"].includes(order.status)) {
+  if (!["pending", "processing", "manual_queue", "review"].includes(order.status)) {
     return res.status(400).json({
       status: false,
       message: `Cannot mark failed — order is ${order.status}`,
@@ -316,7 +319,7 @@ adminRouter.post("/withdrawals/:orderId/mark-failed", async (req, res) => {
   const flipped = await WithdrawalOrderModel.findOneAndUpdate(
     {
       orderId,
-      status: { $in: ["pending", "processing", "manual_queue"] },
+      status: { $in: ["pending", "processing", "manual_queue", "review"] },
     },
     {
       $set: { status: "failed", failedAt: new Date(), failedReason: reason },
@@ -332,6 +335,88 @@ adminRouter.post("/withdrawals/:orderId/mark-failed", async (req, res) => {
     failedReason: reason,
   });
   pushUserMyInfo(order.userName);
+
+  res.json({ status: true, data: withdrawalForAdmin(flipped) });
+});
+
+/**
+ * Approve a review-status withdrawal: clears the review hold, calls the
+ * payout provider, and flips status to whatever provider returns
+ * (typically "processing"). Admin can then mark it paid once they verify
+ * the actual transfer landed.
+ */
+adminRouter.post("/withdrawals/:orderId/approve-review", async (req, res) => {
+  const { orderId } = req.params;
+  const order = await WithdrawalOrderModel.findOne({ orderId });
+  if (!order) return res.status(404).json({ status: false, message: "Order not found" });
+  if (order.status !== "review") {
+    return res.status(400).json({
+      status: false,
+      message: `Order is ${order.status}, not under review`,
+    });
+  }
+
+  // Lazy import to avoid require cycles with admin routes
+  // eslint-disable-next-line @typescript-eslint/no-var-requires
+  const { getPayoutProvider, defaultPayoutProvider } = require("../payment/payouts");
+  // eslint-disable-next-line @typescript-eslint/no-var-requires
+  const { getHotWalletBalance } = require("../payment/hotWallet");
+
+  const providerName = order.provider || defaultPayoutProvider(order.method);
+  const provider = getPayoutProvider(providerName);
+  if (!provider) {
+    return res.status(500).json({ status: false, message: `Provider ${providerName} not registered` });
+  }
+
+  let nextStatus: string = "processing";
+  let providerRef: string | undefined = order.providerRef;
+  try {
+    if (order.method === "usdt") {
+      const hot = await getHotWalletBalance();
+      if (!hot || hot.usdtBalance < order.grossAmount) {
+        nextStatus = "manual_queue";
+      } else {
+        const r = await provider.createPayout({
+          orderId: order.orderId,
+          userName: order.userName,
+          method: "usdt",
+          grossAmount: order.grossAmount,
+          trc20Address: order.trc20Address,
+        });
+        providerRef = r.providerRef;
+        nextStatus = r.status;
+      }
+    } else {
+      const r = await provider.createPayout({
+        orderId: order.orderId,
+        userName: order.userName,
+        method: "bank",
+        grossAmount: order.grossAmount,
+        bankAccount: order.bankAccount,
+        ifsc: order.ifsc,
+        holderName: order.holderName,
+      });
+      providerRef = r.providerRef;
+      nextStatus = r.status;
+    }
+  } catch (e) {
+    return res.status(502).json({
+      status: false,
+      message: `Provider error: ${e instanceof Error ? e.message : String(e)}`,
+    });
+  }
+
+  const flipped = await WithdrawalOrderModel.findOneAndUpdate(
+    { orderId, status: "review" },
+    { $set: { status: nextStatus, providerRef } },
+    { new: true },
+  );
+  if (!flipped) return res.status(409).json({ status: false, message: "Order state changed" });
+
+  pushToUser(order.userName, "withdrawalUpdate", {
+    orderId: order.orderId,
+    status: nextStatus,
+  });
 
   res.json({ status: true, data: withdrawalForAdmin(flipped) });
 });

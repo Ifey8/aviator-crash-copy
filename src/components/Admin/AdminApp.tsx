@@ -359,6 +359,9 @@ interface SettingsData {
   withdrawalFeePct: number;
   withdrawalMinInr: number;
   wagerMultiplier: number;
+  withdrawalReviewAboveInr: number;
+  withdrawalReviewNewAccountHours: number;
+  registerMaxPerIp24h: number;
   updatedAt?: string;
   updatedBy?: string;
 }
@@ -378,6 +381,9 @@ const SETTINGS_FIELDS: { key: keyof SettingsData; label: string; hint: string; g
   { group: "Withdrawal", key: "withdrawalFeePct", label: "Fee on top (%)", hint: "0.05 = 5%. Charged ON TOP of withdrawal amount: user requests ₹1000 → balance −₹1050." },
   { group: "Withdrawal", key: "withdrawalMinInr", label: "Minimum (INR)", hint: "Smallest gross withdrawal accepted." },
   { group: "Withdrawal", key: "wagerMultiplier", label: "Wager multiplier", hint: "1.0 = recharge of ₹X must be wagered ₹X before becoming withdrawable. 0 disables playthrough lock." },
+  { group: "Anti-abuse", key: "withdrawalReviewAboveInr", label: "Review above (INR)", hint: "Withdrawals at or above this gross amount auto-flagged for admin review. 0 disables." },
+  { group: "Anti-abuse", key: "withdrawalReviewNewAccountHours", label: "Review new account (hours)", hint: "If account younger than this and withdrawing → flagged for review. 0 disables." },
+  { group: "Anti-abuse", key: "registerMaxPerIp24h", label: "Max registrations / IP / 24h", hint: "Hard cap on new accounts from one IP per day. 3 = real users uneffected, bot farms blocked. 0 disables." },
 ];
 
 const SettingsTab: React.FC = () => {
@@ -495,6 +501,7 @@ interface WithdrawalRow {
   txHash?: string;
   provider?: string;
   failedReason?: string;
+  meta?: { reviewReason?: string };
   createdAt: string;
   paidAt?: string;
 }
@@ -565,6 +572,20 @@ const WithdrawalsTab: React.FC = () => {
     finally { setBusyOrder(null); }
   };
 
+  const approveReview = async (row: WithdrawalRow) => {
+    if (!window.confirm(
+      `Approve ${row.userName}'s ${row.method.toUpperCase()} withdrawal for ` +
+      `${row.method === "bank" ? "₹" + row.grossAmount : row.grossAmount + " USDT"}? ` +
+      `This will hand it off to the payout provider.`
+    )) return;
+    setBusyOrder(row.orderId);
+    try {
+      await api(`/admin/withdrawals/${row.orderId}/approve-review`, { method: "POST" });
+      load();
+    } catch (e) { alert((e as Error).message); }
+    finally { setBusyOrder(null); }
+  };
+
   if (error) return <div className="admin-error">⚠ {error}</div>;
 
   return (
@@ -595,6 +616,7 @@ const WithdrawalsTab: React.FC = () => {
           <option value="pending">pending</option>
           <option value="processing">processing</option>
           <option value="manual_queue">manual_queue</option>
+          <option value="review">review</option>
           <option value="paid">paid</option>
           <option value="failed">failed</option>
           <option value="cancelled">cancelled</option>
@@ -638,11 +660,24 @@ const WithdrawalsTab: React.FC = () => {
                 </td>
                 <td>
                   <span className={`tag status-${r.status}`}>{r.status}</span>
+                  {r.meta?.reviewReason && (
+                    <div className="seed" title={r.meta.reviewReason}>⚠ {r.meta.reviewReason}</div>
+                  )}
                   {r.failedReason && <div className="seed">{r.failedReason}</div>}
                 </td>
                 <td>
                   {canAct ? (
                     <>
+                      {r.status === "review" && (
+                        <button
+                          onClick={() => approveReview(r)}
+                          disabled={busyOrder === r.orderId}
+                          style={{ marginRight: 4 }}
+                          title="Approve & send to provider"
+                        >
+                          Approve
+                        </button>
+                      )}
                       <button
                         onClick={() => markPaid(r)}
                         disabled={busyOrder === r.orderId}

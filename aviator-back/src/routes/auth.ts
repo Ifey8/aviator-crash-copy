@@ -3,6 +3,12 @@ import { authWithTelegram, authDevGuest } from "../auth/session";
 import { registerWithPassword, loginWithPassword, profileFromUserName } from "../auth/password";
 import { verifyToken } from "../auth/jwt";
 import { config } from "../config";
+import { UserModel } from "../db/models/User";
+import {
+  checkRegisterIpLimit,
+  recordRegisterAttempt,
+  sendIpLimitExceeded,
+} from "../middleware/registerLimit";
 
 export const authRouter = Router();
 
@@ -10,8 +16,20 @@ authRouter.post("/telegram", async (req, res) => {
   const initData: string = req.body?.initData || "";
   const sid: string | undefined = req.body?.sid;
   const ref: string | undefined = req.body?.ref || req.body?.referrer;
+
+  // Check IP limit BEFORE auth — but only count it if this turns out to be
+  // a brand-new user (TG re-login of an existing user shouldn't count).
+  const ipCheck = await checkRegisterIpLimit(req);
+  if (!ipCheck.ok) return sendIpLimitExceeded(res, ipCheck);
+
   const result = await authWithTelegram(initData, { sid, referrer: ref });
   if (!result) return res.status(401).json({ status: false, message: "Invalid Telegram initData" });
+
+  // Was this user just created? Compare createdAt to "a few seconds ago".
+  const u = await UserModel.findOne({ userName: result.userName }).select("createdAt").lean();
+  const isNew = u && Date.now() - new Date(u.createdAt).getTime() < 30_000;
+  if (isNew) await recordRegisterAttempt(req, result.userName, "telegram");
+
   res.json({ status: true, ...result });
 });
 
@@ -20,7 +38,12 @@ authRouter.post("/guest", async (req, res) => {
   const name: string | undefined = req.body?.name;
   const sid: string | undefined = req.body?.sid;
   const ref: string | undefined = req.body?.ref || req.body?.referrer;
+
+  const ipCheck = await checkRegisterIpLimit(req);
+  if (!ipCheck.ok) return sendIpLimitExceeded(res, ipCheck);
+
   const result = await authDevGuest(name, { sid, referrer: ref });
+  await recordRegisterAttempt(req, result.userName, "guest");
   res.json({ status: true, ...result });
 });
 
@@ -28,6 +51,10 @@ authRouter.post("/guest", async (req, res) => {
 
 authRouter.post("/register", async (req, res) => {
   const { userName, password, phone, sid, ref, referrer } = req.body || {};
+
+  const ipCheck = await checkRegisterIpLimit(req);
+  if (!ipCheck.ok) return sendIpLimitExceeded(res, ipCheck);
+
   const r = await registerWithPassword({
     userName,
     password,
@@ -36,6 +63,7 @@ authRouter.post("/register", async (req, res) => {
     referrer: ref || referrer,
   });
   if (!r.ok) return res.status(400).json({ status: false, message: r.reason });
+  await recordRegisterAttempt(req, r.result.userName, "register");
   res.json({ status: true, ...r.result });
 });
 

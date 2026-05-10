@@ -17,6 +17,9 @@ import { startTelegramBot } from "./bot/telegram";
 import { loadSettings } from "./settings";
 
 const app = express();
+// Trust proxy so req.ip reflects the real client behind nginx (X-Forwarded-For).
+// Required for the per-IP register limit to be meaningful.
+app.set("trust proxy", true);
 app.use(cors({ origin: true, credentials: true }));
 app.use(express.json({ limit: "256kb" }));
 

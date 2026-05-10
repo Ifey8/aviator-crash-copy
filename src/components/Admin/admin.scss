@@ -296,6 +296,7 @@
   &.status-pending,
   &.status-processing,
   &.status-manual_queue { background: rgba(255, 200, 87, 0.18); color: var(--admin-gold); }
+  &.status-review        { background: rgba(193, 34, 68, 0.22); color: #ffb0bc; border: 1px dashed #c12244; }
   &.status-paid          { background: rgba(86, 224, 154, 0.18); color: #56e09a; }
   &.status-failed,
   &.status-cancelled     { background: rgba(255, 84, 104, 0.18); color: var(--admin-bad); }

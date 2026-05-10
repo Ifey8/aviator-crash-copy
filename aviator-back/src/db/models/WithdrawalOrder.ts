@@ -28,6 +28,7 @@ export type WithdrawalStatus =
   | "pending"        // created, balance reserved, awaiting provider attempt
   | "processing"    // provider accepted, awaiting confirmation
   | "manual_queue" // USDT only: hot wallet insufficient, admin must top up
+  | "review"        // anti-abuse hold (large amount or young account); admin must Approve before provider call
   | "paid"          // confirmed sent
   | "failed"        // provider rejected → refunded
   | "cancelled";   // user or admin cancelled → refunded
@@ -91,7 +92,7 @@ const WithdrawalOrderSchema = new Schema<WithdrawalOrderDoc>({
   status: {
     type: String,
     required: true,
-    enum: ["pending", "processing", "manual_queue", "paid", "failed", "cancelled"],
+    enum: ["pending", "processing", "manual_queue", "review", "paid", "failed", "cancelled"],
     default: "pending",
     index: true,
   },

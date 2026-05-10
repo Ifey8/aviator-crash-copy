@@ -52,7 +52,12 @@ export const triggerReferralReward = async (
   }
 
   // Credit balance + bump cumulative.
-  const newBalance = await engine.creditBalance(referrerName, reward);
+  // Use creditRecharge so the reward is locked behind the same wager
+  // multiplier as a normal recharge (1× by default). Anti-abuse: prevents
+  // self-referral cycles from netting out instantly — referrer must wager
+  // through the reward before withdrawing it. Doesn't affect honest users
+  // who play normally.
+  const newBalance = await engine.creditRecharge(referrerName, reward);
   await UserModel.updateOne(
     { userName: referrerName },
     { $inc: { referralEarned: reward } },

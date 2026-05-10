@@ -113,6 +113,8 @@ export const WithdrawalSheet: React.FC<Props> = ({ open, onClose }) => {
       setOrder((o) => (o ? { ...o, ...msg } : o));
       if (msg.status === "paid") setStep("success");
       else if (msg.status === "failed" || msg.status === "cancelled") setStep("failed");
+      // pending / processing / manual_queue / review → stay in "pending" step,
+      // status display updates automatically from setOrder above.
     };
     sock.on("withdrawalUpdate", onUpdate);
     return () => { sock.off("withdrawalUpdate", onUpdate); };
@@ -345,12 +347,26 @@ export const WithdrawalSheet: React.FC<Props> = ({ open, onClose }) => {
 
         {step === "pending" && order && (
           <div className="wd-status">
-            <div className="wd-status-icon">⏳</div>
-            <h4>Withdrawal queued</h4>
+            <div className="wd-status-icon">{order.status === "review" ? "🔍" : "⏳"}</div>
+            <h4>
+              {order.status === "review"
+                ? "Under review"
+                : "Withdrawal queued"}
+            </h4>
             <p>
-              Your {order.method === "bank" ? "bank transfer" : "USDT withdrawal"} of
-              {" "}<strong>₹{fmt(order.grossAmount)}</strong>
-              {" "}is being processed.
+              {order.status === "review" ? (
+                <>
+                  Your {order.method === "bank" ? "bank transfer" : "USDT withdrawal"}
+                  {" "}of <strong>{order.method === "bank" ? `₹${fmt(order.grossAmount)}` : `${order.grossAmount} USDT`}</strong>
+                  {" "}is being reviewed by our team. Most reviews clear within 24 hours.
+                </>
+              ) : (
+                <>
+                  Your {order.method === "bank" ? "bank transfer" : "USDT withdrawal"} of
+                  {" "}<strong>₹{fmt(order.grossAmount)}</strong>
+                  {" "}is being processed.
+                </>
+              )}
             </p>
             <p className="wd-status-meta">
               Order: {order.orderId.slice(0, 8)}… · Status: {order.status}

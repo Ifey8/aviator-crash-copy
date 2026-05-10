@@ -165,7 +165,7 @@ withdrawalRouter.post("/create", requireAuth, async (req: Request, res: Response
   // prevents accidental double-submits.
   const existingPending = await WithdrawalOrderModel.findOne({
     userName,
-    status: { $in: ["pending", "processing", "manual_queue"] },
+    status: { $in: ["pending", "processing", "manual_queue", "review"] },
   });
   if (existingPending) {
     return res.status(409).json({
@@ -195,12 +195,37 @@ withdrawalRouter.post("/create", requireAuth, async (req: Request, res: Response
   const providerName = defaultPayoutProvider(method as "bank" | "usdt");
   const provider = getPayoutProvider(providerName);
 
+  // ── Risk review (Layer 5) ──
+  // Auto-flag for admin review if (a) gross amount above threshold, OR
+  // (b) account younger than threshold. 0 in either setting disables it.
+  const reviewAbove = Number(getSetting("withdrawalReviewAboveInr") || 0);
+  const reviewNewAccountHrs = Number(getSetting("withdrawalReviewNewAccountHours") || 0);
+  let needsReview = false;
+  let reviewReason = "";
+  if (reviewAbove > 0 && grossInr >= reviewAbove) {
+    needsReview = true;
+    reviewReason = `Amount ≥ ₹${reviewAbove}`;
+  }
+  if (!needsReview && reviewNewAccountHrs > 0) {
+    const u = await UserModel.findOne({ userName }).select("createdAt").lean();
+    if (u) {
+      const ageHrs = (Date.now() - new Date(u.createdAt).getTime()) / 3_600_000;
+      if (ageHrs < reviewNewAccountHrs) {
+        needsReview = true;
+        reviewReason = `Account ${ageHrs.toFixed(1)}h old (< ${reviewNewAccountHrs}h)`;
+      }
+    }
+  }
+
   // For USDT, check hot wallet liquidity — if short, status = manual_queue
   // and admin must top up + then mark paid manually.
   let initialStatus: WithdrawalStatus = "pending";
   let providerRef: string | undefined;
 
-  try {
+  if (needsReview) {
+    // Hold the order — DO NOT call provider. Admin must Approve first.
+    initialStatus = "review";
+  } else try {
     if (method === "usdt") {
       const hot = await getHotWalletBalance();
       if (!hot || hot.usdtBalance < amount) {
@@ -254,6 +279,7 @@ withdrawalRouter.post("/create", requireAuth, async (req: Request, res: Response
     provider: providerName,
     providerRef,
     balanceAfter: reserved.balance,
+    meta: needsReview ? { reviewReason } : undefined,
   });
 
   pushToUser(userName, "withdrawalUpdate", {
@@ -288,7 +314,7 @@ withdrawalRouter.post("/cancel/:orderId", requireAuth, async (req: Request, res:
     userName,
   });
   if (!order) return res.status(404).json({ status: false, message: "Order not found" });
-  if (!["pending", "manual_queue"].includes(order.status)) {
+  if (!["pending", "manual_queue", "review"].includes(order.status)) {
     return res.status(400).json({
       status: false,
       message: `Cannot cancel — order is already ${order.status}`,
@@ -296,7 +322,7 @@ withdrawalRouter.post("/cancel/:orderId", requireAuth, async (req: Request, res:
   }
   // Atomic state flip; if status changed beneath us, refuse the refund.
   const flipped = await WithdrawalOrderModel.findOneAndUpdate(
-    { orderId: order.orderId, status: { $in: ["pending", "manual_queue"] } },
+    { orderId: order.orderId, status: { $in: ["pending", "manual_queue", "review"] } },
     { $set: { status: "cancelled", cancelledAt: new Date() } },
     { new: true },
   );
