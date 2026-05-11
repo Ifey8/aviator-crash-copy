@@ -14,7 +14,7 @@ import {
 } from "../payment/payouts";
 import { getChannelByCode, getDefaultChannel } from "../payment/channels";
 import { webhookGuard } from "../payment/webhookLog";
-import { recordPayout } from "../payment/ledger";
+import { recordPayout, resolveChannelCodeForOrder } from "../payment/ledger";
 import { autoBroadcastUsdtWithdrawal } from "../payment/walletOps";
 
 export const withdrawalRouter = Router();
@@ -456,17 +456,19 @@ withdrawalRouter.post("/webhook/:key", async (req: Request, res: Response) => {
           pushToUser(order.userName, "withdrawalUpdate", { orderId: order.orderId, status: "paid" });
           pushUserMyInfo(order.userName);
           // Ledger debit on the channel (principal + gateway fee row).
-          const chCode = (flipped.meta as any)?.channelCode;
-          if (chCode && flipped.method === "bank") {
-            try {
-              await recordPayout({
-                channelCode: chCode,
-                orderId: flipped.orderId,
-                providerRef: flipped.providerRef,
-                grossInr: flipped.grossAmount,
-              });
-            } catch (e) {
-              console.error("[withdrawal] ledger recordPayout failed:", (e as Error).message);
+          if (flipped.method === "bank") {
+            const chCode = await resolveChannelCodeForOrder(flipped);
+            if (chCode) {
+              try {
+                await recordPayout({
+                  channelCode: chCode,
+                  orderId: flipped.orderId,
+                  providerRef: flipped.providerRef,
+                  grossInr: flipped.grossAmount,
+                });
+              } catch (e) {
+                console.error("[withdrawal] ledger recordPayout failed:", (e as Error).message);
+              }
             }
           }
         }

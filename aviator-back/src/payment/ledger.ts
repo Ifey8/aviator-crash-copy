@@ -117,3 +117,29 @@ export const recordManualAdjustment = async (args: {
     createdBy: args.createdBy,
   });
 };
+
+/**
+ * Resolve a channel code from an order that may not have meta.channelCode
+ * set (e.g. created before the channel routing landed, or during a partial
+ * deploy). Strategy:
+ *   1. Use order.meta.channelCode if present.
+ *   2. Otherwise, look up channels matching the order's provider name.
+ *      If exactly one exists, use its code.
+ *   3. Otherwise return null — caller must decide (skip / log / fail).
+ *
+ * Single source of truth so webhook + watcher + admin force-paid all
+ * resolve consistently.
+ */
+export const resolveChannelCodeForOrder = async (order: {
+  meta?: any;
+  provider?: string;
+}): Promise<string | null> => {
+  const fromMeta = order.meta?.channelCode;
+  if (fromMeta) return String(fromMeta);
+  if (!order.provider) return null;
+  // eslint-disable-next-line @typescript-eslint/no-var-requires
+  const { PaymentChannelModel } = require("../db/models/PaymentChannel");
+  const candidates = await PaymentChannelModel.find({ provider: order.provider }).select("code").lean();
+  if (candidates.length === 1) return candidates[0].code;
+  return null;
+};

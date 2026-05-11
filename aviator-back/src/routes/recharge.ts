@@ -10,7 +10,7 @@ import { getProvider, defaultProvider, listProviders } from "../payment";
 import { getChannelByCode, getDefaultChannel } from "../payment/channels";
 import { webhookGuard } from "../payment/webhookLog";
 import { triggerReferralReward } from "../payment/referral";
-import { recordPayin } from "../payment/ledger";
+import { recordPayin, resolveChannelCodeForOrder } from "../payment/ledger";
 import { getSetting } from "../settings";
 
 export const rechargeRouter = Router();
@@ -279,22 +279,10 @@ export const markPaidAndCredit = async (
   });
 
   // Channel ledger: record the payin as a credit on the channel's
-  // running balance (minus the gateway's payin fee, recorded
-  // separately). No-op when order didn't come through a channel
-  // (legacy mock recharges via direct provider).
-  //
-  // Fallback: if meta.channelCode is missing (e.g. order predates the
-  // channel-routing deploy), try to find a single matching channel by
-  // provider name. This auto-heals any orphan order created during a
-  // partial rollout. If multiple channels match, we leave it alone —
-  // operator should backfill manually via Admin ± Adjust.
-  let channelCode = (order.meta as any)?.channelCode as string | undefined;
-  if (!channelCode && order.provider) {
-    // eslint-disable-next-line @typescript-eslint/no-var-requires
-    const { PaymentChannelModel } = require("../db/models/PaymentChannel");
-    const candidates = await PaymentChannelModel.find({ provider: order.provider }).select("code country").lean();
-    if (candidates.length === 1) channelCode = candidates[0].code;
-  }
+  // running balance. resolveChannelCodeForOrder falls back to
+  // provider→channel lookup if meta.channelCode is missing (handles
+  // orphans from partial deploys + manual flips).
+  const channelCode = await resolveChannelCodeForOrder(order);
   if (channelCode) {
     try {
       await recordPayin({

@@ -17,7 +17,7 @@ import { listProviderTypes, getProviderType } from "../payment/catalog";
 import { invalidateChannelCache, listChannelsAdmin, getChannelByCode } from "../payment/channels";
 import { pollOneOrderNow } from "../payment/orderWatcher";
 import { ChannelLedgerModel, computeChannelBalance } from "../db/models/ChannelLedger";
-import { recordManualAdjustment } from "../payment/ledger";
+import { recordManualAdjustment, recordPayout, resolveChannelCodeForOrder } from "../payment/ledger";
 
 export const adminRouter = Router();
 adminRouter.use(requireAdmin);
@@ -316,6 +316,25 @@ adminRouter.post("/withdrawals/:orderId/mark-paid", async (req, res) => {
     id: order.providerRef || order.orderId,
     amountInr: order.grossAmount,
   });
+
+  // Channel ledger: same recordPayout the webhook + watcher write, so
+  // admin force-paid keeps the gateway balance accurate. Bank only —
+  // USDT settles on-chain and isn't a channel concept.
+  if (flipped.method === "bank") {
+    const chCode = await resolveChannelCodeForOrder(flipped);
+    if (chCode) {
+      try {
+        await recordPayout({
+          channelCode: chCode,
+          orderId: flipped.orderId,
+          providerRef: flipped.providerRef,
+          grossInr: flipped.grossAmount,
+        });
+      } catch (e) {
+        console.error("[admin] mark-paid ledger recordPayout failed:", (e as Error).message);
+      }
+    }
+  }
 
   pushToUser(order.userName, "withdrawalUpdate", {
     orderId: order.orderId,
