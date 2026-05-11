@@ -6,7 +6,7 @@ import "./admin.scss";
 
 const apiBase = config.api.replace(/\/api$/, "/api");
 
-type Tab = "stats" | "users" | "rounds" | "withdrawals" | "wallets" | "settings";
+type Tab = "stats" | "users" | "rounds" | "withdrawals" | "wallets" | "channels" | "settings";
 
 interface Stats {
   engine: { phase: string; multiplier: number; players: number; historyLen: number };
@@ -74,6 +74,7 @@ export const AdminApp: React.FC = () => {
           <button className={tab === "rounds" ? "active" : ""} onClick={() => setTab("rounds")}>Rounds</button>
           <button className={tab === "withdrawals" ? "active" : ""} onClick={() => setTab("withdrawals")}>Withdrawals</button>
           <button className={tab === "wallets" ? "active" : ""} onClick={() => setTab("wallets")}>Wallets</button>
+          <button className={tab === "channels" ? "active" : ""} onClick={() => setTab("channels")}>Channels</button>
           <button className={tab === "settings" ? "active" : ""} onClick={() => setTab("settings")}>Settings</button>
         </nav>
         <div className="admin-user">
@@ -88,6 +89,7 @@ export const AdminApp: React.FC = () => {
         {tab === "rounds" && <RoundsTab />}
         {tab === "withdrawals" && <WithdrawalsTab />}
         {tab === "wallets" && <WalletsTab />}
+        {tab === "channels" && <ChannelsTab />}
         {tab === "settings" && <SettingsTab />}
       </main>
     </div>
@@ -368,12 +370,6 @@ interface SettingsData {
   inrRechargeEnabled: number;
   usdtAutoPayoutEnabled: number;
   usdtAutoPayoutMaxInr: number;
-  paymeEnabled: number;
-  paymeApiBase: string;
-  paymeMerchantCode: string;
-  paymeSecretKey: string;
-  paymePayinPayType: string;
-  paymePayoutBankCode: string;
   updatedAt?: string;
   updatedBy?: string;
 }
@@ -400,14 +396,312 @@ const SETTINGS_FIELDS: { key: keyof SettingsData; label: string; hint: string; g
   { group: "Recharge", key: "inrRechargeEnabled", label: "INR channel enabled (1=on, 0=off)", hint: "Single switch for BOTH INR top-up AND bank withdrawal. Turn ON only AFTER a real payment provider (Razorpay/Cashfree) is wired in for recharge AND a real payout adapter for bank transfer. While OFF, both routes return 403 and the in-app sheets hide the Bank/INR tabs. USDT recharge + USDT withdrawal unaffected." },
   { group: "Auto-payout", key: "usdtAutoPayoutEnabled", label: "USDT auto-payout (1=on, 0=off)", hint: "When ON: USDT withdrawals under the cap broadcast to TRON automatically (no admin click). Bank withdrawals always manual. Default OFF — opt in when comfortable." },
   { group: "Auto-payout", key: "usdtAutoPayoutMaxInr", label: "Auto-payout cap (INR)", hint: "USDT withdrawals at or above this stay in 'processing' awaiting admin Approve. Below this and auto-on → instant broadcast. Set 2000-5000 for sensible mid-range automation." },
-  // Payme — Indian payment gateway (payin + payout via /api/payin + /api/payout, MD5-signed)
-  { group: "Payme (India gateway)", key: "paymeEnabled", label: "Enabled (1=on, 0=off)", hint: "Master switch for the Payme provider. Must also fill API base + merchant code + secret key below before enabling. Once on, Payme becomes selectable for INR recharge and bank withdrawals (independent of the inrChannelEnabled toggle — that gate still applies)." },
-  { group: "Payme (India gateway)", key: "paymeApiBase", label: "API base URL", hint: "Base URL Payme gave you, e.g. https://api.cowpay.io — used as prefix for /api/payin, /api/payout, /api/payinOrderQuery, /api/payoutOrderQuery, /api/queryBalance. No trailing slash.", type: "text" },
-  { group: "Payme (India gateway)", key: "paymeMerchantCode", label: "Merchant code", hint: "merchant_code field from Payme dashboard. Sent in every signed request body.", type: "text" },
-  { group: "Payme (India gateway)", key: "paymeSecretKey", label: "Secret key (MD5 sign)", hint: "MD5 sign key from Payme dashboard. ⚠ Sensitive — anyone with admin role can read this. The request signing algorithm: sort non-empty fields by ASCII, join key=value with &, append &key=<secret>, MD5 → uppercase hex.", type: "secret" },
-  { group: "Payme (India gateway)", key: "paymePayinPayType", label: "Payin pay_type", hint: "Per Payme India: india-wakeup | india-qr | india-native | india-pwallet. Default india-native — picks the user-friendly hosted payment page.", type: "text" },
-  { group: "Payme (India gateway)", key: "paymePayoutBankCode", label: "Payout bank_code", hint: "india-bank (NEFT to A/C + IFSC) or india-upi (instant to UPI ID). The Aviator WithdrawalSheet asks for bankAccount + IFSC + holderName, which maps to india-bank.", type: "text" },
+  // Payme moved to the Channels tab — see admin → Channels.
 ];
+
+// ================================ Channels ================================
+
+interface ProviderTypeInfo {
+  name: string;
+  displayName: string;
+  countries: string[];
+  supports: { payin: boolean; payout: boolean };
+  credentialFields: FieldSpecApi[];
+  paramFields: FieldSpecApi[];
+}
+interface FieldSpecApi {
+  key: string;
+  label: string;
+  kind: "text" | "secret" | "select" | "number";
+  required?: boolean;
+  default?: string;
+  hint?: string;
+  options?: { value: string; label: string }[];
+}
+interface ChannelRow {
+  code: string;
+  name: string;
+  provider: string;
+  providerDisplayName: string;
+  country: string;
+  enabled: boolean;
+  supports: { payin: boolean; payout: boolean };
+  credentials: Record<string, string>;
+  params: Record<string, string>;
+  priority: number;
+  createdAt: string;
+  updatedAt: string;
+}
+
+const ChannelsTab: React.FC = () => {
+  const api = useApi();
+  const [types, setTypes] = React.useState<ProviderTypeInfo[]>([]);
+  const [rows, setRows] = React.useState<ChannelRow[]>([]);
+  const [editing, setEditing] = React.useState<{ row?: ChannelRow; newProvider?: string } | null>(null);
+  const [error, setError] = React.useState<string | null>(null);
+  const [loading, setLoading] = React.useState(false);
+
+  const load = React.useCallback(async () => {
+    setLoading(true);
+    try {
+      const [t, r] = await Promise.all([
+        api("/admin/channels/types"),
+        api("/admin/channels"),
+      ]);
+      setTypes(t.data || []);
+      setRows(r.data || []);
+      setError(null);
+    } catch (e) { setError((e as Error).message); }
+    finally { setLoading(false); }
+  }, [api]);
+
+  React.useEffect(() => { load(); }, [load]);
+
+  const onDelete = async (code: string) => {
+    if (!window.confirm(`Delete channel "${code}"? Active orders using it will keep working until they settle.`)) return;
+    try { await api(`/admin/channels/${code}`, { method: "DELETE" }); load(); }
+    catch (e) { alert((e as Error).message); }
+  };
+
+  const onToggle = async (row: ChannelRow) => {
+    try {
+      await api(`/admin/channels/${row.code}`, {
+        method: "PATCH",
+        body: JSON.stringify({ enabled: !row.enabled }),
+      });
+      load();
+    } catch (e) { alert((e as Error).message); }
+  };
+
+  const onTest = async (code: string) => {
+    try {
+      const r = await api(`/admin/channels/${code}/test`, { method: "POST" });
+      alert(`Test: ${r.data?.message || "ok"}`);
+    } catch (e) { alert("Test failed: " + (e as Error).message); }
+  };
+
+  return (
+    <div className="admin-channels">
+      <div style={{ display: "flex", gap: 8, alignItems: "center", marginBottom: 12 }}>
+        <h3 style={{ margin: 0, fontSize: 14 }}>Payment channels ({rows.length})</h3>
+        <button onClick={load} disabled={loading}>↻ Refresh</button>
+        <select
+          onChange={(e) => {
+            if (e.target.value) {
+              setEditing({ newProvider: e.target.value });
+              e.target.value = "";
+            }
+          }}
+          defaultValue=""
+          style={{ marginLeft: "auto" }}
+        >
+          <option value="">+ Add channel…</option>
+          {types.map((t) => (
+            <option key={t.name} value={t.name}>{t.displayName}</option>
+          ))}
+        </select>
+      </div>
+
+      {error && <div className="admin-error">⚠ {error}</div>}
+
+      <table className="admin-table">
+        <thead>
+          <tr>
+            <th>Code</th><th>Name</th><th>Provider</th><th>Country</th>
+            <th>Supports</th><th>Priority</th><th>Enabled</th><th>Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map((r) => (
+            <tr key={r.code}>
+              <td><code style={{ fontSize: 11 }}>{r.code}</code></td>
+              <td>{r.name}</td>
+              <td>{r.providerDisplayName}</td>
+              <td>{r.country}</td>
+              <td style={{ fontSize: 11 }}>
+                {r.supports.payin && <span className="tag" style={{ background: "rgba(86,224,154,0.18)", color: "#56e09a", marginRight: 4 }}>payin</span>}
+                {r.supports.payout && <span className="tag" style={{ background: "rgba(255,200,87,0.18)", color: "#ffc857" }}>payout</span>}
+              </td>
+              <td className="num">{r.priority}</td>
+              <td>
+                <label style={{ display: "inline-flex", alignItems: "center", gap: 4 }}>
+                  <input type="checkbox" checked={r.enabled} onChange={() => onToggle(r)} />
+                  {r.enabled ? "on" : "off"}
+                </label>
+              </td>
+              <td>
+                <button onClick={() => setEditing({ row: r })} style={{ marginRight: 4 }}>Edit</button>
+                <button onClick={() => onTest(r.code)} style={{ marginRight: 4 }}>Test</button>
+                <button onClick={() => onDelete(r.code)}>Delete</button>
+              </td>
+            </tr>
+          ))}
+          {rows.length === 0 && <tr><td colSpan={8} className="empty">No channels configured. Pick a provider type from the dropdown above to add one.</td></tr>}
+        </tbody>
+      </table>
+
+      {editing && (
+        <ChannelEditModal
+          types={types}
+          row={editing.row}
+          newProvider={editing.newProvider}
+          onClose={() => setEditing(null)}
+          onSaved={() => { setEditing(null); load(); }}
+        />
+      )}
+    </div>
+  );
+};
+
+const ChannelEditModal: React.FC<{
+  types: ProviderTypeInfo[];
+  row?: ChannelRow;
+  newProvider?: string;
+  onClose: () => void;
+  onSaved: () => void;
+}> = ({ types, row, newProvider, onClose, onSaved }) => {
+  const api = useApi();
+  const isNew = !row;
+  const providerName = row?.provider || newProvider!;
+  const type = types.find((t) => t.name === providerName);
+
+  const [code, setCode] = React.useState(row?.code || "");
+  const [name, setName] = React.useState(row?.name || "");
+  const [country, setCountry] = React.useState(row?.country || (type?.countries[0] || ""));
+  const [enabled, setEnabled] = React.useState(row?.enabled ?? false);
+  const [supportsPayin, setSupportsPayin] = React.useState(row?.supports.payin ?? !!type?.supports.payin);
+  const [supportsPayout, setSupportsPayout] = React.useState(row?.supports.payout ?? !!type?.supports.payout);
+  const [priority, setPriority] = React.useState(row?.priority ?? 100);
+  const initCreds: Record<string, string> = React.useMemo(() => {
+    const out: Record<string, string> = {};
+    type?.credentialFields.forEach((f) => { out[f.key] = row?.credentials[f.key] || ""; });
+    return out;
+  }, [type, row]);
+  const initParams: Record<string, string> = React.useMemo(() => {
+    const out: Record<string, string> = {};
+    type?.paramFields.forEach((f) => { out[f.key] = row?.params[f.key] ?? (f.default || ""); });
+    return out;
+  }, [type, row]);
+  const [creds, setCreds] = React.useState<Record<string, string>>(initCreds);
+  const [params, setParams] = React.useState<Record<string, string>>(initParams);
+  const [busy, setBusy] = React.useState(false);
+  const [err, setErr] = React.useState<string | null>(null);
+
+  if (!type) return null;
+
+  const save = async () => {
+    setBusy(true); setErr(null);
+    try {
+      const body: any = {
+        name, country, enabled, priority,
+        supports: { payin: supportsPayin, payout: supportsPayout },
+        credentials: creds,
+        params,
+      };
+      if (isNew) {
+        body.code = code;
+        body.provider = providerName;
+        await api("/admin/channels", { method: "POST", body: JSON.stringify(body) });
+      } else {
+        await api(`/admin/channels/${row!.code}`, { method: "PATCH", body: JSON.stringify(body) });
+      }
+      onSaved();
+    } catch (e) { setErr((e as Error).message); }
+    finally { setBusy(false); }
+  };
+
+  return (
+    <div className="admin-modal-overlay" onClick={onClose}>
+      <div className="admin-modal" onClick={(e) => e.stopPropagation()} style={{ maxWidth: 560 }}>
+        <h3>{isNew ? `New ${type.displayName} channel` : `Edit ${row!.code}`}</h3>
+
+        {isNew && (
+          <label>
+            <span>Code (stable identifier)</span>
+            <input type="text" value={code} onChange={(e) => setCode(e.target.value)} placeholder="e.g. payme-in-1" />
+          </label>
+        )}
+        <label>
+          <span>Display name</span>
+          <input type="text" value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g. Payme India (primary)" />
+        </label>
+        <label>
+          <span>Country</span>
+          <select value={country} onChange={(e) => setCountry(e.target.value)}>
+            {type.countries.map((c) => <option key={c} value={c}>{c}</option>)}
+          </select>
+        </label>
+        <div style={{ display: "flex", gap: 16, marginTop: 8 }}>
+          <label className="checkbox">
+            <input type="checkbox" checked={supportsPayin} disabled={!type.supports.payin} onChange={(e) => setSupportsPayin(e.target.checked)} />
+            <span>Payin (recharge)</span>
+          </label>
+          <label className="checkbox">
+            <input type="checkbox" checked={supportsPayout} disabled={!type.supports.payout} onChange={(e) => setSupportsPayout(e.target.checked)} />
+            <span>Payout (withdrawal)</span>
+          </label>
+          <label className="checkbox">
+            <input type="checkbox" checked={enabled} onChange={(e) => setEnabled(e.target.checked)} />
+            <span>Enabled</span>
+          </label>
+        </div>
+        <label>
+          <span>Priority (higher = preferred)</span>
+          <input type="number" value={priority} onChange={(e) => setPriority(Number(e.target.value))} />
+        </label>
+
+        <h4 style={{ marginTop: 16, marginBottom: 4, fontSize: 12, letterSpacing: "0.08em", textTransform: "uppercase", color: "var(--admin-muted)" }}>Credentials</h4>
+        {type.credentialFields.map((f) => (
+          <label key={f.key}>
+            <span>{f.label}{f.required && " *"}</span>
+            {f.kind === "select" ? (
+              <select value={creds[f.key] || ""} onChange={(e) => setCreds((c) => ({ ...c, [f.key]: e.target.value }))}>
+                <option value=""></option>
+                {(f.options || []).map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
+              </select>
+            ) : (
+              <input
+                type={f.kind === "secret" ? "password" : "text"}
+                value={creds[f.key] || ""}
+                autoComplete="off" spellCheck={false}
+                placeholder={f.kind === "secret" && creds[f.key]?.startsWith("••••") ? creds[f.key] : ""}
+                onChange={(e) => setCreds((c) => ({ ...c, [f.key]: e.target.value }))}
+              />
+            )}
+            {f.hint && <span className="admin-settings-hint" style={{ display: "block", fontSize: 10.5, opacity: 0.7 }}>{f.hint}</span>}
+          </label>
+        ))}
+
+        {type.paramFields.length > 0 && (
+          <>
+            <h4 style={{ marginTop: 16, marginBottom: 4, fontSize: 12, letterSpacing: "0.08em", textTransform: "uppercase", color: "var(--admin-muted)" }}>Params</h4>
+            {type.paramFields.map((f) => (
+              <label key={f.key}>
+                <span>{f.label}</span>
+                {f.kind === "select" ? (
+                  <select value={params[f.key] || ""} onChange={(e) => setParams((p) => ({ ...p, [f.key]: e.target.value }))}>
+                    <option value=""></option>
+                    {(f.options || []).map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
+                  </select>
+                ) : (
+                  <input type="text" value={params[f.key] || ""} onChange={(e) => setParams((p) => ({ ...p, [f.key]: e.target.value }))} />
+                )}
+                {f.hint && <span className="admin-settings-hint" style={{ display: "block", fontSize: 10.5, opacity: 0.7 }}>{f.hint}</span>}
+              </label>
+            ))}
+          </>
+        )}
+
+        {err && <div className="admin-error">⚠ {err}</div>}
+
+        <div className="admin-modal-actions">
+          <button onClick={onClose} disabled={busy}>Cancel</button>
+          <button className="primary" onClick={save} disabled={busy}>{busy ? "Saving…" : (isNew ? "Create" : "Save")}</button>
+        </div>
+      </div>
+    </div>
+  );
+};
 
 const SettingsTab: React.FC = () => {
   const api = useApi();

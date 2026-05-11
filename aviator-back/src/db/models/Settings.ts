@@ -73,26 +73,8 @@ export interface SettingsDoc {
    */
   inrRechargeEnabled: number;
 
-  // ── Payme (Indian payment gateway: payin + payout) ──
-  /**
-   * Master switch. 1 = registry exposes "payme" recharge + payout providers.
-   * Even with creds filled, switch must be ON for the route to use Payme.
-   */
-  paymeEnabled: number;
-  /** Base API URL Payme gave you, e.g. https://api.cowpay.io */
-  paymeApiBase: string;
-  /** merchant_code field — issued by Payme on signup. */
-  paymeMerchantCode: string;
-  /**
-   * MD5 sign key. ⚠ SENSITIVE: stored in DB so admin can rotate without
-   * redeploy, but only admin role sees Settings. For better security
-   * use env override (config.paymeSecretKey) which takes precedence.
-   */
-  paymeSecretKey: string;
-  /** payin pay_type for India. e.g. "india-native", "india-upi", "india-qr". */
-  paymePayinPayType: string;
-  /** payout bank_code for India — "india-bank" (bank+ifsc) or "india-upi". */
-  paymePayoutBankCode: string;
+  // Payme fields moved to PaymentChannel collection. See payment/channels.ts +
+  // payment/migrate.ts (auto-migrates existing Settings values on boot).
 
   // ── Auto-payout (USDT only) ──
   /**
@@ -140,12 +122,6 @@ const SettingsSchema = new Schema<SettingsDoc>(
     inrRechargeEnabled: { type: Number, required: true, min: 0, max: 1 },
     usdtAutoPayoutEnabled: { type: Number, required: true, min: 0, max: 1 },
     usdtAutoPayoutMaxInr: { type: Number, required: true, min: 0 },
-    paymeEnabled: { type: Number, default: 0, min: 0, max: 1 },
-    paymeApiBase: { type: String, default: "" },
-    paymeMerchantCode: { type: String, default: "" },
-    paymeSecretKey: { type: String, default: "" },
-    paymePayinPayType: { type: String, default: "india-native" },
-    paymePayoutBankCode: { type: String, default: "india-bank" },
     updatedAt: { type: Date, default: Date.now },
     updatedBy: { type: String },
   },

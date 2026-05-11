@@ -4,45 +4,59 @@ import {
   CreateOrderResult,
   WebhookVerifyResult,
 } from "../types";
-import { tryGetSetting } from "../../settings";
+import { ChannelConfig } from "../catalog";
 import { paymeSignedBody, paymeVerifyWebhook } from "./paymeSign";
 
 /**
- * PaymeProvider — Indian payment gateway adapter.
+ * PaymeProvider — Indian payment gateway adapter (payin).
  *
  * Doc: https://tasteful-freeze-313.notion.site/Payme-API-Doc-...
  *
  * Lifecycle:
  *   createOrder() POSTs /api/payin → returns pay_url for the user.
- *   The user pays, Payme POSTs /webhook (configured via notify_url) with
- *   `{ sign, transdata: {...} }`. verifyWebhook() validates the MD5 sig
- *   and maps transdata.order_status → "paid" | "failed".
+ *   The user pays, Payme POSTs the webhook URL we provided (notify_url)
+ *   with `{ sign, transdata: {...} }`. verifyWebhook() validates the MD5
+ *   sig and maps transdata.order_status → "paid" | "failed".
  *
- * Config (admin Settings → Payme group):
- *   • paymeApiBase        — base URL (e.g. https://api.cowpay.io)
- *   • paymeMerchantCode   — merchant_code
- *   • paymeSecretKey      — MD5 sign key
- *   • paymePayinPayType   — india-native / india-upi / india-qr / india-pwallet
+ * Config — from channel.credentials + channel.params:
+ *   credentials.apiBase        — base URL (e.g. https://api.cowpay.io)
+ *   credentials.merchantCode   — merchant_code
+ *   credentials.secretKey      — MD5 sign key
+ *   params.payinPayType        — india-native / india-upi / india-qr / india-pwallet
+ *   params.country             — "IN" (default) or "ID"
  *
- * Country is hard-coded "IN" — this provider is only registered for India.
+ * Country code defaults to "IN" for backward compat with the previous
+ * single-channel impl. Set params.country to "ID" for Indonesia channels.
  */
 export class PaymeProvider implements PaymentProvider {
-  readonly name = "payme";
+  readonly name: string;
   readonly isProduction = true;
 
-  async createOrder(input: CreateOrderInput): Promise<CreateOrderResult> {
-    const apiBase = String(tryGetSetting("paymeApiBase", "")).trim().replace(/\/$/, "");
-    const merchantCode = String(tryGetSetting("paymeMerchantCode", "")).trim();
-    const secretKey = String(tryGetSetting("paymeSecretKey", "")).trim();
-    const payType = String(tryGetSetting("paymePayinPayType", "india-native")).trim();
+  constructor(private readonly cfg: ChannelConfig) {
+    this.name = `payme:${cfg.channelCode}`;
+  }
 
+  private getCreds() {
+    const c = this.cfg.credentials || {};
+    const apiBase = String(c.apiBase || "").trim().replace(/\/$/, "");
+    const merchantCode = String(c.merchantCode || "").trim();
+    const secretKey = String(c.secretKey || "").trim();
     if (!apiBase || !merchantCode || !secretKey) {
-      throw new Error("Payme not fully configured — set apiBase / merchantCode / secretKey in admin Settings");
+      throw new Error(
+        `Payme channel ${this.cfg.channelCode} missing credentials (apiBase / merchantCode / secretKey)`,
+      );
     }
+    return { apiBase, merchantCode, secretKey };
+  }
+
+  async createOrder(input: CreateOrderInput): Promise<CreateOrderResult> {
+    const { apiBase, merchantCode, secretKey } = this.getCreds();
+    const payType = String(this.cfg.params?.payinPayType || "india-native").trim();
+    const country = String(this.cfg.params?.country || "IN").trim().toUpperCase();
 
     const fields = {
       merchant_code: merchantCode,
-      country_code: "IN",
+      country_code: country,
       order_no: input.orderId,
       // Payme expects 2-decimal string per the doc example ("100.00")
       order_amount: input.amount.toFixed(2),
@@ -59,14 +73,11 @@ export class PaymeProvider implements PaymentProvider {
       body: JSON.stringify(body),
       signal: AbortSignal.timeout(15_000),
     });
-
     if (!res.ok) {
       const text = await res.text().catch(() => "");
       throw new Error(`Payme /api/payin HTTP ${res.status}: ${text.slice(0, 200)}`);
     }
     const json = (await res.json()) as Record<string, unknown>;
-    // Payme uses status:true + code:"0" (string!) for success. Some integrations
-    // return numeric 0 — accept either.
     const ok = json.status === true && (json.code === "0" || json.code === 0);
     if (!ok) {
       throw new Error(`Payme /api/payin error: ${String(json.message || json.code || "unknown")}`);
@@ -86,10 +97,7 @@ export class PaymeProvider implements PaymentProvider {
     _headers: Record<string, string | string[] | undefined>,
     rawBody: string,
   ): WebhookVerifyResult {
-    const secretKey = String(tryGetSetting("paymeSecretKey", "")).trim();
-    if (!secretKey) {
-      return { ok: false, providerRef: "", status: "failed", failedReason: "Payme not configured" };
-    }
+    const { secretKey } = this.getCreds();
     let envelope: { sign?: string; transdata?: Record<string, unknown> } | null = null;
     try {
       envelope = JSON.parse(rawBody);
@@ -102,13 +110,10 @@ export class PaymeProvider implements PaymentProvider {
     const td = envelope!.transdata!;
     const providerRef = String(td.plat_order_no || "");
     const orderStatus = String(td.order_status || "");
-    // Payme states: paying | success | failed
     let status: "paid" | "failed";
     if (orderStatus === "success") status = "paid";
     else if (orderStatus === "failed") status = "failed";
     else {
-      // "paying" — webhook fired prematurely; treat as not-yet-final and
-      // tell the caller we don't have a definitive outcome.
       return { ok: false, providerRef, status: "failed", failedReason: `Non-final status: ${orderStatus}`, raw: td };
     }
     return {

@@ -7,6 +7,7 @@ import { config } from "../config";
 import { engine } from "../game/engine";
 import { pushToUser, pushUserMyInfo } from "../sockets";
 import { getProvider, defaultProvider, listProviders } from "../payment";
+import { getChannelByCode, getDefaultChannel } from "../payment/channels";
 import { triggerReferralReward } from "../payment/referral";
 import { getSetting } from "../settings";
 
@@ -64,11 +65,10 @@ const orderToClient = (o: InstanceType<typeof RechargeOrderModel>) => ({
 rechargeRouter.post("/create", requireAuth, async (req: Request, res: Response) => {
   const userName = req.authUserName!;
   const amount = Number(req.body?.amount);
-  const providerName: string = req.body?.provider || defaultProvider();
+  const explicitChannelCode: string | undefined = req.body?.channelCode;
+  const explicitProvider: string | undefined = req.body?.provider; // legacy fallback
 
   // Gate: INR recharge disabled until a real payment provider is integrated.
-  // Mock provider auto-credits on click which is fine in dev but would be a
-  // money printer in prod; admin Settings → "INR recharge enabled" turns it on.
   if (Number(getSetting("inrRechargeEnabled") || 0) !== 1) {
     return res.status(403).json({
       status: false,
@@ -83,12 +83,39 @@ rechargeRouter.post("/create", requireAuth, async (req: Request, res: Response) 
     });
   }
 
-  const provider = getProvider(providerName);
-  if (!provider) {
-    return res.status(400).json({
-      status: false,
-      message: `Unknown provider "${providerName}". Available: ${listProviders().join(", ")}`,
-    });
+  // ── Channel resolution ──
+  // Priority: explicit channelCode → default channel for country IN → legacy
+  // top-level provider registry (mock / razorpay) as fallback for dev.
+  let providerName: string;
+  let provider: ReturnType<typeof getProvider> = null;
+  let channelCode: string | undefined;
+
+  if (explicitChannelCode) {
+    const ch = await getChannelByCode(explicitChannelCode);
+    if (!ch || !ch.payment) {
+      return res.status(400).json({ status: false, message: `Channel "${explicitChannelCode}" not found or doesn't support payin` });
+    }
+    provider = ch.payment;
+    providerName = ch.doc.provider;
+    channelCode = ch.doc.code;
+  } else {
+    const def = await getDefaultChannel("IN", "payin");
+    if (def && def.payment) {
+      provider = def.payment;
+      providerName = def.doc.provider;
+      channelCode = def.doc.code;
+    } else {
+      // No active channel — fall back to legacy registry. Lets dev keep
+      // using mock without setting up channels.
+      providerName = explicitProvider || defaultProvider();
+      provider = getProvider(providerName);
+      if (!provider) {
+        return res.status(400).json({
+          status: false,
+          message: `No active payment channel for IN, and unknown legacy provider "${providerName}". Available: ${listProviders().join(", ")}`,
+        });
+      }
+    }
   }
 
   // Reject if user already has too many pending orders (basic abuse guard).
@@ -115,7 +142,10 @@ rechargeRouter.post("/create", requireAuth, async (req: Request, res: Response) 
       currency: "INR",
       userName,
       returnUrl: `${config.frontendUrl}/recharge/return?orderId=${orderId}`,
-      webhookUrl: `${config.frontendUrl.replace(/:18803.*/, ":18805")}/api/recharge/webhook/${provider.name}`,
+      // Webhook routes by CHANNEL CODE so we can look up the right channel
+      // credentials when verifying signature. Falls back to legacy
+      // provider-name routing when no channel is configured.
+      webhookUrl: `${config.frontendUrl.replace(/:18803.*/, ":18805")}/api/recharge/webhook/${channelCode || provider.name}`,
     });
   } catch (e) {
     return res.status(502).json({
@@ -129,12 +159,14 @@ rechargeRouter.post("/create", requireAuth, async (req: Request, res: Response) 
     userName,
     amount,
     currency: "INR",
-    provider: provider.name,
+    // Store provider type for analytics + channel code for webhook routing.
+    provider: providerName,
     providerRef: providerResult.providerRef,
     status: "pending" as RechargeStatus,
     paymentUrl: providerResult.paymentUrl,
     qrCode: providerResult.qrCode,
     expiresAt,
+    meta: channelCode ? { channelCode } : undefined,
   });
 
   res.json({ status: true, data: orderToClient(doc) });
@@ -243,22 +275,37 @@ const markPaidAndCredit = async (
 };
 
 // ---------------------------------------------------------------------------
-// POST /api/recharge/webhook/:provider — provider callback (PUBLIC, sig-verified)
-// Body MUST be parsed as raw JSON for HMAC; we use the global express.json()
-// middleware which gives us the parsed object — for HMAC providers we re-stringify.
+// POST /api/recharge/webhook/:key — provider callback (PUBLIC, sig-verified)
+// :key is either a channel code (new path) or a legacy provider name
+// (mock / razorpay). We try channel lookup first, then fall back.
+// Payme expects literal "success" string as ack; other providers JSON.
 // ---------------------------------------------------------------------------
-rechargeRouter.post("/webhook/:provider", async (req: Request, res: Response) => {
-  const provider = getProvider(req.params.provider);
-  if (!provider) {
-    return res.status(404).json({ status: false, message: "Unknown provider" });
-  }
+rechargeRouter.post("/webhook/:key", async (req: Request, res: Response) => {
+  const key = req.params.key;
   const rawBody = JSON.stringify(req.body);
-  const result = provider.verifyWebhook(req.headers, rawBody);
-  if (!result.ok) {
-    return res.status(400).json({ status: false, message: "Webhook verification failed" });
+
+  // Channel-based routing (preferred)
+  let result: ReturnType<typeof emptyResult> | null = null;
+  let isChannel = false;
+  const ch = await getChannelByCode(key, { allowDisabled: true });
+  if (ch?.payment) {
+    isChannel = true;
+    result = ch.payment.verifyWebhook(req.headers, rawBody);
+  } else {
+    // Legacy: provider-name routing
+    const provider = getProvider(key);
+    if (!provider) {
+      return res.status(404).json({ status: false, message: "Unknown provider/channel" });
+    }
+    result = provider.verifyWebhook(req.headers, rawBody);
+  }
+
+  if (!result || !result.ok) {
+    return res.status(400).json({ status: false, message: result?.failedReason || "Webhook verification failed" });
   }
   if (result.status === "paid") {
     const r = await markPaidAndCredit(result.providerRef, result.raw);
+    if (isChannel) return res.type("text").send("success");
     return res.json({ status: r.ok, data: { orderId: r.order?.orderId } });
   }
   // Failed — mark order as failed, no credit.
@@ -270,8 +317,13 @@ rechargeRouter.post("/webhook/:provider", async (req: Request, res: Response) =>
   if (order) {
     pushToUser(order.userName, "rechargeUpdate", { orderId: order.orderId, status: "failed" });
   }
+  if (isChannel) return res.type("text").send("success");
   res.json({ status: true });
 });
+
+// Type helper for the verifyWebhook result union (avoids the ReturnType<>
+// noise inline above)
+const emptyResult = () => ({} as ReturnType<NonNullable<ReturnType<typeof getProvider>>["verifyWebhook"]>);
 
 // ---------------------------------------------------------------------------
 // POST /api/recharge/mock-pay/:orderId — DEV-ONLY simulated payment

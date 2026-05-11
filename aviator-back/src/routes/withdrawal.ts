@@ -12,6 +12,7 @@ import {
   getPayoutProvider,
   defaultPayoutProvider,
 } from "../payment/payouts";
+import { getChannelByCode, getDefaultChannel } from "../payment/channels";
 import { autoBroadcastUsdtWithdrawal } from "../payment/walletOps";
 
 export const withdrawalRouter = Router();
@@ -207,8 +208,40 @@ withdrawalRouter.post("/create", requireAuth, async (req: Request, res: Response
   }
 
   const orderId = randomUUID();
-  const providerName = defaultPayoutProvider(method as "bank" | "usdt");
-  const provider = getPayoutProvider(providerName);
+
+  // ── Channel / provider resolution ──
+  // Bank: try channel registry first (admin can configure Payme / others per country).
+  // USDT: stays on the on-chain path; provider here is "mock" since payouts.ts always returns mock for usdt.
+  // Explicit body.channelCode wins for both.
+  const explicitChannelCode: string | undefined = req.body?.channelCode;
+  let providerName: string;
+  let provider: ReturnType<typeof getPayoutProvider> = null;
+  let channelCode: string | undefined;
+
+  if (method === "bank") {
+    if (explicitChannelCode) {
+      const ch = await getChannelByCode(explicitChannelCode);
+      if (!ch || !ch.payout) {
+        return res.status(400).json({ status: false, message: `Channel "${explicitChannelCode}" not found or doesn't support payout` });
+      }
+      provider = ch.payout;
+      providerName = ch.doc.provider;
+      channelCode = ch.doc.code;
+    } else {
+      const def = await getDefaultChannel("IN", "payout");
+      if (def && def.payout) {
+        provider = def.payout;
+        providerName = def.doc.provider;
+        channelCode = def.doc.code;
+      } else {
+        providerName = defaultPayoutProvider("bank");
+        provider = getPayoutProvider(providerName);
+      }
+    }
+  } else {
+    providerName = defaultPayoutProvider("usdt");
+    provider = getPayoutProvider(providerName);
+  }
 
   // ── Risk review (Layer 5) ──
   // Auto-flag for admin review if (a) gross amount above threshold, OR
@@ -294,7 +327,10 @@ withdrawalRouter.post("/create", requireAuth, async (req: Request, res: Response
     provider: providerName,
     providerRef,
     balanceAfter: reserved.balance,
-    meta: needsReview ? { reviewReason } : undefined,
+    meta: {
+      ...(needsReview ? { reviewReason } : {}),
+      ...(channelCode ? { channelCode } : {}),
+    },
   });
 
   pushToUser(userName, "withdrawalUpdate", {
@@ -344,20 +380,27 @@ withdrawalRouter.get("/orders", requireAuth, async (req: Request, res: Response)
 // POST /api/withdrawal/cancel/:orderId — user cancels (only if pending/manual_queue)
 // ---------------------------------------------------------------------------
 /**
- * POST /api/withdrawal/webhook/:provider — provider callback. PUBLIC (sig-verified).
+ * POST /api/withdrawal/webhook/:key — provider callback. PUBLIC (sig-verified).
  *
- * Currently only Payme posts to this. The provider's verifyWebhook validates
- * the MD5 signature; we then atomically flip the matching order's status
- * processing → paid / failed.
+ * :key is either a channel code (new path, looks up channel's payout
+ * provider) or a legacy provider name (mock / payme — pre-channel routing).
  *
- * On failed: refund the totalDebitInr back to the user. On paid: fire the
- * referral reward (idempotent on providerRef).
+ * Channel route is preferred because each channel has its own secret key.
  */
-withdrawalRouter.post("/webhook/:provider", async (req: Request, res: Response) => {
-  const provider = getPayoutProvider(req.params.provider);
-  if (!provider) return res.status(404).json({ status: false, message: "Unknown provider" });
+withdrawalRouter.post("/webhook/:key", async (req: Request, res: Response) => {
+  const key = req.params.key;
   const rawBody = JSON.stringify(req.body);
-  const v = provider.verifyWebhook(req.headers as Record<string, unknown>, rawBody);
+
+  // Channel lookup first
+  let v;
+  const ch = await getChannelByCode(key, { allowDisabled: true });
+  if (ch?.payout) {
+    v = ch.payout.verifyWebhook(req.headers as Record<string, unknown>, rawBody);
+  } else {
+    const provider = getPayoutProvider(key);
+    if (!provider) return res.status(404).json({ status: false, message: "Unknown provider/channel" });
+    v = provider.verifyWebhook(req.headers as Record<string, unknown>, rawBody);
+  }
   if (!v.ok || !v.providerRef) {
     return res.status(400).json({ status: false, message: v.failedReason || "verification failed" });
   }

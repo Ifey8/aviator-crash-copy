@@ -15,6 +15,7 @@ import { withdrawalRouter } from "./routes/withdrawal";
 import { startTronWatcher } from "./payment/providers/tron";
 import { startTelegramBot } from "./bot/telegram";
 import { loadSettings } from "./settings";
+import { migratePaymeSettingsToChannel } from "./payment/migrate";
 
 const app = express();
 // Trust proxy so req.ip reflects the real client behind nginx (X-Forwarded-For).
@@ -49,6 +50,7 @@ const io = new Server(server, {
 const main = async () => {
   await connectDb();
   await loadSettings();
+  await migratePaymeSettingsToChannel();
   initSockets(io);
   await engine.start();
   await startTelegramBot();

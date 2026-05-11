@@ -11,6 +11,9 @@ import { pushToUser, pushUserMyInfo } from "../sockets";
 import { triggerReferralReward } from "../payment/referral";
 import { getHotWalletBalance } from "../payment/hotWallet";
 import { listWallets, transferOut, sweepAddresses, fetchAddressBalance } from "../payment/walletOps";
+import { PaymentChannelModel } from "../db/models/PaymentChannel";
+import { listProviderTypes, getProviderType } from "../payment/catalog";
+import { invalidateChannelCache, listChannelsAdmin, getChannelByCode } from "../payment/channels";
 
 export const adminRouter = Router();
 adminRouter.use(requireAdmin);
@@ -32,11 +35,9 @@ adminRouter.put("/settings", async (req, res) => {
     "registerMaxPerIp24h",
     "inrRechargeEnabled",
     "usdtAutoPayoutEnabled", "usdtAutoPayoutMaxInr",
-    "paymeEnabled",
   ] as const;
   const allowedStrings = [
-    "paymeApiBase", "paymeMerchantCode", "paymeSecretKey",
-    "paymePayinPayType", "paymePayoutBankCode",
+    // (Payme settings moved to PaymentChannel — managed via /admin/channels)
   ] as const;
   const patch: Record<string, number | string> = {};
   for (const k of allowedNumbers) {
@@ -72,19 +73,6 @@ adminRouter.put("/settings", async (req, res) => {
   }
   if (Number(merged.cryptoMinUsdt) > Number(merged.cryptoMaxUsdt)) {
     return res.status(400).json({ status: false, message: "cryptoMinUsdt > cryptoMaxUsdt" });
-  }
-  // Payme: if enabling, require base URL + merchant code + secret key
-  if (Number(merged.paymeEnabled) === 1) {
-    const missing: string[] = [];
-    for (const k of ["paymeApiBase", "paymeMerchantCode", "paymeSecretKey"] as const) {
-      if (!String(merged[k] || "").trim()) missing.push(k);
-    }
-    if (missing.length) {
-      return res.status(400).json({
-        status: false,
-        message: `Cannot enable Payme — missing: ${missing.join(", ")}`,
-      });
-    }
   }
   const updated = await updateSettings(patch as any, req.adminUserName);
   res.json({ status: true, data: updated });
@@ -450,6 +438,223 @@ adminRouter.post("/withdrawals/:orderId/approve-review", async (req, res) => {
   });
 
   res.json({ status: true, data: withdrawalForAdmin(flipped) });
+});
+
+// ============================================================
+// Payment Channels
+// ============================================================
+
+/**
+ * GET /admin/channels/types — list supported provider types + their
+ * credential / param FieldSpec schemas. Admin UI uses this to render
+ * the "create channel" form dynamically — no UI changes required when
+ * a new provider lands in the catalog.
+ *
+ * Sensitive fields are listed by key only (no values, no secrets here).
+ */
+adminRouter.get("/channels/types", async (_req, res) => {
+  const types = listProviderTypes().map((t) => ({
+    name: t.name,
+    displayName: t.displayName,
+    countries: t.countries,
+    supports: t.supports,
+    credentialFields: t.credentialFields,
+    paramFields: t.paramFields,
+  }));
+  res.json({ status: true, data: types });
+});
+
+/**
+ * GET /admin/channels — list all configured channels. Secrets are
+ * MASKED in the response (•••• + last 4 chars). For audit + summary;
+ * the admin doesn't need to re-read secrets once saved.
+ */
+adminRouter.get("/channels", async (_req, res) => {
+  const docs = await listChannelsAdmin();
+  const mask = (v: string): string => {
+    if (!v) return "";
+    if (v.length <= 4) return "••••";
+    return "••••" + v.slice(-4);
+  };
+  const rows = docs.map((d) => {
+    const t = getProviderType(d.provider);
+    const credSpecs = t?.credentialFields || [];
+    const credentials: Record<string, string> = {};
+    const credMap = d.credentials instanceof Map
+      ? Object.fromEntries((d.credentials as any).entries())
+      : { ...(d.credentials as any) };
+    for (const spec of credSpecs) {
+      const raw = String(credMap[spec.key] || "");
+      credentials[spec.key] = spec.kind === "secret" ? mask(raw) : raw;
+    }
+    const paramMap = d.params instanceof Map
+      ? Object.fromEntries((d.params as any).entries())
+      : { ...(d.params as any) };
+    return {
+      code: d.code,
+      name: d.name,
+      provider: d.provider,
+      providerDisplayName: t?.displayName || d.provider,
+      country: d.country,
+      enabled: d.enabled,
+      supports: d.supports,
+      credentials,
+      params: paramMap,
+      priority: d.priority,
+      createdAt: d.createdAt,
+      updatedAt: d.updatedAt,
+    };
+  });
+  res.json({ status: true, data: rows });
+});
+
+/**
+ * POST /admin/channels — create a new channel. Validates against the
+ * provider type's FieldSpec (required credentials present, countries
+ * in the allowed set, etc).
+ */
+adminRouter.post("/channels", async (req, res) => {
+  const {
+    code, name, provider, country,
+    enabled, supports, credentials, params, priority,
+  } = req.body || {};
+
+  if (!code || !/^[a-z0-9_-]{3,32}$/i.test(code)) {
+    return res.status(400).json({ status: false, message: "code: 3-32 alphanumeric/_/- required" });
+  }
+  if (!name || typeof name !== "string") {
+    return res.status(400).json({ status: false, message: "name required" });
+  }
+  const type = provider && getProviderType(provider);
+  if (!type) {
+    return res.status(400).json({ status: false, message: `Unknown provider type "${provider}"` });
+  }
+  if (!country || !type.countries.includes(country)) {
+    return res.status(400).json({ status: false, message: `country must be one of ${type.countries.join(", ")}` });
+  }
+  // Validate credentials against spec
+  const credObj: Record<string, string> = {};
+  for (const spec of type.credentialFields) {
+    const v = credentials?.[spec.key];
+    if (spec.required && !String(v || "").trim()) {
+      return res.status(400).json({ status: false, message: `credentials.${spec.key} is required` });
+    }
+    if (v !== undefined) credObj[spec.key] = String(v).slice(0, 512);
+  }
+  const paramObj: Record<string, string> = {};
+  for (const spec of type.paramFields) {
+    const v = params?.[spec.key];
+    if (v !== undefined) paramObj[spec.key] = String(v).slice(0, 256);
+    else if (spec.default !== undefined) paramObj[spec.key] = spec.default;
+  }
+
+  const existing = await PaymentChannelModel.findOne({ code });
+  if (existing) {
+    return res.status(409).json({ status: false, message: `Channel "${code}" already exists` });
+  }
+
+  const doc = await PaymentChannelModel.create({
+    code,
+    name,
+    provider,
+    country,
+    enabled: !!enabled,
+    supports: {
+      payin: supports?.payin !== false && type.supports.payin,
+      payout: supports?.payout !== false && type.supports.payout,
+    },
+    credentials: credObj,
+    params: paramObj,
+    priority: typeof priority === "number" ? priority : 100,
+  });
+  res.json({ status: true, data: { code: doc.code } });
+});
+
+/**
+ * PATCH /admin/channels/:code — update an existing channel. Same
+ * validation rules as create, but secrets are only updated when the
+ * admin sends a non-empty new value (allows admin UI to send the
+ * masked placeholder for unchanged secrets).
+ */
+adminRouter.patch("/channels/:code", async (req, res) => {
+  const doc = await PaymentChannelModel.findOne({ code: req.params.code });
+  if (!doc) return res.status(404).json({ status: false, message: "Channel not found" });
+  const type = getProviderType(doc.provider);
+  if (!type) return res.status(500).json({ status: false, message: "Provider type missing from catalog" });
+
+  const {
+    name, country, enabled, supports, credentials, params, priority,
+  } = req.body || {};
+
+  if (typeof name === "string") doc.name = name;
+  if (country) {
+    if (!type.countries.includes(country)) {
+      return res.status(400).json({ status: false, message: `country must be one of ${type.countries.join(", ")}` });
+    }
+    doc.country = country;
+  }
+  if (typeof enabled === "boolean") doc.enabled = enabled;
+  if (supports) {
+    if (typeof supports.payin === "boolean") doc.supports.payin = supports.payin && type.supports.payin;
+    if (typeof supports.payout === "boolean") doc.supports.payout = supports.payout && type.supports.payout;
+  }
+  if (credentials && typeof credentials === "object") {
+    for (const spec of type.credentialFields) {
+      const v = credentials[spec.key];
+      if (v === undefined) continue;
+      const s = String(v).trim();
+      // Don't overwrite secrets with the masked placeholder
+      if (spec.kind === "secret" && /^[•\*]+/.test(s)) continue;
+      (doc.credentials as any).set(spec.key, s.slice(0, 512));
+    }
+  }
+  if (params && typeof params === "object") {
+    for (const spec of type.paramFields) {
+      const v = params[spec.key];
+      if (v === undefined) continue;
+      (doc.params as any).set(spec.key, String(v).slice(0, 256));
+    }
+  }
+  if (typeof priority === "number") doc.priority = priority;
+  doc.updatedAt = new Date();
+  await doc.save();
+  invalidateChannelCache(doc.code);
+  res.json({ status: true, data: { code: doc.code } });
+});
+
+/**
+ * DELETE /admin/channels/:code — remove a channel. Affects future
+ * routing only; existing orders keep their stored providerRef and the
+ * webhook still verifies via channel doc IF it still exists. Use with
+ * care — better to disable than to delete.
+ */
+adminRouter.delete("/channels/:code", async (req, res) => {
+  const r = await PaymentChannelModel.deleteOne({ code: req.params.code });
+  invalidateChannelCache(req.params.code);
+  res.json({ status: true, data: { deleted: r.deletedCount } });
+});
+
+/**
+ * POST /admin/channels/:code/test — ping the upstream API to verify
+ * credentials look right. Different providers expose different
+ * "balance"-type endpoints; for now we just look up the channel and
+ * return the resolved config (with credentials masked) so admin can
+ * see we successfully parsed it. Future: dispatch to a provider-level
+ * test() method per type.
+ */
+adminRouter.post("/channels/:code/test", async (req, res) => {
+  const ch = await getChannelByCode(req.params.code, { allowDisabled: true });
+  if (!ch) return res.status(404).json({ status: false, message: "Channel not found" });
+  res.json({
+    status: true,
+    data: {
+      code: ch.doc.code,
+      provider: ch.doc.provider,
+      hasPayment: !!ch.payment,
+      hasPayout: !!ch.payout,
+      message: "Channel resolves. Real provider ping not yet implemented — try a small dry-run recharge / payout.",
+    },
+  });
 });
 
 // ---------- Hot wallet status (USDT liquidity gauge) ----------
