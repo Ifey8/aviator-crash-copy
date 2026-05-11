@@ -156,7 +156,10 @@ withdrawalRouter.post("/create", requireAuth, async (req: Request, res: Response
   if (method === "bank") {
     const err = validateBank(req.body);
     if (err) return res.status(400).json({ status: false, message: err });
-    grossInr = +amount.toFixed(2);
+    // Bank gross is rounded to integer rupees — Payme rejects decimal
+    // order_amount, and the user-facing INR amount is always integer
+    // anyway (presets are whole-rupee).
+    grossInr = Math.round(amount);
     if (grossInr < minInr) {
       return res.status(400).json({ status: false, message: `Minimum withdrawal is ₹${minInr}` });
     }
@@ -167,7 +170,9 @@ withdrawalRouter.post("/create", requireAuth, async (req: Request, res: Response
     if (err) return res.status(400).json({ status: false, message: err });
     const rateQ = await getUsdtInrRate();
     fxRate = rateQ.rate;
-    grossInr = +(amount * fxRate).toFixed(2);
+    // USDT amount can be fractional (e.g. 5.5 USDT), but INR equivalent
+    // we record + compare to thresholds should be integer.
+    grossInr = Math.round(amount * fxRate);
     if (grossInr < minInr) {
       return res.status(400).json({
         status: false,

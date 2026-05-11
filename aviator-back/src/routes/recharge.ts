@@ -65,7 +65,10 @@ const orderToClient = (o: InstanceType<typeof RechargeOrderModel>) => ({
 // ---------------------------------------------------------------------------
 rechargeRouter.post("/create", requireAuth, async (req: Request, res: Response) => {
   const userName = req.authUserName!;
-  const amount = Number(req.body?.amount);
+  // Normalise amount to integer rupees right at the entry: Payme rejects
+  // decimal order_amount and we want DB / display / provider call all to
+  // agree on the same value. Use Math.round so 499.6 → 500, not 499.
+  const amount = Math.round(Number(req.body?.amount) || 0);
   const explicitChannelCode: string | undefined = req.body?.channelCode;
   const explicitProvider: string | undefined = req.body?.provider; // legacy fallback
 
