@@ -20,3 +20,5 @@ npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
 yarn.lock
+# Heavy ad assets (regenerable via ffmpeg from .mp4)
+doc/ad/*.gif

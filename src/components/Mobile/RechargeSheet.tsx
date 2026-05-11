@@ -2,6 +2,7 @@ import React from "react";
 import Context from "../../context";
 import { config } from "../../config";
 import { CryptoPayPanel } from "./CryptoPayPanel";
+import { useT } from "../../i18n";
 
 /**
  * RechargeSheet — bottom sheet for topping up balance via a payment provider.
@@ -55,6 +56,7 @@ const authHeaders = (): Record<string, string> => {
 
 export const RechargeSheet: React.FC<Props> = ({ open, onClose }) => {
   const ctx = React.useContext(Context);
+  const { t } = useT();
   const sock = (ctx as any).socket;
 
   const [step, setStep] = React.useState<Step>("picker");
@@ -145,7 +147,7 @@ export const RechargeSheet: React.FC<Props> = ({ open, onClose }) => {
 
   const handleConfirm = async (): Promise<void> => {
     if (amount <= 0) {
-      setError("Enter a valid amount");
+      setError(t("recharge.error.amount"));
       return;
     }
     if (method === "crypto") {
@@ -165,7 +167,7 @@ export const RechargeSheet: React.FC<Props> = ({ open, onClose }) => {
       });
       const json = await res.json();
       if (!json.status) {
-        setError(json.message || "Failed to create order");
+        setError(json.message || t("recharge.error.create"));
         setStep("picker");
         return;
       }
@@ -181,7 +183,7 @@ export const RechargeSheet: React.FC<Props> = ({ open, onClose }) => {
       // Auto-open the provider's payment URL in a new tab.
       window.open(o.paymentUrl, "_blank", "noopener,noreferrer");
     } catch {
-      setError("Network error — please try again");
+      setError(t("recharge.error.network"));
       setStep("picker");
     }
   };
@@ -208,8 +210,8 @@ export const RechargeSheet: React.FC<Props> = ({ open, onClose }) => {
 
         {step === "picker" && (
           <div className="rs-picker">
-            <h3 className="rs-title">Top up balance</h3>
-            <p className="rs-sub">Choose an amount to add to your wallet.</p>
+            <h3 className="rs-title">{t("recharge.title")}</h3>
+            <p className="rs-sub">{t("recharge.sub")}</p>
 
             {/* Pay-method selector — fiat (UPI/cards via mock provider) vs
                 crypto (USDT-TRC20 on TRON). The chosen method changes how
@@ -225,8 +227,8 @@ export const RechargeSheet: React.FC<Props> = ({ open, onClose }) => {
                   onClick={() => setMethod("fiat")}
                   disabled={inrEnabled === null}
                 >
-                  <span className="rs-method-name">UPI / Cards</span>
-                  <span className="rs-method-sub">INR</span>
+                  <span className="rs-method-name">{t("recharge.method.fiat")}</span>
+                  <span className="rs-method-sub">{t("recharge.method.fiat.sub")}</span>
                 </button>
               )}
               <button
@@ -234,13 +236,13 @@ export const RechargeSheet: React.FC<Props> = ({ open, onClose }) => {
                 className={`rs-method ${method === "crypto" ? "active" : ""}`}
                 onClick={() => setMethod("crypto")}
               >
-                <span className="rs-method-name">USDT</span>
-                <span className="rs-method-sub">TRC-20</span>
+                <span className="rs-method-name">{t("recharge.method.crypto")}</span>
+                <span className="rs-method-sub">{t("recharge.method.crypto.sub")}</span>
               </button>
             </div>
             {inrEnabled === false && (
               <p className="rs-fine" style={{ marginTop: -4, opacity: 0.7 }}>
-                INR top-up is temporarily unavailable. USDT (TRC-20) is live.
+                {t("recharge.inrUnavailable")}
               </p>
             )}
 
@@ -256,13 +258,11 @@ export const RechargeSheet: React.FC<Props> = ({ open, onClose }) => {
               ))}
             </div>
             <button className="rs-cta" onClick={handleConfirm}>
-              Continue · ₹{amount.toLocaleString("en-IN")}{method === "crypto" ? " · USDT" : ""}
+              {t("recharge.continue")} · ₹{amount.toLocaleString("en-IN")}{method === "crypto" ? " · USDT" : ""}
             </button>
             {error && <div className="rs-error">{error}</div>}
             <p className="rs-fine">
-              {method === "crypto"
-                ? "Minimum 10 USDT · Live USDT/INR rate · Funds credit on 1 confirmation"
-                : "Minimum ₹100 · Maximum ₹50,000 · Funds usually arrive within 1 minute"}
+              {method === "crypto" ? t("recharge.fine.crypto") : t("recharge.fine.fiat")}
             </p>
           </div>
         )}
@@ -278,13 +278,13 @@ export const RechargeSheet: React.FC<Props> = ({ open, onClose }) => {
         {step === "creating" && (
           <div className="rs-loader">
             <div className="rs-spinner" />
-            <p>Creating order…</p>
+            <p>{t("recharge.creating")}</p>
           </div>
         )}
 
         {step === "pending" && order && (
           <div className="rs-pending">
-            <h3 className="rs-title">Awaiting payment</h3>
+            <h3 className="rs-title">{t("recharge.pendingTitle")}</h3>
             <div className="rs-amount-big">₹{order.amount.toLocaleString("en-IN")}</div>
             <a
               href={order.paymentUrl}
@@ -292,17 +292,16 @@ export const RechargeSheet: React.FC<Props> = ({ open, onClose }) => {
               rel="noopener noreferrer"
               className="rs-cta"
             >
-              Open payment page
+              {t("recharge.openPaymentPage")}
             </a>
-            <p className="rs-hint">
-              If the payment page didn't open, tap the button above.
-            </p>
+            <p className="rs-hint">{t("recharge.pendingHint")}</p>
             <ExpiryCountdown
               expiresAt={order.expiresAt}
               onExpire={() => setStep("failed")}
+              labelExpiresIn={t("recharge.expiresIn")}
             />
             <button className="rs-link" onClick={handleCancel}>
-              Cancel order
+              {t("recharge.cancelOrder")}
             </button>
           </div>
         )}
@@ -310,23 +309,23 @@ export const RechargeSheet: React.FC<Props> = ({ open, onClose }) => {
         {step === "success" && order && (
           <div className="rs-success">
             <div className="rs-check">✓</div>
-            <h3 className="rs-title">Recharge complete</h3>
-            <p className="rs-sub">+₹{order.amount.toLocaleString("en-IN")} added to your balance</p>
-            <button className="rs-cta" onClick={onClose}>Done</button>
+            <h3 className="rs-title">{t("recharge.successTitle")}</h3>
+            <p className="rs-sub">+₹{order.amount.toLocaleString("en-IN")} {t("recharge.successSub")}</p>
+            <button className="rs-cta" onClick={onClose}>{t("common.done")}</button>
           </div>
         )}
 
         {step === "failed" && (
           <div className="rs-failed">
             <div className="rs-x">×</div>
-            <h3 className="rs-title">Payment unsuccessful</h3>
+            <h3 className="rs-title">{t("recharge.failedTitle")}</h3>
             <p className="rs-sub">
-              {order?.status === "expired" ? "The order expired." :
-               order?.status === "cancelled" ? "Order was cancelled." :
-               "Provider reported a failure."}
+              {order?.status === "expired" ? t("recharge.failed.expired") :
+               order?.status === "cancelled" ? t("recharge.failed.cancelled") :
+               t("recharge.failed.provider")}
             </p>
             <button className="rs-cta" onClick={() => { setStep("picker"); setOrder(null); }}>
-              Try again
+              {t("common.tryAgain")}
             </button>
           </div>
         )}
@@ -335,9 +334,10 @@ export const RechargeSheet: React.FC<Props> = ({ open, onClose }) => {
   );
 };
 
-const ExpiryCountdown: React.FC<{ expiresAt: string; onExpire: () => void }> = ({
+const ExpiryCountdown: React.FC<{ expiresAt: string; onExpire: () => void; labelExpiresIn: string }> = ({
   expiresAt,
   onExpire,
+  labelExpiresIn,
 }) => {
   const [now, setNow] = React.useState(Date.now());
   React.useEffect(() => {
@@ -357,7 +357,7 @@ const ExpiryCountdown: React.FC<{ expiresAt: string; onExpire: () => void }> = (
   const s = Math.floor((remaining % 60000) / 1000);
   return (
     <div className="rs-countdown">
-      Expires in <span>{m}:{s.toString().padStart(2, "0")}</span>
+      {labelExpiresIn} <span>{m}:{s.toString().padStart(2, "0")}</span>
     </div>
   );
 };

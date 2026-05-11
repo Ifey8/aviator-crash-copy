@@ -1057,6 +1057,46 @@
     }
   }
 
+  .account-lang-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 12px;
+    padding: 10px 12px;
+    background: rgba(255, 245, 220, 0.04);
+    border: 1px solid rgba(255, 200, 87, 0.12);
+    border-radius: 12px;
+  }
+  .account-lang-label {
+    font-size: 13px;
+    color: var(--text-muted);
+    letter-spacing: 0.02em;
+  }
+  .account-lang-toggle {
+    display: flex;
+    gap: 4px;
+    background: rgba(10, 14, 29, 0.6);
+    padding: 3px;
+    border-radius: 999px;
+  }
+  .account-lang-btn {
+    padding: 6px 14px;
+    border: none;
+    background: transparent;
+    color: var(--text-muted);
+    font-size: 13px;
+    font-weight: 700;
+    border-radius: 999px;
+    cursor: pointer;
+    min-width: 44px;
+    transition: background 120ms, color 120ms;
+
+    &.active {
+      background: linear-gradient(135deg, var(--crash-saffron), var(--crash-gold));
+      color: #0a0e1d;
+    }
+  }
+
   .account-actions {
     display: flex;
     flex-direction: column;

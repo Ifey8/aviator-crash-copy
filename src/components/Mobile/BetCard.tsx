@@ -1,5 +1,6 @@
 import React from "react";
 import Context, { callCashOut } from "../../context";
+import { useT } from "../../i18n";
 
 type Side = "f" | "s";
 
@@ -11,6 +12,7 @@ const QUICK_AMOUNTS = [10, 50, 100, 500];
 
 export const BetCard: React.FC<Props> = ({ side }) => {
   const ctx = React.useContext(Context);
+  const { t } = useT();
   const userInfo = ctx.userInfo;
   const sideInfo = userInfo[side];
   const phase = ctx.GameState;
@@ -87,7 +89,7 @@ export const BetCard: React.FC<Props> = ({ side }) => {
   if (phase === "PLAYING" && betted && !cashouted) {
     cta = (
       <button className="bet-cta cta-cashout" onClick={cashOut}>
-        <span className="cta-line-1">CASH OUT</span>
+        <span className="cta-line-1">{t("cta.cashOut")}</span>
         <span className="cta-line-2">
           {(amount * Number((ctx.currentTarget as any) || 1)).toFixed(2)} INR
         </span>
@@ -100,14 +102,14 @@ export const BetCard: React.FC<Props> = ({ side }) => {
     // touched local state; the server-side wager + balance deduction stayed.
     cta = (
       <button className="bet-cta cta-waiting" disabled>
-        <span className="cta-line-1">BET PLACED</span>
+        <span className="cta-line-1">{t("cta.betPlaced")}</span>
         <span className="cta-line-2">{amount.toFixed(2)} INR</span>
       </button>
     );
   } else if (cashouted) {
     cta = (
       <button className="bet-cta cta-won" disabled>
-        <span className="cta-line-1">CASHED OUT</span>
+        <span className="cta-line-1">{t("cta.cashedOut")}</span>
         <span className="cta-line-2">+{cashAmount.toFixed(2)} INR</span>
       </button>
     );
@@ -118,7 +120,7 @@ export const BetCard: React.FC<Props> = ({ side }) => {
         onClick={placeBet}
         disabled={phase !== "BET"}
       >
-        <span className="cta-line-1">{mode === "auto" ? "AUTO BET" : "BET"}</span>
+        <span className="cta-line-1">{mode === "auto" ? t("cta.autoBet") : t("cta.bet")}</span>
         <span className="cta-line-2">
           {amount.toFixed(2)} INR
           {mode === "auto" && ` · @${autoTarget.toFixed(2)}x`}
@@ -135,14 +137,14 @@ export const BetCard: React.FC<Props> = ({ side }) => {
           onClick={() => setMode("bet")}
           disabled={betted}
         >
-          Bet
+          {t("bet.tab.bet")}
         </button>
         <button
           className={`tab ${mode === "auto" ? "active" : ""}`}
           onClick={() => setMode("auto")}
           disabled={betted}
         >
-          Auto
+          {t("bet.tab.auto")}
         </button>
       </div>
 
@@ -197,7 +199,7 @@ export const BetCard: React.FC<Props> = ({ side }) => {
 
       {mode === "auto" && (
         <div className="auto-target-row">
-          <div className="auto-target-caption">Auto cashout target</div>
+          <div className="auto-target-caption">{t("bet.autoTarget")}</div>
           <div className="amount-stepper compact">
             <button
               className="step-btn"
@@ -236,8 +238,8 @@ export const BetCard: React.FC<Props> = ({ side }) => {
       {autoOn && (
         <button className="auto-on-pill" onClick={stopAuto} type="button">
           <span className="dot" />
-          AUTO ON · @{(sideInfo.target || autoTarget).toFixed(2)}x
-          <span className="stop-x">✕ Stop</span>
+          {t("auto.on")} · @{(sideInfo.target || autoTarget).toFixed(2)}x
+          <span className="stop-x">{t("auto.stop")}</span>
         </button>
       )}
     </div>

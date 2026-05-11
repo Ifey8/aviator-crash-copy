@@ -1,6 +1,7 @@
 import React from "react";
 import Context from "../../context";
 import { useAuth } from "../../auth/AuthProvider";
+import { useT } from "../../i18n";
 
 /**
  * AccountSheet — opens when the user taps the AVIATOR logo in the header.
@@ -24,6 +25,7 @@ interface Props {
 export const AccountSheet: React.FC<Props> = ({ open, onClose }) => {
   const { user, logout } = useAuth();
   const ctx = React.useContext(Context);
+  const { t, lang, setLang } = useT();
 
   if (!open || !user) return null;
 
@@ -57,34 +59,54 @@ export const AccountSheet: React.FC<Props> = ({ open, onClose }) => {
 
         <div className="account-balance-card">
           <div className="account-balance-row">
-            <span>Total balance</span>
+            <span>{t("account.balance.total")}</span>
             <strong>₹{fmt(balance)}</strong>
           </div>
           <div className="account-balance-row">
-            <span>Locked (playthrough)</span>
+            <span>{t("account.balance.locked")}</span>
             <strong className="account-locked">₹{fmt(wager)}</strong>
           </div>
           <div className="account-balance-row account-balance-w">
-            <span>Withdrawable</span>
+            <span>{t("account.balance.withdrawable")}</span>
             <strong>₹{fmt(withdrawable)}</strong>
+          </div>
+        </div>
+
+        <div className="account-lang-row">
+          <span className="account-lang-label">{t("account.language")}</span>
+          <div className="account-lang-toggle" role="group" aria-label="Language">
+            <button
+              className={`account-lang-btn ${lang === "en" ? "active" : ""}`}
+              onClick={() => setLang("en")}
+              type="button"
+            >
+              EN
+            </button>
+            <button
+              className={`account-lang-btn ${lang === "hi" ? "active" : ""}`}
+              onClick={() => setLang("hi")}
+              type="button"
+            >
+              हिंदी
+            </button>
           </div>
         </div>
 
         <div className="account-actions">
           {user.isAdmin && (
-            <a className="account-link" href="/admin">⚙ Admin panel</a>
+            <a className="account-link" href="/admin">{t("account.adminPanel")}</a>
           )}
           <button
             className="account-logout"
             onClick={() => {
-              if (window.confirm("Sign out?")) logout();
+              if (window.confirm(t("account.signOutConfirm"))) logout();
             }}
           >
-            Sign out
+            {t("account.signOut")}
           </button>
         </div>
 
-        <button className="account-close" onClick={onClose}>Close</button>
+        <button className="account-close" onClick={onClose}>{t("account.close")}</button>
       </div>
     </div>
   );

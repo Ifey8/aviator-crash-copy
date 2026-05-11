@@ -1,6 +1,7 @@
 import React from "react";
 import Context from "../../context";
 import { Plane } from "./Plane";
+import { useT } from "../../i18n";
 
 /**
  * Defer the displayed balance so it changes WHEN coins reach their target,
@@ -53,6 +54,7 @@ interface HeaderProps {
 
 export const MobileHeader: React.FC<HeaderProps> = ({ onOpenMenu, onRecharge, onWithdraw, onOpenAccount }) => {
   const { userInfo, errorBackend } = React.useContext(Context);
+  const { t } = useT();
   const balanceServer = Number(userInfo?.balance || 0);
   const balance = useDisplayBalance(balanceServer);
   const currency = userInfo?.currency || "INR";
@@ -68,7 +70,7 @@ export const MobileHeader: React.FC<HeaderProps> = ({ onOpenMenu, onRecharge, on
           <Plane size={28} static halo={false} />
         </span>
         <span className="mobile-header-name">AVIATOR</span>
-        {errorBackend && <span className="mobile-header-offline">offline</span>}
+        {errorBackend && <span className="mobile-header-offline">{t("header.offline")}</span>}
       </button>
       <div className="mobile-header-right">
         <div className="mobile-header-balance" data-fx="balance">
@@ -81,7 +83,7 @@ export const MobileHeader: React.FC<HeaderProps> = ({ onOpenMenu, onRecharge, on
             onClick={onRecharge}
             aria-label="Top up balance"
           >
-            + ADD
+            {t("header.add")}
           </button>
         )}
         {onWithdraw && (
@@ -90,7 +92,7 @@ export const MobileHeader: React.FC<HeaderProps> = ({ onOpenMenu, onRecharge, on
             onClick={onWithdraw}
             aria-label="Withdraw balance"
           >
-            ⊖ OUT
+            {t("header.out")}
           </button>
         )}
         <button className="mobile-header-menu" onClick={onOpenMenu} aria-label="menu">

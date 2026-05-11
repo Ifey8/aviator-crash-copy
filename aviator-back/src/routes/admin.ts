@@ -753,16 +753,67 @@ adminRouter.delete("/channels/:code", async (req, res) => {
 });
 
 /**
- * POST /admin/channels/:code/test — ping the upstream API to verify
- * credentials look right. Different providers expose different
- * "balance"-type endpoints; for now we just look up the channel and
- * return the resolved config (with credentials masked) so admin can
- * see we successfully parsed it. Future: dispatch to a provider-level
- * test() method per type.
+ * POST /admin/channels/:code/test — ping the upstream gateway to verify
+ * credentials + connectivity. No money moves and no order is created.
+ *
+ * Strategy: dispatch the provider's queryOrderStatus / queryPayoutStatus
+ * with a bogus order_no like "_aviator_diag_<ts>". A healthy gateway:
+ *   (a) responds within a few hundred ms (network reachable)
+ *   (b) accepts the MD5 signature (secretKey + merchant_code right)
+ *   (c) returns «order not found» or similar (auth succeeded, just no
+ *       such record). For Payme that surfaces as status=unknown + a
+ *       failedReason from the gateway — we treat that combo as OK.
+ *
+ * Anything else — network throw, HTTP 4xx, sign-mismatch — bubbles up
+ * verbatim so the operator can see exactly what's wrong without digging
+ * through server logs.
  */
 adminRouter.post("/channels/:code/test", async (req, res) => {
   const ch = await getChannelByCode(req.params.code, { allowDisabled: true });
   if (!ch) return res.status(404).json({ status: false, message: "Channel not found" });
+
+  const lines: string[] = [];
+  // Same bogus id for both directions — easier to spot in upstream logs.
+  const dummyId = `_aviator_diag_${Date.now()}`;
+
+  const ping = async (
+    label: string,
+    fn: (() => Promise<{ status: string; failedReason?: string }>) | null,
+  ): Promise<void> => {
+    if (!fn) {
+      lines.push(`${label}: configured (no query method to ping)`);
+      return;
+    }
+    const t0 = Date.now();
+    try {
+      const r = await fn();
+      const ms = Date.now() - t0;
+      // status="unknown" with a failedReason = gateway responded with
+      // «not found» or similar — which IS the success signal for a bogus
+      // orderId (we never created it, so "unknown" means it round-tripped).
+      const headline = r.status === "unknown" && r.failedReason
+        ? "OK (round-trip"
+        : `${r.status} (`;
+      lines.push(`${label}: ${headline}${ms}ms)${r.failedReason ? ` — ${r.failedReason}` : ""}`);
+    } catch (e) {
+      const ms = Date.now() - t0;
+      lines.push(`${label}: THREW (${ms}ms) — ${(e as Error).message}`);
+    }
+  };
+
+  await ping(
+    "PAYIN",
+    ch.payment?.queryOrderStatus
+      ? () => ch.payment!.queryOrderStatus!({ orderId: dummyId })
+      : null,
+  );
+  await ping(
+    "PAYOUT",
+    ch.payout?.queryPayoutStatus
+      ? () => ch.payout!.queryPayoutStatus!({ orderId: dummyId })
+      : null,
+  );
+
   res.json({
     status: true,
     data: {
@@ -770,7 +821,7 @@ adminRouter.post("/channels/:code/test", async (req, res) => {
       provider: ch.doc.provider,
       hasPayment: !!ch.payment,
       hasPayout: !!ch.payout,
-      message: "Channel resolves. Real provider ping not yet implemented — try a small dry-run recharge / payout.",
+      message: lines.length ? lines.join("\n") : "Channel resolves but no provider direction is configured.",
     },
   });
 });

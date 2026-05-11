@@ -1,6 +1,7 @@
 import React from "react";
 import Context from "../../context";
 import { config } from "../../config";
+import { useT } from "../../i18n";
 
 /**
  * WithdrawalSheet — bottom sheet for cashing out balance via:
@@ -60,6 +61,7 @@ const fmt = (n: number) =>
 
 export const WithdrawalSheet: React.FC<Props> = ({ open, onClose }) => {
   const ctx = React.useContext(Context);
+  const { t } = useT();
   const sock = (ctx as any).socket;
 
   const [tab, setTab] = React.useState<Tab>("bank");
@@ -168,7 +170,7 @@ export const WithdrawalSheet: React.FC<Props> = ({ open, onClose }) => {
         headers: authHeaders(),
       });
       setStep("failed");
-      setOrder({ ...order, status: "cancelled", failedReason: "Cancelled by you" });
+      setOrder({ ...order, status: "cancelled", failedReason: t("withdrawal.cancelled.by.you") });
     } catch (e) { /* ignore */ }
   };
 
@@ -200,27 +202,26 @@ export const WithdrawalSheet: React.FC<Props> = ({ open, onClose }) => {
   return (
     <div className="mobile-modal-overlay" onClick={onClose}>
       <div className="mobile-modal withdrawal-sheet" onClick={(e) => e.stopPropagation()}>
-        <h3>Withdraw funds</h3>
+        <h3>{t("withdrawal.title")}</h3>
 
         {step === "form" && (
           <>
             <div className="wd-balance-card">
               <div className="wd-balance-row">
-                <span>Total balance</span>
+                <span>{t("account.balance.total")}</span>
                 <strong>₹{fmt(balance)}</strong>
               </div>
               <div className="wd-balance-row">
-                <span>Locked (playthrough)</span>
+                <span>{t("account.balance.locked")}</span>
                 <strong className="wd-locked">₹{fmt(wager)}</strong>
               </div>
               <div className="wd-balance-row wd-balance-withdrawable">
-                <span>Withdrawable</span>
+                <span>{t("account.balance.withdrawable")}</span>
                 <strong>₹{fmt(withdrawable)}</strong>
               </div>
               {wager > 0 && (
                 <div className="wd-hint">
-                  Recharges must be wagered through before they can be withdrawn.
-                  Place ₹{fmt(wager)} more in bets to unlock the rest.
+                  {t("withdrawal.wagerHint")}
                 </div>
               )}
             </div>
@@ -234,55 +235,55 @@ export const WithdrawalSheet: React.FC<Props> = ({ open, onClose }) => {
                   className={`wd-tab ${tab === "bank" ? "active" : ""}`}
                   onClick={() => setTab("bank")}
                 >
-                  Bank (INR)
+                  {t("withdrawal.tab.bank")}
                 </button>
               )}
               <button
                 className={`wd-tab ${tab === "usdt" ? "active" : ""}`}
                 onClick={() => setTab("usdt")}
               >
-                USDT (TRC20)
+                {t("withdrawal.tab.usdt")}
               </button>
             </div>
             {quote?.bankEnabled === false && (
               <p className="wd-hint" style={{ marginTop: 0, opacity: 0.75 }}>
-                Bank withdrawals are temporarily unavailable. USDT (TRC20) is live.
+                {t("withdrawal.bankUnavailable")}
               </p>
             )}
 
             {tab === "bank" ? (
               <div className="wd-form">
                 <label>
-                  <span>Account number</span>
+                  <span>{t("withdrawal.form.bankAccount")}</span>
                   <input
                     type="text"
                     inputMode="numeric"
-                    placeholder="9-18 digits"
+                    placeholder={t("withdrawal.form.bankAccount.ph")}
                     value={bankAcct}
                     onChange={(e) => setBankAcct(e.target.value.replace(/\D/g, ""))}
                   />
                 </label>
                 <label>
-                  <span>IFSC code</span>
+                  <span>{t("withdrawal.form.ifsc")}</span>
                   <input
                     type="text"
-                    placeholder="e.g. SBIN0001234"
+                    placeholder={t("withdrawal.form.ifsc.ph")}
                     value={ifsc}
                     onChange={(e) => setIfsc(e.target.value.toUpperCase())}
                     maxLength={11}
                   />
                 </label>
                 <label>
-                  <span>Holder name (as on bank record)</span>
+                  <span>{t("withdrawal.form.holder")}</span>
                   <input
                     type="text"
-                    placeholder="Full name"
+                    placeholder={t("withdrawal.form.holder.ph")}
                     value={holder}
                     onChange={(e) => setHolder(e.target.value)}
                   />
                 </label>
                 <label>
-                  <span>Amount (INR) — min ₹{minInr}</span>
+                  <span>{t("withdrawal.form.amountInr")} — {t("withdrawal.cta.min")} ₹{minInr}</span>
                   <input
                     type="text"
                     inputMode="decimal"
@@ -295,7 +296,7 @@ export const WithdrawalSheet: React.FC<Props> = ({ open, onClose }) => {
             ) : (
               <div className="wd-form">
                 <label>
-                  <span>TRC20 USDT address</span>
+                  <span>{t("withdrawal.form.trc20")}</span>
                   <input
                     type="text"
                     placeholder="T..."
@@ -305,7 +306,7 @@ export const WithdrawalSheet: React.FC<Props> = ({ open, onClose }) => {
                   />
                 </label>
                 <label>
-                  <span>Amount (USDT) — min ₹{minInr} (≈ {(minInr / fxRate).toFixed(2)} USDT)</span>
+                  <span>{t("withdrawal.form.amountUsdt")} — {t("withdrawal.cta.min")} ₹{minInr} (≈ {(minInr / fxRate).toFixed(2)} USDT)</span>
                   <input
                     type="text"
                     inputMode="decimal"
@@ -315,24 +316,24 @@ export const WithdrawalSheet: React.FC<Props> = ({ open, onClose }) => {
                   />
                 </label>
                 <div className="wd-rate-note">
-                  Rate locked at submit: 1 USDT ≈ ₹{fxRate.toFixed(2)}
+                  {t("withdrawal.rateLocked")} 1 USDT ≈ ₹{fxRate.toFixed(2)}
                 </div>
               </div>
             )}
 
             <div className="wd-summary">
               <div className="wd-summary-row">
-                <span>You receive</span>
+                <span>{t("withdrawal.summary.youReceive")}</span>
                 <strong>
                   {tab === "bank" ? `₹${fmt(grossInr)}` : `${Number(amountUsdt || 0) || 0} USDT`}
                 </strong>
               </div>
               <div className="wd-summary-row">
-                <span>Fee ({(feePct * 100).toFixed(1)}%)</span>
+                <span>{t("withdrawal.summary.fee")} ({(feePct * 100).toFixed(1)}%)</span>
                 <strong>₹{fmt(feeInr)}</strong>
               </div>
               <div className="wd-summary-row wd-summary-total">
-                <span>Total deducted from balance</span>
+                <span>{t("withdrawal.summary.total")}</span>
                 <strong>₹{fmt(totalInr)}</strong>
               </div>
             </div>
@@ -340,24 +341,24 @@ export const WithdrawalSheet: React.FC<Props> = ({ open, onClose }) => {
             {error && <div className="wd-error">⚠ {error}</div>}
 
             <div className="wd-actions">
-              <button className="wd-cancel" onClick={onClose}>Close</button>
+              <button className="wd-cancel" onClick={onClose}>{t("common.close")}</button>
               <button
                 className="modal-cta wd-submit"
                 onClick={submit}
                 disabled={!formValid}
               >
                 {totalInr > withdrawable
-                  ? "Insufficient withdrawable"
+                  ? t("withdrawal.cta.insufficient")
                   : grossInr < minInr
-                    ? `Min ₹${minInr}`
-                    : `Withdraw ₹${fmt(grossInr)}`}
+                    ? `${t("withdrawal.cta.min")} ₹${minInr}`
+                    : `${t("withdrawal.cta.withdraw")} ₹${fmt(grossInr)}`}
               </button>
             </div>
           </>
         )}
 
         {step === "submitting" && (
-          <div className="wd-status">Submitting…</div>
+          <div className="wd-status">{t("withdrawal.submitting")}</div>
         )}
 
         {step === "pending" && order && (
@@ -365,30 +366,30 @@ export const WithdrawalSheet: React.FC<Props> = ({ open, onClose }) => {
             <div className="wd-status-icon">{order.status === "review" ? "🔍" : "⏳"}</div>
             <h4>
               {order.status === "review"
-                ? "Under review"
-                : "Withdrawal queued"}
+                ? t("withdrawal.review.title")
+                : t("withdrawal.queued.title")}
             </h4>
             <p>
               {order.status === "review" ? (
                 <>
-                  Your {order.method === "bank" ? "bank transfer" : "USDT withdrawal"}
-                  {" "}of <strong>{order.method === "bank" ? `₹${fmt(order.grossAmount)}` : `${order.grossAmount} USDT`}</strong>
-                  {" "}is being reviewed by our team. Most reviews clear within 24 hours.
+                  {order.method === "bank" ? t("withdrawal.method.bank") : t("withdrawal.method.usdt")}
+                  {" "}<strong>{order.method === "bank" ? `₹${fmt(order.grossAmount)}` : `${order.grossAmount} USDT`}</strong>
+                  {" "}{t("withdrawal.review.body")}
                 </>
               ) : (
                 <>
-                  Your {order.method === "bank" ? "bank transfer" : "USDT withdrawal"} of
+                  {order.method === "bank" ? t("withdrawal.method.bank") : t("withdrawal.method.usdt")}
                   {" "}<strong>₹{fmt(order.grossAmount)}</strong>
-                  {" "}is being processed.
+                  {" "}{t("withdrawal.queued.body")}
                 </>
               )}
             </p>
             <p className="wd-status-meta">
-              Order: {order.orderId.slice(0, 8)}… · Status: {order.status}
+              {t("withdrawal.orderMeta")}: {order.orderId.slice(0, 8)}… · {t("withdrawal.status")}: {order.status}
             </p>
             <div className="wd-actions">
-              <button className="wd-cancel" onClick={cancelOrder}>Cancel withdrawal</button>
-              <button className="modal-cta" onClick={onClose}>Close</button>
+              <button className="wd-cancel" onClick={cancelOrder}>{t("withdrawal.cancel")}</button>
+              <button className="modal-cta" onClick={onClose}>{t("common.close")}</button>
             </div>
           </div>
         )}
@@ -396,21 +397,21 @@ export const WithdrawalSheet: React.FC<Props> = ({ open, onClose }) => {
         {step === "success" && order && (
           <div className="wd-status wd-status-success">
             <div className="wd-status-icon">✅</div>
-            <h4>Withdrawal complete</h4>
-            <p>₹{fmt(order.grossAmount)} sent successfully.</p>
+            <h4>{t("withdrawal.successTitle")}</h4>
+            <p>₹{fmt(order.grossAmount)} {t("withdrawal.successSub")}</p>
             {order.txHash && (
               <p className="wd-status-meta">TX: {order.txHash.slice(0, 16)}…</p>
             )}
-            <button className="modal-cta" onClick={onClose}>Done</button>
+            <button className="modal-cta" onClick={onClose}>{t("common.done")}</button>
           </div>
         )}
 
         {step === "failed" && order && (
           <div className="wd-status wd-status-failed">
             <div className="wd-status-icon">⚠</div>
-            <h4>Withdrawal {order.status}</h4>
-            <p>{order.failedReason || "The provider rejected this withdrawal. Your balance has been refunded."}</p>
-            <button className="modal-cta" onClick={onClose}>Close</button>
+            <h4>{t("withdrawal.failedTitle")} {order.status}</h4>
+            <p>{order.failedReason || t("withdrawal.failed.default")}</p>
+            <button className="modal-cta" onClick={onClose}>{t("common.close")}</button>
           </div>
         )}
       </div>
