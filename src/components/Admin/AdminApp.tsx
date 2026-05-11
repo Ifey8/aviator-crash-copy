@@ -368,11 +368,18 @@ interface SettingsData {
   inrRechargeEnabled: number;
   usdtAutoPayoutEnabled: number;
   usdtAutoPayoutMaxInr: number;
+  paymeEnabled: number;
+  paymeApiBase: string;
+  paymeMerchantCode: string;
+  paymeSecretKey: string;
+  paymePayinPayType: string;
+  paymePayoutBankCode: string;
   updatedAt?: string;
   updatedBy?: string;
 }
 
-const SETTINGS_FIELDS: { key: keyof SettingsData; label: string; hint: string; group: string }[] = [
+type SettingsFieldType = "number" | "text" | "secret";
+const SETTINGS_FIELDS: { key: keyof SettingsData; label: string; hint: string; group: string; type?: SettingsFieldType }[] = [
   { group: "Game", key: "maxCrashMultiplier", label: "Max crash multiplier", hint: "Cap on max payout (eg 100 = 100x). Lower = less variance for operator." },
   { group: "Game", key: "houseEdge", label: "House edge", hint: "0.03 = 3%. Higher = better operator margin, lower player RTP." },
   { group: "Game", key: "minBet", label: "Min bet (INR)", hint: "Smallest allowed wager." },
@@ -393,6 +400,13 @@ const SETTINGS_FIELDS: { key: keyof SettingsData; label: string; hint: string; g
   { group: "Recharge", key: "inrRechargeEnabled", label: "INR channel enabled (1=on, 0=off)", hint: "Single switch for BOTH INR top-up AND bank withdrawal. Turn ON only AFTER a real payment provider (Razorpay/Cashfree) is wired in for recharge AND a real payout adapter for bank transfer. While OFF, both routes return 403 and the in-app sheets hide the Bank/INR tabs. USDT recharge + USDT withdrawal unaffected." },
   { group: "Auto-payout", key: "usdtAutoPayoutEnabled", label: "USDT auto-payout (1=on, 0=off)", hint: "When ON: USDT withdrawals under the cap broadcast to TRON automatically (no admin click). Bank withdrawals always manual. Default OFF — opt in when comfortable." },
   { group: "Auto-payout", key: "usdtAutoPayoutMaxInr", label: "Auto-payout cap (INR)", hint: "USDT withdrawals at or above this stay in 'processing' awaiting admin Approve. Below this and auto-on → instant broadcast. Set 2000-5000 for sensible mid-range automation." },
+  // Payme — Indian payment gateway (payin + payout via /api/payin + /api/payout, MD5-signed)
+  { group: "Payme (India gateway)", key: "paymeEnabled", label: "Enabled (1=on, 0=off)", hint: "Master switch for the Payme provider. Must also fill API base + merchant code + secret key below before enabling. Once on, Payme becomes selectable for INR recharge and bank withdrawals (independent of the inrChannelEnabled toggle — that gate still applies)." },
+  { group: "Payme (India gateway)", key: "paymeApiBase", label: "API base URL", hint: "Base URL Payme gave you, e.g. https://api.cowpay.io — used as prefix for /api/payin, /api/payout, /api/payinOrderQuery, /api/payoutOrderQuery, /api/queryBalance. No trailing slash.", type: "text" },
+  { group: "Payme (India gateway)", key: "paymeMerchantCode", label: "Merchant code", hint: "merchant_code field from Payme dashboard. Sent in every signed request body.", type: "text" },
+  { group: "Payme (India gateway)", key: "paymeSecretKey", label: "Secret key (MD5 sign)", hint: "MD5 sign key from Payme dashboard. ⚠ Sensitive — anyone with admin role can read this. The request signing algorithm: sort non-empty fields by ASCII, join key=value with &, append &key=<secret>, MD5 → uppercase hex.", type: "secret" },
+  { group: "Payme (India gateway)", key: "paymePayinPayType", label: "Payin pay_type", hint: "Per Payme India: india-wakeup | india-qr | india-native | india-pwallet. Default india-native — picks the user-friendly hosted payment page.", type: "text" },
+  { group: "Payme (India gateway)", key: "paymePayoutBankCode", label: "Payout bank_code", hint: "india-bank (NEFT to A/C + IFSC) or india-upi (instant to UPI ID). The Aviator WithdrawalSheet asks for bankAccount + IFSC + holderName, which maps to india-bank.", type: "text" },
 ];
 
 const SettingsTab: React.FC = () => {
@@ -438,8 +452,8 @@ const SettingsTab: React.FC = () => {
 
   const groups = Array.from(new Set(SETTINGS_FIELDS.map((f) => f.group)));
 
-  const draftOrCurrent = (k: keyof SettingsData): number =>
-    draft[k] !== undefined ? (draft[k] as number) : (data[k] as number);
+  const draftOrCurrent = (k: keyof SettingsData): number | string =>
+    (draft[k] !== undefined ? draft[k] : data[k]) as number | string;
 
   const dirty = Object.keys(draft).length > 0;
 
@@ -453,20 +467,38 @@ const SettingsTab: React.FC = () => {
         <section key={g} className="admin-settings-group">
           <h3>{g}</h3>
           <div className="admin-settings-grid">
-            {SETTINGS_FIELDS.filter((f) => f.group === g).map((f) => (
-              <label key={f.key} className="admin-settings-field">
-                <span className="admin-settings-label">{f.label}</span>
-                <input
-                  type="number"
-                  step="any"
-                  value={draftOrCurrent(f.key)}
-                  onChange={(e) =>
-                    setDraft((d) => ({ ...d, [f.key]: Number(e.target.value) }))
-                  }
-                />
-                <span className="admin-settings-hint">{f.hint}</span>
-              </label>
-            ))}
+            {SETTINGS_FIELDS.filter((f) => f.group === g).map((f) => {
+              const isText = f.type === "text" || f.type === "secret";
+              const isSecret = f.type === "secret";
+              const v = draftOrCurrent(f.key);
+              return (
+                <label key={f.key} className="admin-settings-field">
+                  <span className="admin-settings-label">{f.label}</span>
+                  {isText ? (
+                    <input
+                      type={isSecret ? "password" : "text"}
+                      autoComplete="off"
+                      spellCheck={false}
+                      value={typeof v === "string" ? v : (v == null ? "" : String(v))}
+                      placeholder={isSecret ? (v ? "•••••••• (saved)" : "(empty)") : ""}
+                      onChange={(e) =>
+                        setDraft((d) => ({ ...d, [f.key]: e.target.value }))
+                      }
+                    />
+                  ) : (
+                    <input
+                      type="number"
+                      step="any"
+                      value={typeof v === "number" ? v : Number(v) || 0}
+                      onChange={(e) =>
+                        setDraft((d) => ({ ...d, [f.key]: Number(e.target.value) }))
+                      }
+                    />
+                  )}
+                  <span className="admin-settings-hint">{f.hint}</span>
+                </label>
+              );
+            })}
           </div>
         </section>
       ))}

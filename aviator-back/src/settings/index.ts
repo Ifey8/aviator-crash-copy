@@ -31,7 +31,13 @@ type SettingsKey =
   | "registerMaxPerIp24h"
   | "inrRechargeEnabled"
   | "usdtAutoPayoutEnabled"
-  | "usdtAutoPayoutMaxInr";
+  | "usdtAutoPayoutMaxInr"
+  | "paymeEnabled"
+  | "paymeApiBase"
+  | "paymeMerchantCode"
+  | "paymeSecretKey"
+  | "paymePayinPayType"
+  | "paymePayoutBankCode";
 
 let cache: SettingsDoc | null = null;
 
@@ -56,6 +62,12 @@ const defaultsFromEnv = (): Omit<SettingsDoc, "_id" | "updatedAt" | "updatedBy">
   inrRechargeEnabled: 0, // OFF — re-enable after a real payment provider is integrated
   usdtAutoPayoutEnabled: 0, // OFF by default — operator must explicitly opt in
   usdtAutoPayoutMaxInr: 2000,
+  paymeEnabled: 0,
+  paymeApiBase: "",
+  paymeMerchantCode: "",
+  paymeSecretKey: "",
+  paymePayinPayType: "india-native",
+  paymePayoutBankCode: "india-bank",
 });
 
 /**

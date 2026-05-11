@@ -22,7 +22,7 @@ adminRouter.get("/settings", async (_req, res) => {
 });
 
 adminRouter.put("/settings", async (req, res) => {
-  const allowed = [
+  const allowedNumbers = [
     "maxCrashMultiplier", "houseEdge", "minBet", "maxBet", "initialBalance",
     "cryptoMinUsdt", "cryptoMaxUsdt", "usdtInrRateFallback",
     "botMinCount", "botMaxCount",
@@ -32,9 +32,14 @@ adminRouter.put("/settings", async (req, res) => {
     "registerMaxPerIp24h",
     "inrRechargeEnabled",
     "usdtAutoPayoutEnabled", "usdtAutoPayoutMaxInr",
+    "paymeEnabled",
   ] as const;
-  const patch: Record<string, number> = {};
-  for (const k of allowed) {
+  const allowedStrings = [
+    "paymeApiBase", "paymeMerchantCode", "paymeSecretKey",
+    "paymePayinPayType", "paymePayoutBankCode",
+  ] as const;
+  const patch: Record<string, number | string> = {};
+  for (const k of allowedNumbers) {
     const v = req.body?.[k];
     if (v !== undefined) {
       const n = Number(v);
@@ -44,21 +49,44 @@ adminRouter.put("/settings", async (req, res) => {
       patch[k] = n;
     }
   }
+  for (const k of allowedStrings) {
+    const v = req.body?.[k];
+    if (v !== undefined) {
+      if (typeof v !== "string") {
+        return res.status(400).json({ status: false, message: `${k} must be a string` });
+      }
+      // Length cap to keep schema sane + prevent abuse via huge writes
+      patch[k] = v.slice(0, 512);
+    }
+  }
   if (Object.keys(patch).length === 0) {
     return res.status(400).json({ status: false, message: "No valid fields in request" });
   }
   // Sanity: minBet <= maxBet, botMinCount <= botMaxCount, cryptoMin <= cryptoMax
-  const merged = { ...getAllSettings(), ...patch };
-  if (merged.minBet > merged.maxBet) {
+  const merged = { ...getAllSettings(), ...patch } as any;
+  if (Number(merged.minBet) > Number(merged.maxBet)) {
     return res.status(400).json({ status: false, message: "minBet > maxBet" });
   }
-  if (merged.botMinCount > merged.botMaxCount) {
+  if (Number(merged.botMinCount) > Number(merged.botMaxCount)) {
     return res.status(400).json({ status: false, message: "botMinCount > botMaxCount" });
   }
-  if (merged.cryptoMinUsdt > merged.cryptoMaxUsdt) {
+  if (Number(merged.cryptoMinUsdt) > Number(merged.cryptoMaxUsdt)) {
     return res.status(400).json({ status: false, message: "cryptoMinUsdt > cryptoMaxUsdt" });
   }
-  const updated = await updateSettings(patch, req.adminUserName);
+  // Payme: if enabling, require base URL + merchant code + secret key
+  if (Number(merged.paymeEnabled) === 1) {
+    const missing: string[] = [];
+    for (const k of ["paymeApiBase", "paymeMerchantCode", "paymeSecretKey"] as const) {
+      if (!String(merged[k] || "").trim()) missing.push(k);
+    }
+    if (missing.length) {
+      return res.status(400).json({
+        status: false,
+        message: `Cannot enable Payme — missing: ${missing.join(", ")}`,
+      });
+    }
+  }
+  const updated = await updateSettings(patch as any, req.adminUserName);
   res.json({ status: true, data: updated });
 });
 

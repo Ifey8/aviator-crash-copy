@@ -343,6 +343,62 @@ withdrawalRouter.get("/orders", requireAuth, async (req: Request, res: Response)
 // ---------------------------------------------------------------------------
 // POST /api/withdrawal/cancel/:orderId — user cancels (only if pending/manual_queue)
 // ---------------------------------------------------------------------------
+/**
+ * POST /api/withdrawal/webhook/:provider — provider callback. PUBLIC (sig-verified).
+ *
+ * Currently only Payme posts to this. The provider's verifyWebhook validates
+ * the MD5 signature; we then atomically flip the matching order's status
+ * processing → paid / failed.
+ *
+ * On failed: refund the totalDebitInr back to the user. On paid: fire the
+ * referral reward (idempotent on providerRef).
+ */
+withdrawalRouter.post("/webhook/:provider", async (req: Request, res: Response) => {
+  const provider = getPayoutProvider(req.params.provider);
+  if (!provider) return res.status(404).json({ status: false, message: "Unknown provider" });
+  const rawBody = JSON.stringify(req.body);
+  const v = provider.verifyWebhook(req.headers as Record<string, unknown>, rawBody);
+  if (!v.ok || !v.providerRef) {
+    return res.status(400).json({ status: false, message: v.failedReason || "verification failed" });
+  }
+
+  const order = await WithdrawalOrderModel.findOne({ providerRef: v.providerRef });
+  if (!order) return res.status(404).json({ status: false, message: "Order not found for providerRef" });
+
+  if (v.status === "paid") {
+    const flipped = await WithdrawalOrderModel.findOneAndUpdate(
+      { providerRef: v.providerRef, status: { $in: ["pending", "processing", "manual_queue"] } },
+      { $set: { status: "paid", paidAt: new Date() } },
+      { new: true },
+    );
+    if (flipped) {
+      // Idempotent reward
+      // eslint-disable-next-line @typescript-eslint/no-var-requires
+      const { triggerReferralReward } = require("../payment/referral");
+      await triggerReferralReward(order.userName, {
+        type: "payout",
+        id: order.providerRef || order.orderId,
+        amountInr: order.method === "bank" ? order.grossAmount : order.grossAmount * (order.fxRate || 1),
+      });
+      pushToUser(order.userName, "withdrawalUpdate", { orderId: order.orderId, status: "paid" });
+      pushUserMyInfo(order.userName);
+    }
+  } else if (v.status === "failed") {
+    const flipped = await WithdrawalOrderModel.findOneAndUpdate(
+      { providerRef: v.providerRef, status: { $in: ["pending", "processing", "manual_queue"] } },
+      { $set: { status: "failed", failedAt: new Date(), failedReason: v.failedReason || "Provider reported failure" } },
+      { new: true },
+    );
+    if (flipped) {
+      await engine.refundWithdrawal(order.userName, order.totalDebitInr);
+      pushToUser(order.userName, "withdrawalUpdate", { orderId: order.orderId, status: "failed", failedReason: flipped.failedReason });
+      pushUserMyInfo(order.userName);
+    }
+  }
+  // Payme expects literal "success" string ack
+  res.type("text").send("success");
+});
+
 withdrawalRouter.post("/cancel/:orderId", requireAuth, async (req: Request, res: Response) => {
   const userName = req.authUserName!;
   const order = await WithdrawalOrderModel.findOne({

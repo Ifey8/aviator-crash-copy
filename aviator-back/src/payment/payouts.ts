@@ -1,18 +1,19 @@
 import { PayoutProvider } from "./payoutTypes";
 import { MockPayoutProvider } from "./providers/mockPayout";
+import { PaymePayoutProvider } from "./providers/paymePayout";
+import { isPaymeAvailable } from "./index";
 
 /**
  * Payout provider registry — mirrors the recharge registry pattern.
  *
- * v1: mock only. To integrate Razorpay Payouts / similar:
- *   1. Create providers/razorpayPayout.ts implementing PayoutProvider
- *   2. Register here when env vars present
- *   3. Set PAYOUT_BANK_PROVIDER env to its name
+ * Always-registered:
+ *   • "mock"  — admin marks orders paid/failed manually
+ *   • "payme" — bank/UPI payout via Payme /api/payout (gated by admin Settings)
  */
 const registry = new Map<string, PayoutProvider>();
 
-// Always register mock for now — admin marks orders paid/failed manually.
 registry.set("mock", new MockPayoutProvider());
+registry.set("payme", new PaymePayoutProvider());
 
 export const getPayoutProvider = (name: string): PayoutProvider | null =>
   registry.get(name) || null;
@@ -21,10 +22,15 @@ export const listPayoutProviders = (): string[] => Array.from(registry.keys());
 
 /**
  * Pick the right provider for a withdrawal method.
- *   bank → process.env.PAYOUT_BANK_PROVIDER || "mock"
- *   usdt → process.env.PAYOUT_USDT_PROVIDER || "mock"
+ *   bank → Payme (if enabled) → env override → "mock"
+ *   usdt → on-chain path handles it (this fn still returns "mock" as
+ *          fallback for the legacy adapter call, but routes/withdrawal.ts
+ *          routes USDT directly to walletOps regardless).
  */
 export const defaultPayoutProvider = (method: "bank" | "usdt"): string => {
-  if (method === "bank") return process.env.PAYOUT_BANK_PROVIDER || "mock";
+  if (method === "bank") {
+    if (isPaymeAvailable()) return "payme";
+    return process.env.PAYOUT_BANK_PROVIDER || "mock";
+  }
   return process.env.PAYOUT_USDT_PROVIDER || "mock";
 };
