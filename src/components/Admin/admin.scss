@@ -331,8 +331,16 @@
   border: 1px solid var(--admin-border);
   border-radius: 12px;
   padding: 22px;
+  padding-bottom: 0;            /* footer provides its own padding so it sits flush */
   min-width: 360px;
   max-width: 480px;
+  /* Long forms (e.g. Edit Payme with credentials + params + fees)
+     previously overflowed the viewport and the Save button became
+     unreachable without zooming out. Cap the height to 90vh and let
+     the modal scroll internally; the actions row below is sticky so
+     it stays visible regardless of scroll position. */
+  max-height: 90vh;
+  overflow-y: auto;
 
   h3 { margin: 0 0 16px; font-size: 16px; }
   label {
@@ -367,6 +375,19 @@
     justify-content: flex-end;
     gap: 8px;
     margin-top: 16px;
+    /* Sticky to the bottom of the scrolling modal so Save / Cancel are
+       always reachable on tall forms (Edit Payme has ~12 fields). The
+       solid background + top border visually separate it from the
+       scrolling content above. */
+    position: sticky;
+    bottom: 0;
+    background: var(--admin-bg-2);
+    border-top: 1px solid var(--admin-border);
+    padding: 12px 0;
+    margin-left: -22px;
+    margin-right: -22px;
+    padding-left: 22px;
+    padding-right: 22px;
     button {
       background: var(--admin-bg-3);
       color: var(--admin-text);
