@@ -812,6 +812,49 @@ const WalletsTab: React.FC = () => {
   const runSweep = () => runSweepCore(undefined, "all");
   const runSweepOne = (address: string) => runSweepCore([address], address);
 
+  // Force-sweep: ignores the "no un-swept orders" gate. Used when on-chain
+  // USDT actually exists on a sub-address but the DB marked it swept
+  // (e.g. earlier sweep saw TronGrid rate-limited 0 and falsely flagged
+  // the order as "no-balance" swept).
+  const forceSweepOne = async (address: string) => {
+    if (!window.confirm(
+      `Force-sweep ${address.slice(0, 12)}…?\n\n` +
+      `This resets any sweptAt marker on the order(s) for this address ` +
+      `then re-runs sweep. Use ONLY when you see on-chain USDT but admin ` +
+      `says "0" / "un-swept = 0".`,
+    )) return;
+    setSweepingTarget(address);
+    try {
+      // Step 1: clear the marker via a tiny admin endpoint
+      await api(`/admin/wallets/reset-sweep-marker`, {
+        method: "POST",
+        body: JSON.stringify({ address }),
+      });
+      // Step 2: re-run sweep for that address
+      const r = await api(`/admin/wallets/sweep`, {
+        method: "POST",
+        body: JSON.stringify({ dryRun: false, addresses: [address] }),
+      });
+      const d = r.data;
+      alert(
+        `Force-sweep result:\n` +
+        `Attempted: ${d.attempted}\n` +
+        `Swept: ${d.swept}\n` +
+        `Total USDT swept: ${d.totalUsdt.toFixed(4)}\n\n` +
+        d.details.map((x: any) =>
+          `${x.address.slice(0, 12)}…  ${x.action}` +
+          (x.txHash ? ` [${x.txHash.slice(0, 10)}…]` : "") +
+          (x.error ? ` ERROR: ${x.error}` : "")
+        ).join("\n"),
+      );
+      load(true);
+    } catch (e) {
+      alert("Force sweep failed: " + (e as Error).message);
+    } finally {
+      setSweepingTarget(null);
+    }
+  };
+
   const dryRunSweep = async () => {
     try {
       const r = await api(`/admin/wallets/sweep`, {
@@ -893,6 +936,13 @@ const WalletsTab: React.FC = () => {
           {deposits.map((w) => {
             const isBusy = sweepingTarget === w.address;
             const hasUnswept = (w.unsweptOrderCount || 0) > 0;
+            // Show "Force" option when there's no un-swept marker in DB
+            // BUT the address has paid orders + some on-chain USDT (rare
+            // case where a buggy earlier sweep falsely marked the order
+            // as no-balance while the chain still holds funds).
+            const showForce = !hasUnswept
+              && (w.paidOrderCount || 0) > 0
+              && w.usdtBalance > 0;
             return (
               <tr key={w.address} className={hasUnswept ? "row-banned" : ""}>
                 <td>{w.index}</td>
@@ -910,6 +960,15 @@ const WalletsTab: React.FC = () => {
                       title="Sweep just this address"
                     >
                       {isBusy ? "Sweeping…" : "Sweep"}
+                    </button>
+                  ) : showForce ? (
+                    <button
+                      onClick={() => forceSweepOne(w.address)}
+                      disabled={!!sweepingTarget}
+                      title="Force sweep — resets DB marker then sweeps"
+                      style={{ background: "rgba(193,34,68,0.18)", color: "#ffb0bc", border: "1px solid rgba(193,34,68,0.4)" }}
+                    >
+                      {isBusy ? "Sweeping…" : "Force"}
                     </button>
                   ) : "—"}
                 </td>

@@ -470,6 +470,32 @@ adminRouter.post("/wallets/transfer-out", async (req, res) => {
 });
 
 /**
+ * POST /admin/wallets/reset-sweep-marker — clear sweptAt / sweptTxHash on
+ * all paid orders for a given depositAddress so a subsequent /sweep can
+ * re-process them. Use when admin sees on-chain USDT but DB believes the
+ * address is already swept (typically caused by an earlier sweep that
+ * misread TronGrid's response as "no balance" and prematurely flagged
+ * the order).
+ */
+adminRouter.post("/wallets/reset-sweep-marker", async (req, res) => {
+  const address: string | undefined = req.body?.address;
+  if (!address || !/^T[1-9A-HJ-NP-Za-km-z]{33}$/.test(address)) {
+    return res.status(400).json({ status: false, message: "address required (TRC20)" });
+  }
+  // Lazy-import to avoid a top-level cycle with the admin router
+  // eslint-disable-next-line @typescript-eslint/no-var-requires
+  const { CryptoOrderModel } = require("../db/models/CryptoOrder");
+  const r = await CryptoOrderModel.updateMany(
+    { depositAddress: address, status: "paid" },
+    { $unset: { sweptAt: "", sweptTxHash: "" } },
+  );
+  res.json({
+    status: true,
+    data: { modified: r.modifiedCount, address },
+  });
+});
+
+/**
  * POST /admin/wallets/sweep — run the sweep operation on paid+un-swept
  * deposit addresses → hot wallet. Optional body.addresses limits scope.
  */
