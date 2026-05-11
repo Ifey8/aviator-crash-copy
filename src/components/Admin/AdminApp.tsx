@@ -1060,13 +1060,32 @@ const BotEditModal: React.FC<{
   onSaved: () => void;
 }> = ({ row, isNew, onClose, onSaved }) => {
   const api = useApi();
-  const [code, setCode] = React.useState(row?.code || "");
-  const [name, setName] = React.useState(row?.name || "");
+  // Sensible defaults for NEW bots so admin only needs to paste a token.
+  // Existing bots: use whatever is stored (empty fields fall through to
+  // backend defaults at runtime).
+  const defaultWebappUrl = (typeof window !== "undefined" && window.location?.origin) || "";
+  const defaultStartMessage = "Welcome to Aviator Crash! Tap below to launch the game.";
+  const defaultStartButton = "🛩️ Play Aviator";
+  // Pseudo-random short code for new bots. Random suffix so we don't
+  // collide with an existing "backup-1" — admin can edit if they prefer.
+  const defaultCode = React.useMemo(
+    () => `backup-${Math.random().toString(36).slice(2, 6)}`,
+    [],
+  );
+
+  const [code, setCode] = React.useState(row?.code || (isNew ? defaultCode : ""));
+  const [name, setName] = React.useState(row?.name || (isNew ? "Aviator Bot" : ""));
   const [token, setToken] = React.useState("");          // never pre-fill (masked)
-  const [webappUrl, setWebappUrl] = React.useState(row?.webappUrl || "");
-  const [startMessage, setStartMessage] = React.useState(row?.startMessage || "");
-  const [startButtonLabel, setStartButtonLabel] = React.useState(row?.startButtonLabel || "");
-  const [enabled, setEnabled] = React.useState(row?.enabled ?? false);
+  const [webappUrl, setWebappUrl] = React.useState(
+    row?.webappUrl || (isNew ? defaultWebappUrl : ""),
+  );
+  const [startMessage, setStartMessage] = React.useState(
+    row?.startMessage || (isNew ? defaultStartMessage : ""),
+  );
+  const [startButtonLabel, setStartButtonLabel] = React.useState(
+    row?.startButtonLabel || (isNew ? defaultStartButton : ""),
+  );
+  const [enabled, setEnabled] = React.useState(row?.enabled ?? (isNew ? true : false));
   const [busy, setBusy] = React.useState(false);
   const [err, setErr] = React.useState<string | null>(null);
 
