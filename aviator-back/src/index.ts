@@ -16,6 +16,7 @@ import { startTronWatcher } from "./payment/providers/tron";
 import { startTelegramBot } from "./bot/telegram";
 import { loadSettings } from "./settings";
 import { migratePaymeSettingsToChannel } from "./payment/migrate";
+import { startOrderWatcher } from "./payment/orderWatcher";
 
 const app = express();
 // Trust proxy so req.ip reflects the real client behind nginx (X-Forwarded-For).
@@ -55,6 +56,7 @@ const main = async () => {
   await engine.start();
   await startTelegramBot();
   startTronWatcher();
+  startOrderWatcher();
   server.listen(config.port, () => {
     console.log(`[api] listening on :${config.port}`);
     console.log(

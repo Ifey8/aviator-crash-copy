@@ -228,7 +228,9 @@ rechargeRouter.post("/cancel/:orderId", requireAuth, async (req: Request, res: R
 // IDEMPOTENT — only applies if order was pending.
 // Called from both webhook and dev mock-pay endpoints.
 // ---------------------------------------------------------------------------
-const markPaidAndCredit = async (
+// Exported so orderWatcher can reuse the same idempotent credit logic
+// when it polls /api/payinOrderQuery and finds an order is paid.
+export const markPaidAndCredit = async (
   providerRef: string,
   raw: unknown,
 ): Promise<{ ok: boolean; reason?: string; order?: InstanceType<typeof RechargeOrderModel> }> => {

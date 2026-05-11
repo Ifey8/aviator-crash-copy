@@ -15,6 +15,7 @@ import { PaymentChannelModel } from "../db/models/PaymentChannel";
 import { WebhookLogModel } from "../db/models/WebhookLog";
 import { listProviderTypes, getProviderType } from "../payment/catalog";
 import { invalidateChannelCache, listChannelsAdmin, getChannelByCode } from "../payment/channels";
+import { pollOneOrderNow } from "../payment/orderWatcher";
 
 export const adminRouter = Router();
 adminRouter.use(requireAdmin);
@@ -698,6 +699,26 @@ adminRouter.get("/webhook-logs", async (req, res) => {
     .lean();
   const total = await WebhookLogModel.countDocuments(filter);
   res.json({ status: true, total, items });
+});
+
+/**
+ * POST /admin/orders/poll — force a backstop query of a single order now.
+ * Body: { direction: "payin" | "payout", orderId: "..." }
+ * Useful when an operator wants to manually re-check an order that may
+ * have missed its webhook. orderWatcher does this automatically on the
+ * tiered schedule — this endpoint just bypasses the schedule.
+ */
+adminRouter.post("/orders/poll", async (req, res) => {
+  const direction = req.body?.direction;
+  const orderId = req.body?.orderId;
+  if (direction !== "payin" && direction !== "payout") {
+    return res.status(400).json({ status: false, message: "direction must be payin or payout" });
+  }
+  if (!orderId || typeof orderId !== "string") {
+    return res.status(400).json({ status: false, message: "orderId required" });
+  }
+  const r = await pollOneOrderNow(direction, orderId);
+  res.json({ status: r.ok, data: r });
 });
 
 // ---------- Hot wallet status (USDT liquidity gauge) ----------

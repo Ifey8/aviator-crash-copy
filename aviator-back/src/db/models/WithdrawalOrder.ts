@@ -67,6 +67,9 @@ export interface WithdrawalOrderDoc {
 
   meta?: Record<string, unknown>;
 
+  /** orderWatcher last polled the provider for this order's status. */
+  lastPolledAt?: Date;
+
   createdAt: Date;
   paidAt?: Date;
   failedAt?: Date;
@@ -103,6 +106,8 @@ const WithdrawalOrderSchema = new Schema<WithdrawalOrderDoc>({
   balanceAfter: { type: Number },
 
   meta: { type: Schema.Types.Mixed },
+
+  lastPolledAt: { type: Date },
 
   createdAt: { type: Date, default: Date.now, index: true },
   paidAt: { type: Date },

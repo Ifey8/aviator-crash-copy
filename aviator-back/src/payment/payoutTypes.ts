@@ -39,12 +39,25 @@ export interface PayoutWebhookResult {
   raw?: unknown;
 }
 
+export interface PayoutQueryInput {
+  orderId: string;
+  providerRef?: string;
+}
+export interface PayoutQueryResult {
+  status: "paid" | "failed" | "pending" | "unknown";
+  providerRef?: string;
+  failedReason?: string;
+  raw?: unknown;
+}
+
 export interface PayoutProvider {
   readonly name: string;
   /** Create an outbound payout. May or may not complete synchronously. */
   createPayout(input: PayoutCreateInput): Promise<PayoutCreateResult>;
   /** Verify & parse a webhook callback. Some providers don't have one — return ok:false. */
   verifyWebhook(headers: Record<string, unknown>, rawBody: string): PayoutWebhookResult;
+  /** Backstop poll: ask the gateway what state the payout order is in. */
+  queryPayoutStatus?(input: PayoutQueryInput): Promise<PayoutQueryResult>;
 }
 
 /** Helper used by admin force-paid: refund-on-fail logic lives in routes. */

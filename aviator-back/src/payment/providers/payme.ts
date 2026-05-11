@@ -3,6 +3,8 @@ import {
   CreateOrderInput,
   CreateOrderResult,
   WebhookVerifyResult,
+  QueryOrderStatusInput,
+  QueryOrderStatusResult,
 } from "../types";
 import { ChannelConfig } from "../catalog";
 import { paymeSignedBody, paymeVerifyWebhook } from "./paymeSign";
@@ -124,4 +126,48 @@ export class PaymeProvider implements PaymentProvider {
       failedReason: status === "failed" ? String(td.message || "Provider reported failure") : undefined,
     };
   }
+
+  /**
+   * Backstop poll. POSTs /api/payinOrderQuery with the merchant order_no.
+   * Returns "pending" / "paid" / "failed" / "unknown". The orderWatcher
+   * uses this when a webhook hasn't arrived within the polling interval.
+   */
+  async queryOrderStatus(input: QueryOrderStatusInput): Promise<QueryOrderStatusResult> {
+    let creds;
+    try {
+      creds = this.getCreds();
+    } catch (e) {
+      return { status: "unknown", failedReason: (e as Error).message };
+    }
+    const country = String(this.cfg.params?.country || "IN").trim().toUpperCase();
+    const body = paymeSignedBody({
+      merchant_code: creds.merchantCode,
+      country_code: country,
+      order_no: input.orderId,
+    }, creds.secretKey);
+    let json: Record<string, unknown>;
+    try {
+      const res = await fetch(`${creds.apiBase}/api/payinOrderQuery`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+        signal: AbortSignal.timeout(10_000),
+      });
+      json = (await res.json()) as Record<string, unknown>;
+    } catch (e) {
+      return { status: "unknown", failedReason: `Network: ${(e as Error).message}` };
+    }
+    const ok = json.status === true && (json.code === "0" || json.code === 0);
+    if (!ok) {
+      // Provider says order doesn't exist → treat as unknown (we'll retry)
+      return { status: "unknown", failedReason: String(json.message || json.code || "query failed"), raw: json };
+    }
+    const orderStatus = String(json.order_status || "");
+    const providerRef = String(json.plat_order_no || "") || undefined;
+    if (orderStatus === "success") return { status: "paid", providerRef, raw: json };
+    if (orderStatus === "failed") return { status: "failed", providerRef, raw: json, failedReason: String(json.message || "Failed") };
+    if (orderStatus === "paying") return { status: "pending", providerRef, raw: json };
+    return { status: "unknown", providerRef, raw: json };
+  }
 }
+

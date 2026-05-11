@@ -3,6 +3,8 @@ import {
   PayoutCreateInput,
   PayoutCreateResult,
   PayoutWebhookResult,
+  PayoutQueryInput,
+  PayoutQueryResult,
 } from "../payoutTypes";
 import { ChannelConfig } from "../catalog";
 import { paymeSignedBody, paymeVerifyWebhook } from "./paymeSign";
@@ -130,6 +132,39 @@ export class PaymePayoutProvider implements PayoutProvider {
       };
     }
     return { ok: false, providerRef, failedReason: `Non-final status: ${orderStatus}`, raw: td };
+  }
+
+  /** Backstop: POST /api/payoutOrderQuery to find current state. */
+  async queryPayoutStatus(input: PayoutQueryInput): Promise<PayoutQueryResult> {
+    let creds;
+    try { creds = this.getCreds(); }
+    catch (e) { return { status: "unknown", failedReason: (e as Error).message }; }
+    const country = String(this.cfg.params?.country || "IN").trim().toUpperCase();
+    const body = paymeSignedBody({
+      merchant_code: creds.merchantCode,
+      country_code: country,
+      order_no: input.orderId,
+    }, creds.secretKey);
+    let json: Record<string, unknown>;
+    try {
+      const res = await fetch(`${creds.apiBase}/api/payoutOrderQuery`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+        signal: AbortSignal.timeout(10_000),
+      });
+      json = (await res.json()) as Record<string, unknown>;
+    } catch (e) {
+      return { status: "unknown", failedReason: `Network: ${(e as Error).message}` };
+    }
+    const ok = json.status === true && (json.code === "0" || json.code === 0);
+    if (!ok) return { status: "unknown", failedReason: String(json.message || "query failed"), raw: json };
+    const orderStatus = String(json.order_status || "");
+    const providerRef = String(json.plat_order_no || "") || undefined;
+    if (orderStatus === "success") return { status: "paid", providerRef, raw: json };
+    if (orderStatus === "failed") return { status: "failed", providerRef, raw: json, failedReason: String(json.message || "Failed") };
+    if (orderStatus === "payouting") return { status: "pending", providerRef, raw: json };
+    return { status: "unknown", providerRef, raw: json };
   }
 }
 

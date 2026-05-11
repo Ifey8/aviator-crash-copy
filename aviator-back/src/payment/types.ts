@@ -45,6 +45,24 @@ export interface WebhookVerifyResult {
   raw?: unknown;
 }
 
+/**
+ * Backstop poll: ask the upstream gateway what state THEIR copy of the
+ * order is in. Used by the orderWatcher to catch missed webhooks.
+ * Returns `unknown` to mean "can't determine; try again later". Providers
+ * that don't support polling can omit this method.
+ */
+export interface QueryOrderStatusInput {
+  orderId: string;        // our internal merchant order_no
+  providerRef?: string;   // gateway's plat_order_no if we have it
+}
+export interface QueryOrderStatusResult {
+  /** "paid" / "failed" terminal; "pending" still in flight; "unknown" couldn't tell. */
+  status: "paid" | "failed" | "pending" | "unknown";
+  providerRef?: string;
+  failedReason?: string;
+  raw?: unknown;
+}
+
 export interface PaymentProvider {
   readonly name: string;
   /** True iff this provider is safe to expose in production. */
@@ -57,4 +75,6 @@ export interface PaymentProvider {
    */
   verifyWebhook(headers: Record<string, string | string[] | undefined>, rawBody: string):
     WebhookVerifyResult;
+  /** Backstop poll. Optional — orderWatcher skips providers that don't expose it. */
+  queryOrderStatus?(input: QueryOrderStatusInput): Promise<QueryOrderStatusResult>;
 }

@@ -36,6 +36,8 @@ export interface RechargeOrderDoc extends Document {
   balanceAfter?: number;
   // Free-form provider response (raw webhook payload, signature, etc).
   meta?: Record<string, unknown>;
+  /** orderWatcher last polled the provider for this order's status. */
+  lastPolledAt?: Date;
 }
 
 const RechargeOrderSchema = new Schema<RechargeOrderDoc>({
@@ -59,6 +61,7 @@ const RechargeOrderSchema = new Schema<RechargeOrderDoc>({
   failedReason: { type: String },
   balanceAfter: { type: Number },
   meta: { type: Schema.Types.Mixed },
+  lastPolledAt: { type: Date },
 });
 
 export const RechargeOrderModel = model<RechargeOrderDoc>(
