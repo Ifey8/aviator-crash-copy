@@ -370,16 +370,30 @@ export const Provider = ({ children }: any) => {
           // satisfied (server sends pre-settle state where betted=true) so
           // it never fired. Doing it here, on the BET-phase tick, is
           // simple and reliable.
-          for (const side of ["f", "s"] as const) {
-            const info = prev[side];
-            if (info.auto && info.betAmount > 0 && info.target > 1) {
-              if (next.balance >= info.betAmount) {
-                socket.emit("playBet", {
-                  betAmount: info.betAmount,
-                  target: info.target,
-                  type: side,
-                  auto: true,
-                });
+          //
+          // SAFETY: pause auto when the page is hidden (phone screen off,
+          // tab backgrounded, Telegram WebApp minimised). Even if the
+          // socket survives, the user can't see / cancel what's happening,
+          // so we MUST NOT fire bets on their behalf in that state.
+          // Auto resumes automatically the next BET phase after the user
+          // brings the page back to foreground (next gameState event with
+          // visibilityState === 'visible').
+          const pageVisible =
+            typeof document === "undefined" ||
+            document.visibilityState !== "hidden";
+
+          if (pageVisible) {
+            for (const side of ["f", "s"] as const) {
+              const info = prev[side];
+              if (info.auto && info.betAmount > 0 && info.target > 1) {
+                if (next.balance >= info.betAmount) {
+                  socket.emit("playBet", {
+                    betAmount: info.betAmount,
+                    target: info.target,
+                    type: side,
+                    auto: true,
+                  });
+                }
               }
             }
           }
