@@ -722,12 +722,17 @@ interface WalletEntry {
   role: "hot" | "deposit";
   index: number;
   address: string;
-  trxBalance: number;
-  usdtBalance: number;
+  /** null when the backend's chain RPC call failed — show as "⚠ ?" not "0" */
+  trxBalance: number | null;
+  usdtBalance: number | null;
   paidOrderCount?: number;
   unsweptOrderCount?: number;
   totalUsdtClaimed?: number;
 }
+
+/** Render a balance: number → fixed-decimal string; null → ⚠ ? */
+const fmtBal = (v: number | null, decimals = 4): string =>
+  v == null ? "⚠ ?" : v.toFixed(decimals);
 
 interface WalletsListData {
   network: string;
@@ -927,8 +932,8 @@ const WalletsTab: React.FC = () => {
         <thead>
           <tr>
             <th>Index</th><th>Address</th>
-            <th>USDT</th><th>TRX</th>
-            <th>Paid</th><th>Un-swept</th><th>Total claimed</th>
+            <th className="num">USDT</th><th className="num">TRX</th>
+            <th className="num">Paid</th><th className="num">Un-swept</th><th className="num">Total claimed</th>
             <th>Action</th>
           </tr>
         </thead>
@@ -942,13 +947,13 @@ const WalletsTab: React.FC = () => {
             // as no-balance while the chain still holds funds).
             const showForce = !hasUnswept
               && (w.paidOrderCount || 0) > 0
-              && w.usdtBalance > 0;
+              && (w.usdtBalance || 0) > 0;
             return (
               <tr key={w.address} className={hasUnswept ? "row-banned" : ""}>
                 <td>{w.index}</td>
                 <td className="seed">{w.address}</td>
-                <td className="num">{w.usdtBalance.toFixed(4)}</td>
-                <td className="num">{w.trxBalance.toFixed(4)}</td>
+                <td className="num" title={w.usdtBalance == null ? "On-chain balance fetch failed — retry via ↻ Refresh" : ""}>{fmtBal(w.usdtBalance)}</td>
+                <td className="num" title={w.trxBalance == null ? "On-chain balance fetch failed — retry via ↻ Refresh" : ""}>{fmtBal(w.trxBalance)}</td>
                 <td className="num">{w.paidOrderCount}</td>
                 <td className="num">{w.unsweptOrderCount}</td>
                 <td className="num">{w.totalUsdtClaimed?.toFixed(2)}</td>
@@ -1052,9 +1057,9 @@ const HotWalletCard: React.FC<{ hot: WalletEntry }> = ({ hot }) => {
             <button onClick={() => setQrOpen(true)}>QR</button>
           </div>
           <div style={{ fontSize: 12, marginTop: 8 }}>
-            <strong style={{ color: "#ffc857" }}>{hot.usdtBalance.toFixed(4)} USDT</strong>
+            <strong style={{ color: "#ffc857" }}>{fmtBal(hot.usdtBalance)} USDT</strong>
             {" · "}
-            <strong>{hot.trxBalance.toFixed(4)} TRX</strong>
+            <strong>{fmtBal(hot.trxBalance)} TRX</strong>
           </div>
           <div style={{ fontSize: 10.5, opacity: 0.55, marginTop: 4 }}>
             Network: TRC20 · Send TRX or USDT (TRC20) only — never ERC20/BEP20

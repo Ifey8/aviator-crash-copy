@@ -255,6 +255,7 @@
     text-transform: uppercase;
     color: var(--admin-muted);
     border-bottom: 1px solid var(--admin-border);
+    &.num { text-align: right; font-variant-numeric: tabular-nums; }
   }
   tbody td {
     padding: 8px 12px;

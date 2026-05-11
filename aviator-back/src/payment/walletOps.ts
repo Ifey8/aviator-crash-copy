@@ -47,8 +47,9 @@ export interface WalletEntry {
   role: "hot" | "deposit";
   index: number;
   address: string;
-  trxBalance: number;
-  usdtBalance: number;
+  /** null = balance fetch failed (rate limit / network). UI shows ⚠. */
+  trxBalance: number | null;
+  usdtBalance: number | null;
   /** for deposit addresses only — paid orders bound to this address */
   paidOrderCount?: number;
   unsweptOrderCount?: number;
@@ -74,26 +75,43 @@ export interface WalletsListResult {
 const CACHE_TTL_MS = 30_000;
 let cached: { at: number; result: WalletsListResult } | null = null;
 
+// Retry helper — TronGrid free tier rate-limits + occasional 5xx, but
+// usually clears within a few hundred ms. Three attempts with linear
+// backoff covers >99% of transient failures without making the UI wait
+// more than a couple seconds. Throws after the final attempt — callers
+// MUST handle the throw rather than papering over with `return 0`,
+// because a silent 0 looks identical to "really has no balance" and
+// caused the worst class of bug we've hit (sweep marked address as
+// no-balance + flagged orders swept, while chain still held the funds).
+const withRetry = async <T>(fn: () => Promise<T>, label: string): Promise<T> => {
+  let lastErr: unknown;
+  for (let i = 0; i < 3; i++) {
+    try {
+      return await fn();
+    } catch (e) {
+      lastErr = e;
+      if (i < 2) await new Promise((r) => setTimeout(r, 400 + i * 600));
+    }
+  }
+  throw new Error(`[${label}] all 3 attempts failed: ${(lastErr as Error)?.message || lastErr}`);
+};
+
 const fetchTrxBalance = async (address: string): Promise<number> => {
-  try {
+  return withRetry(async () => {
     const tron = buildClient();
     const sun = await tron.trx.getBalance(address);
     return Number(sun) / 1e6;
-  } catch {
-    return 0;
-  }
+  }, `trxBalance ${address.slice(0, 8)}`);
 };
 
 const fetchUsdtBalance = async (address: string): Promise<number> => {
   if (!config.tronContract) return 0;
-  try {
+  return withRetry(async () => {
     const tron = buildClient();
     const c = await tron.contract().at(config.tronContract);
     const raw: bigint = await c.balanceOf(address).call();
     return Number(raw) / 1e6;
-  } catch {
-    return 0;
-  }
+  }, `usdtBalance ${address.slice(0, 8)}`);
 };
 
 export const listWallets = async (useCache = true): Promise<WalletsListResult> => {
@@ -160,17 +178,26 @@ export const listWallets = async (useCache = true): Promise<WalletsListResult> =
   // × 2 calls = ~100 requests; with API key + 30s cache this is fine.
   const wallets: WalletEntry[] = [];
 
-  // Hot first
+  // Hot first — wrapped so a single chain hiccup doesn't render the
+  // whole tab empty. Failed cells will surface as null balances which
+  // the UI renders as "⚠ ?" so the operator knows the data is stale.
+  const safe = async (fn: () => Promise<number>): Promise<number | null> => {
+    try { return await fn(); } catch (e) {
+      console.warn("[wallets] balance fetch failed:", (e as Error).message);
+      return null;
+    }
+  };
+
   const [hotTrx, hotUsdt] = await Promise.all([
-    fetchTrxBalance(hot.address),
-    fetchUsdtBalance(hot.address),
+    safe(() => fetchTrxBalance(hot.address)),
+    safe(() => fetchUsdtBalance(hot.address)),
   ]);
   wallets.push({
     role: "hot",
     index: hot.index,
     address: hot.address,
-    trxBalance: +hotTrx.toFixed(4),
-    usdtBalance: +hotUsdt.toFixed(4),
+    trxBalance: hotTrx == null ? null : +hotTrx.toFixed(4),
+    usdtBalance: hotUsdt == null ? null : +hotUsdt.toFixed(4),
   });
 
   let depositTrx = 0;
@@ -178,17 +205,17 @@ export const listWallets = async (useCache = true): Promise<WalletsListResult> =
   let unsweptOrders = 0;
 
   for (const row of derivedRows) {
-    const trxBal = await fetchTrxBalance(row._id);
-    const usdtBal = await fetchUsdtBalance(row._id);
-    depositTrx += trxBal;
-    depositUsdt += usdtBal;
+    const trxBal = await safe(() => fetchTrxBalance(row._id));
+    const usdtBal = await safe(() => fetchUsdtBalance(row._id));
+    if (trxBal != null) depositTrx += trxBal;
+    if (usdtBal != null) depositUsdt += usdtBal;
     unsweptOrders += row.unsweptOrderCount;
     wallets.push({
       role: "deposit",
       index: row.derivIndex,
       address: row._id,
-      trxBalance: +trxBal.toFixed(4),
-      usdtBalance: +usdtBal.toFixed(4),
+      trxBalance: trxBal == null ? null : +trxBal.toFixed(4),
+      usdtBalance: usdtBal == null ? null : +usdtBal.toFixed(4),
       paidOrderCount: row.paidOrderCount,
       unsweptOrderCount: row.unsweptOrderCount,
       totalUsdtClaimed: +row.totalUsdtClaimed.toFixed(4),
@@ -201,8 +228,10 @@ export const listWallets = async (useCache = true): Promise<WalletsListResult> =
     fetchedAt: new Date(),
     wallets,
     totals: {
-      hotTrx: +hotTrx.toFixed(4),
-      hotUsdt: +hotUsdt.toFixed(4),
+      // Null balances treated as 0 in the totals card — individual row
+      // displays "⚠ ?" so operator can pinpoint which address failed.
+      hotTrx: hotTrx == null ? 0 : +hotTrx.toFixed(4),
+      hotUsdt: hotUsdt == null ? 0 : +hotUsdt.toFixed(4),
       depositTrx: +depositTrx.toFixed(4),
       depositUsdt: +depositUsdt.toFixed(4),
       unsweptOrders,
@@ -409,9 +438,45 @@ export const sweepAddresses = async (input: { addresses?: string[]; dryRun?: boo
 
     const subClient = buildClient(acct.privateKey);
     const usdtContract = await subClient.contract().at(config.tronContract);
-    const balRaw: bigint = await usdtContract.balanceOf(acct.address).call();
-    const onChainUsdt = Number(balRaw) / 1e6;
-    const onChainTrx = (await subClient.trx.getBalance(acct.address)) / 1e6;
+
+    // Read balance with retry. A bare balanceOf() can return 0 on rate
+    // limit / network glitch, which would falsely trigger the
+    // "no-balance" path and lock the funds out of admin view. Use
+    // withRetry so we're certain before marking the order swept.
+    let onChainUsdt = 0;
+    let onChainTrx = 0;
+    let balRaw: bigint = 0n;
+    let balanceCheckFailed = false;
+    try {
+      balRaw = await withRetry<bigint>(
+        () => usdtContract.balanceOf(acct.address).call(),
+        `sweep.balanceOf ${acct.address.slice(0, 8)}`,
+      );
+      onChainUsdt = Number(balRaw) / 1e6;
+      const trxSun = await withRetry<number>(
+        () => subClient.trx.getBalance(acct.address),
+        `sweep.trxBalance ${acct.address.slice(0, 8)}`,
+      );
+      onChainTrx = Number(trxSun) / 1e6;
+    } catch (e) {
+      balanceCheckFailed = true;
+      console.error(`[sweep] balance check failed for ${acct.address}:`, (e as Error).message);
+    }
+
+    // Refuse to mark "no-balance" if we couldn't actually read the chain.
+    // Better to fail loudly than silently flag the order as swept.
+    if (balanceCheckFailed) {
+      result.details.push({
+        address: acct.address,
+        derivIndex: acct.index,
+        onChainUsdt: 0,
+        onChainTrx: 0,
+        orderIds: grp.orderIds,
+        action: "error",
+        error: "Could not read balance after 3 retries — chain RPC unreachable. Order NOT marked swept.",
+      });
+      continue;
+    }
 
     if (onChainUsdt <= 0) {
       result.details.push({
