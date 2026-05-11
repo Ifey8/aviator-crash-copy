@@ -62,7 +62,7 @@ export const authWithTelegram = async (
   initData: string,
   attribution?: { sid?: string; referrer?: string },
 ): Promise<AuthResult | null> => {
-  const v = validateInitData(initData);
+  const v = await validateInitData(initData);
   if (!v.ok) return null;
   const tg = v.user;
   const baseName = tg.username || tg.first_name || `tg${tg.id}`;

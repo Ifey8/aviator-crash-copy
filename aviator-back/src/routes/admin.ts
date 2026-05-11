@@ -18,6 +18,8 @@ import { invalidateChannelCache, listChannelsAdmin, getChannelByCode } from "../
 import { pollOneOrderNow } from "../payment/orderWatcher";
 import { ChannelLedgerModel, computeChannelBalance } from "../db/models/ChannelLedger";
 import { recordManualAdjustment, recordPayout, resolveChannelCodeForOrder } from "../payment/ledger";
+import { TelegramBotModel } from "../db/models/TelegramBot";
+import { reloadBot } from "../bot/telegram";
 
 export const adminRouter = Router();
 adminRouter.use(requireAdmin);
@@ -461,6 +463,88 @@ adminRouter.post("/withdrawals/:orderId/approve-review", async (req, res) => {
   });
 
   res.json({ status: true, data: withdrawalForAdmin(flipped) });
+});
+
+// ============================================================
+// Telegram Bots
+// ============================================================
+
+const maskToken = (t: string): string => {
+  if (!t) return "";
+  if (t.length <= 12) return "••••";
+  // BOTID:••••XXXX — keep the bot_id prefix (everything before :) visible
+  // since it's public; only mask the secret half. Last 4 chars revealed
+  // for verification.
+  const i = t.indexOf(":");
+  if (i < 0) return "••••" + t.slice(-4);
+  return t.slice(0, i + 1) + "••••" + t.slice(-4);
+};
+
+adminRouter.get("/telegram-bots", async (_req, res) => {
+  const docs = await TelegramBotModel.find().sort({ createdAt: 1 }).lean();
+  res.json({
+    status: true,
+    data: docs.map((d) => ({
+      code: d.code,
+      name: d.name,
+      username: d.username,
+      tokenMasked: maskToken(d.token),
+      webappUrl: d.webappUrl,
+      enabled: d.enabled,
+      createdAt: d.createdAt,
+      updatedAt: d.updatedAt,
+    })),
+  });
+});
+
+adminRouter.post("/telegram-bots", async (req, res) => {
+  const { code, name, token, webappUrl, enabled } = req.body || {};
+  if (!code || !/^[a-z0-9_-]{2,32}$/i.test(code)) {
+    return res.status(400).json({ status: false, message: "code: 2-32 alphanumeric/_/- required" });
+  }
+  if (!name) return res.status(400).json({ status: false, message: "name required" });
+  if (!token || !/^\d+:[A-Za-z0-9_-]{20,}$/.test(token)) {
+    return res.status(400).json({ status: false, message: "token must look like 1234567890:ABC... per BotFather" });
+  }
+  const dup = await TelegramBotModel.findOne({ code });
+  if (dup) return res.status(409).json({ status: false, message: `Bot with code "${code}" exists` });
+  const doc = await TelegramBotModel.create({
+    code,
+    name,
+    token: token.trim(),
+    webappUrl: String(webappUrl || "").trim() || undefined,
+    enabled: !!enabled,
+  });
+  if (doc.enabled) await reloadBot(doc.code);
+  res.json({ status: true, data: { code: doc.code } });
+});
+
+adminRouter.patch("/telegram-bots/:code", async (req, res) => {
+  const doc = await TelegramBotModel.findOne({ code: req.params.code });
+  if (!doc) return res.status(404).json({ status: false, message: "Bot not found" });
+  const { name, token, webappUrl, enabled } = req.body || {};
+  if (typeof name === "string") doc.name = name;
+  if (typeof token === "string" && token.trim()) {
+    // ignore masked placeholder (•••• in the middle)
+    if (!/^[•\*]/.test(token) && !token.includes("••••")) {
+      if (!/^\d+:[A-Za-z0-9_-]{20,}$/.test(token.trim())) {
+        return res.status(400).json({ status: false, message: "invalid token shape" });
+      }
+      doc.token = token.trim();
+    }
+  }
+  if (typeof webappUrl === "string") doc.webappUrl = webappUrl.trim();
+  if (typeof enabled === "boolean") doc.enabled = enabled;
+  doc.updatedAt = new Date();
+  await doc.save();
+  await reloadBot(doc.code);
+  res.json({ status: true, data: { code: doc.code } });
+});
+
+adminRouter.delete("/telegram-bots/:code", async (req, res) => {
+  const r = await TelegramBotModel.deleteOne({ code: req.params.code });
+  await reloadBot(req.params.code); // will just stop, since doc gone
+  res.json({ status: true, data: { deleted: r.deletedCount } });
 });
 
 // ============================================================

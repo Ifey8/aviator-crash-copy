@@ -6,7 +6,7 @@ import "./admin.scss";
 
 const apiBase = config.api.replace(/\/api$/, "/api");
 
-type Tab = "stats" | "users" | "rounds" | "withdrawals" | "wallets" | "channels" | "webhooks" | "settings";
+type Tab = "stats" | "users" | "rounds" | "withdrawals" | "wallets" | "channels" | "bots" | "webhooks" | "settings";
 
 interface Stats {
   engine: { phase: string; multiplier: number; players: number; historyLen: number };
@@ -75,6 +75,7 @@ export const AdminApp: React.FC = () => {
           <button className={tab === "withdrawals" ? "active" : ""} onClick={() => setTab("withdrawals")}>Withdrawals</button>
           <button className={tab === "wallets" ? "active" : ""} onClick={() => setTab("wallets")}>Wallets</button>
           <button className={tab === "channels" ? "active" : ""} onClick={() => setTab("channels")}>Channels</button>
+          <button className={tab === "bots" ? "active" : ""} onClick={() => setTab("bots")}>Bots</button>
           <button className={tab === "webhooks" ? "active" : ""} onClick={() => setTab("webhooks")}>Webhooks</button>
           <button className={tab === "settings" ? "active" : ""} onClick={() => setTab("settings")}>Settings</button>
         </nav>
@@ -91,6 +92,7 @@ export const AdminApp: React.FC = () => {
         {tab === "withdrawals" && <WithdrawalsTab />}
         {tab === "wallets" && <WalletsTab />}
         {tab === "channels" && <ChannelsTab />}
+        {tab === "bots" && <BotsTab />}
         {tab === "webhooks" && <WebhooksTab />}
         {tab === "settings" && <SettingsTab />}
       </main>
@@ -937,6 +939,193 @@ const ChannelAdjustModal: React.FC<{
           <button className="primary" onClick={submit} disabled={!valid || busy}>
             {busy ? "Saving…" : `Record ${direction}`}
           </button>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+// ================================ Telegram Bots ================================
+
+interface BotRow {
+  code: string;
+  name: string;
+  username?: string;
+  tokenMasked: string;
+  webappUrl: string;
+  enabled: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
+const BotsTab: React.FC = () => {
+  const api = useApi();
+  const [rows, setRows] = React.useState<BotRow[]>([]);
+  const [error, setError] = React.useState<string | null>(null);
+  const [editing, setEditing] = React.useState<{ row?: BotRow; isNew?: boolean } | null>(null);
+
+  const load = React.useCallback(async () => {
+    try {
+      const r = await api("/admin/telegram-bots");
+      setRows(r.data || []);
+      setError(null);
+    } catch (e) { setError((e as Error).message); }
+  }, [api]);
+
+  React.useEffect(() => { load(); }, [load]);
+
+  const onToggle = async (row: BotRow) => {
+    try {
+      await api(`/admin/telegram-bots/${row.code}`, {
+        method: "PATCH",
+        body: JSON.stringify({ enabled: !row.enabled }),
+      });
+      load();
+    } catch (e) { alert((e as Error).message); }
+  };
+
+  const onDelete = async (code: string) => {
+    if (!window.confirm(`Delete bot "${code}"? Players who joined via this bot will fail re-auth.`)) return;
+    try { await api(`/admin/telegram-bots/${code}`, { method: "DELETE" }); load(); }
+    catch (e) { alert((e as Error).message); }
+  };
+
+  return (
+    <div className="admin-bots">
+      <div style={{ display: "flex", gap: 8, alignItems: "center", marginBottom: 12 }}>
+        <h3 style={{ margin: 0, fontSize: 14 }}>Telegram bots ({rows.length})</h3>
+        <button onClick={load}>↻ Refresh</button>
+        <button className="primary" style={{ marginLeft: "auto" }} onClick={() => setEditing({ isNew: true })}>
+          + Add bot
+        </button>
+      </div>
+
+      {error && <div className="admin-error">⚠ {error}</div>}
+
+      <p style={{ fontSize: 11, opacity: 0.7, marginTop: -4, marginBottom: 12 }}>
+        Register multiple bots so a Telegram ban on one doesn't kill the funnel.
+        Players who joined via any enabled bot can re-auth seamlessly — the
+        backend tries each token until one matches.
+      </p>
+
+      <table className="admin-table">
+        <thead>
+          <tr>
+            <th>Code</th><th>Name</th><th>@Username</th><th>Token</th>
+            <th>WebApp URL</th><th>Enabled</th><th>Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map((r) => (
+            <tr key={r.code}>
+              <td><code style={{ fontSize: 11 }}>{r.code}</code></td>
+              <td>{r.name}</td>
+              <td>{r.username ? `@${r.username}` : <span style={{ opacity: 0.5 }}>—</span>}</td>
+              <td className="seed" style={{ fontSize: 10.5 }}>{r.tokenMasked}</td>
+              <td className="seed" style={{ fontSize: 10.5 }}>{r.webappUrl || <span style={{ opacity: 0.5 }}>(env default)</span>}</td>
+              <td>
+                <label style={{ display: "inline-flex", alignItems: "center", gap: 4 }}>
+                  <input type="checkbox" checked={r.enabled} onChange={() => onToggle(r)} />
+                  {r.enabled ? "on" : "off"}
+                </label>
+              </td>
+              <td style={{ whiteSpace: "nowrap" }}>
+                <button onClick={() => setEditing({ row: r })} style={{ marginRight: 4 }}>Edit</button>
+                <button onClick={() => onDelete(r.code)}>Delete</button>
+              </td>
+            </tr>
+          ))}
+          {rows.length === 0 && <tr><td colSpan={7} className="empty">No bots configured. Click + Add bot to register one.</td></tr>}
+        </tbody>
+      </table>
+
+      {editing && (
+        <BotEditModal
+          row={editing.row}
+          isNew={!!editing.isNew}
+          onClose={() => setEditing(null)}
+          onSaved={() => { setEditing(null); load(); }}
+        />
+      )}
+    </div>
+  );
+};
+
+const BotEditModal: React.FC<{
+  row?: BotRow;
+  isNew: boolean;
+  onClose: () => void;
+  onSaved: () => void;
+}> = ({ row, isNew, onClose, onSaved }) => {
+  const api = useApi();
+  const [code, setCode] = React.useState(row?.code || "");
+  const [name, setName] = React.useState(row?.name || "");
+  const [token, setToken] = React.useState("");          // never pre-fill (masked)
+  const [webappUrl, setWebappUrl] = React.useState(row?.webappUrl || "");
+  const [enabled, setEnabled] = React.useState(row?.enabled ?? false);
+  const [busy, setBusy] = React.useState(false);
+  const [err, setErr] = React.useState<string | null>(null);
+
+  const save = async () => {
+    setBusy(true); setErr(null);
+    try {
+      const body: any = { name, webappUrl, enabled };
+      if (token.trim()) body.token = token.trim();
+      if (isNew) {
+        body.code = code;
+        if (!body.token) {
+          setErr("Token required for new bot");
+          setBusy(false);
+          return;
+        }
+        await api("/admin/telegram-bots", { method: "POST", body: JSON.stringify(body) });
+      } else {
+        await api(`/admin/telegram-bots/${row!.code}`, { method: "PATCH", body: JSON.stringify(body) });
+      }
+      onSaved();
+    } catch (e) { setErr((e as Error).message); }
+    finally { setBusy(false); }
+  };
+
+  return (
+    <div className="admin-modal-overlay" onClick={onClose}>
+      <div className="admin-modal" onClick={(e) => e.stopPropagation()}>
+        <h3>{isNew ? "Add bot" : `Edit ${row!.code}`}</h3>
+        <p style={{ fontSize: 11, opacity: 0.7, marginTop: -6 }}>
+          Get your token from @BotFather → /newbot → copy "Use this token to access the HTTP API".
+        </p>
+        {isNew && (
+          <label>
+            <span>Code (stable identifier)</span>
+            <input type="text" value={code} onChange={(e) => setCode(e.target.value)} placeholder="primary / backup-1 / ..." />
+          </label>
+        )}
+        <label>
+          <span>Display name</span>
+          <input type="text" value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g. Aviator India (primary)" />
+        </label>
+        <label>
+          <span>Bot token{!isNew && " (leave empty to keep current)"}</span>
+          <input
+            type="password"
+            autoComplete="off" spellCheck={false}
+            value={token}
+            onChange={(e) => setToken(e.target.value)}
+            placeholder={isNew ? "1234567890:ABCDEF..." : (row?.tokenMasked || "")}
+          />
+        </label>
+        <label>
+          <span>WebApp URL (optional — defaults to TELEGRAM_WEBAPP_URL env)</span>
+          <input type="text" value={webappUrl} onChange={(e) => setWebappUrl(e.target.value)} placeholder="https://aviator.rummydeatly.com" />
+        </label>
+        <label className="checkbox">
+          <input type="checkbox" checked={enabled} onChange={(e) => setEnabled(e.target.checked)} />
+          <span>Enabled</span>
+        </label>
+        {err && <div className="admin-error">⚠ {err}</div>}
+        <div className="admin-modal-actions">
+          <button onClick={onClose} disabled={busy}>Cancel</button>
+          <button className="primary" onClick={save} disabled={busy}>{busy ? "Saving…" : (isNew ? "Create" : "Save")}</button>
         </div>
       </div>
     </div>
