@@ -25,6 +25,15 @@ export interface TelegramBotDoc {
   token: string;        // bot HTTP API token from @BotFather  ⚠ SENSITIVE
   username?: string;    // @bot_username — display + deep-link generation
   webappUrl: string;    // URL Telegram opens when user taps Play
+  /**
+   * Per-bot /start reply text. Defaults to the canonical primary copy
+   * if empty. Lets the operator soften wording on backup bots that may
+   * be ad-targeted, e.g. avoid "crash" / "betting" in the response so
+   * Telegram review crawlers see neutral content.
+   */
+  startMessage: string;
+  /** Per-bot CTA button label shown on /start. Default "🛩️ Play Aviator". */
+  startButtonLabel: string;
   enabled: boolean;     // master switch for this bot
   createdAt: Date;
   updatedAt: Date;
@@ -37,6 +46,8 @@ const TelegramBotSchema = new Schema<TelegramBotDoc>(
     token: { type: String, required: true },
     username: { type: String, default: "" },
     webappUrl: { type: String, default: "" },
+    startMessage: { type: String, default: "" },
+    startButtonLabel: { type: String, default: "" },
     enabled: { type: Boolean, default: false, index: true },
     createdAt: { type: Date, default: Date.now },
     updatedAt: { type: Date, default: Date.now },

@@ -953,6 +953,8 @@ interface BotRow {
   username?: string;
   tokenMasked: string;
   webappUrl: string;
+  startMessage?: string;
+  startButtonLabel?: string;
   enabled: boolean;
   createdAt: string;
   updatedAt: string;
@@ -1062,6 +1064,8 @@ const BotEditModal: React.FC<{
   const [name, setName] = React.useState(row?.name || "");
   const [token, setToken] = React.useState("");          // never pre-fill (masked)
   const [webappUrl, setWebappUrl] = React.useState(row?.webappUrl || "");
+  const [startMessage, setStartMessage] = React.useState(row?.startMessage || "");
+  const [startButtonLabel, setStartButtonLabel] = React.useState(row?.startButtonLabel || "");
   const [enabled, setEnabled] = React.useState(row?.enabled ?? false);
   const [busy, setBusy] = React.useState(false);
   const [err, setErr] = React.useState<string | null>(null);
@@ -1069,7 +1073,7 @@ const BotEditModal: React.FC<{
   const save = async () => {
     setBusy(true); setErr(null);
     try {
-      const body: any = { name, webappUrl, enabled };
+      const body: any = { name, webappUrl, startMessage, startButtonLabel, enabled };
       if (token.trim()) body.token = token.trim();
       if (isNew) {
         body.code = code;
@@ -1117,6 +1121,33 @@ const BotEditModal: React.FC<{
         <label>
           <span>WebApp URL (optional — defaults to TELEGRAM_WEBAPP_URL env)</span>
           <input type="text" value={webappUrl} onChange={(e) => setWebappUrl(e.target.value)} placeholder="https://aviator.rummydeatly.com" />
+        </label>
+        <label>
+          <span>/start reply text (optional)</span>
+          <textarea
+            value={startMessage}
+            onChange={(e) => setStartMessage(e.target.value)}
+            placeholder="Welcome to Aviator Crash! Tap below to launch the game."
+            rows={3}
+            style={{ width: "100%", boxSizing: "border-box", background: "var(--admin-bg-3)", border: "1px solid var(--admin-border)", color: "var(--admin-text)", padding: "8px 10px", borderRadius: 6, fontFamily: "inherit", fontSize: 13, resize: "vertical" }}
+            maxLength={4000}
+          />
+          <span className="admin-settings-hint" style={{ display: "block", fontSize: 10.5, opacity: 0.7 }}>
+            What the bot replies when user sends /start. Leave empty to use the default. Backup bots that may face Telegram-Ads review can use softer wording (avoid "crash" / "betting") to reduce auto-reject risk.
+          </span>
+        </label>
+        <label>
+          <span>/start button label (optional)</span>
+          <input
+            type="text"
+            value={startButtonLabel}
+            onChange={(e) => setStartButtonLabel(e.target.value)}
+            placeholder="🛩️ Play Aviator"
+            maxLength={64}
+          />
+          <span className="admin-settings-hint" style={{ display: "block", fontSize: 10.5, opacity: 0.7 }}>
+            Text on the inline WebApp button below the /start reply.
+          </span>
         </label>
         <label className="checkbox">
           <input type="checkbox" checked={enabled} onChange={(e) => setEnabled(e.target.checked)} />

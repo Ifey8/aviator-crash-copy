@@ -13,22 +13,25 @@ import { TelegramBotModel, TelegramBotDoc } from "../db/models/TelegramBot";
  */
 const running = new Map<string, Bot>();
 
+const DEFAULT_START_MESSAGE =
+  "Welcome to Aviator Crash! Tap below to launch the game.";
+const DEFAULT_START_BUTTON = "🛩️ Play Aviator";
+
 const startOneBot = async (doc: TelegramBotDoc): Promise<void> => {
   if (running.has(doc.code)) return; // already running
   const bot = new Bot(doc.token);
   const webappUrl = doc.webappUrl || config.telegramWebappUrl;
+  const startMessage = (doc.startMessage || "").trim() || DEFAULT_START_MESSAGE;
+  const startButton = (doc.startButtonLabel || "").trim() || DEFAULT_START_BUTTON;
 
   bot.command("start", (ctx) => {
-    const kb = new InlineKeyboard().webApp("🛩️ Play Aviator", webappUrl);
-    return ctx.reply(
-      "Welcome to Aviator Crash! Tap below to launch the game.",
-      { reply_markup: kb },
-    );
+    const kb = new InlineKeyboard().webApp(startButton, webappUrl);
+    return ctx.reply(startMessage, { reply_markup: kb });
   });
   bot.command("balance", (ctx) =>
     ctx.reply(
       "Open the WebApp to view balance and place bets.",
-      { reply_markup: new InlineKeyboard().webApp("Open Aviator", webappUrl) },
+      { reply_markup: new InlineKeyboard().webApp(startButton, webappUrl) },
     ),
   );
   bot.command("help", (ctx) =>

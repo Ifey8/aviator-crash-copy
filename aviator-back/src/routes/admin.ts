@@ -490,6 +490,8 @@ adminRouter.get("/telegram-bots", async (_req, res) => {
       username: d.username,
       tokenMasked: maskToken(d.token),
       webappUrl: d.webappUrl,
+      startMessage: d.startMessage || "",
+      startButtonLabel: d.startButtonLabel || "",
       enabled: d.enabled,
       createdAt: d.createdAt,
       updatedAt: d.updatedAt,
@@ -498,7 +500,7 @@ adminRouter.get("/telegram-bots", async (_req, res) => {
 });
 
 adminRouter.post("/telegram-bots", async (req, res) => {
-  const { code, name, token, webappUrl, enabled } = req.body || {};
+  const { code, name, token, webappUrl, startMessage, startButtonLabel, enabled } = req.body || {};
   if (!code || !/^[a-z0-9_-]{2,32}$/i.test(code)) {
     return res.status(400).json({ status: false, message: "code: 2-32 alphanumeric/_/- required" });
   }
@@ -513,6 +515,8 @@ adminRouter.post("/telegram-bots", async (req, res) => {
     name,
     token: token.trim(),
     webappUrl: String(webappUrl || "").trim() || undefined,
+    startMessage: String(startMessage || "").slice(0, 4000),
+    startButtonLabel: String(startButtonLabel || "").slice(0, 64),
     enabled: !!enabled,
   });
   if (doc.enabled) await reloadBot(doc.code);
@@ -522,7 +526,7 @@ adminRouter.post("/telegram-bots", async (req, res) => {
 adminRouter.patch("/telegram-bots/:code", async (req, res) => {
   const doc = await TelegramBotModel.findOne({ code: req.params.code });
   if (!doc) return res.status(404).json({ status: false, message: "Bot not found" });
-  const { name, token, webappUrl, enabled } = req.body || {};
+  const { name, token, webappUrl, startMessage, startButtonLabel, enabled } = req.body || {};
   if (typeof name === "string") doc.name = name;
   if (typeof token === "string" && token.trim()) {
     // ignore masked placeholder (•••• in the middle)
@@ -534,6 +538,8 @@ adminRouter.patch("/telegram-bots/:code", async (req, res) => {
     }
   }
   if (typeof webappUrl === "string") doc.webappUrl = webappUrl.trim();
+  if (typeof startMessage === "string") doc.startMessage = startMessage.slice(0, 4000);
+  if (typeof startButtonLabel === "string") doc.startButtonLabel = startButtonLabel.slice(0, 64);
   if (typeof enabled === "boolean") doc.enabled = enabled;
   doc.updatedAt = new Date();
   await doc.save();
