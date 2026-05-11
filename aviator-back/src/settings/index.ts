@@ -73,17 +73,39 @@ const defaultsFromEnv = (): Omit<SettingsDoc, "_id" | "updatedAt" | "updatedBy">
 /**
  * Load settings into the cache. Creates the doc on first run with env
  * defaults so the system always has a value. Call once at server boot.
+ *
+ * BACKFILL on every boot: if the existing doc is missing fields that
+ * have been added to the schema in subsequent releases (e.g. paymeXxx,
+ * usdtAutoPayoutXxx), $set them to the defaultsFromEnv() values. This
+ * keeps old DBs working seamlessly through schema evolution without
+ * needing a manual migration step. Safe because $set only touches
+ * keys that are currently undefined — operator-tuned values stay put.
  */
 export const loadSettings = async (): Promise<SettingsDoc> => {
+  const defaults = defaultsFromEnv();
   let doc = await SettingsModel.findById("default");
   if (!doc) {
-    doc = await SettingsModel.create({
-      _id: "default",
-      ...defaultsFromEnv(),
-    });
+    doc = await SettingsModel.create({ _id: "default", ...defaults });
     console.log("[settings] seeded default settings from env");
+  } else {
+    // Backfill missing keys
+    const docObj = doc.toObject ? doc.toObject() : doc;
+    const missing: Record<string, unknown> = {};
+    for (const [k, v] of Object.entries(defaults)) {
+      if ((docObj as any)[k] === undefined) missing[k] = v;
+    }
+    if (Object.keys(missing).length > 0) {
+      await SettingsModel.updateOne({ _id: "default" }, { $set: missing });
+      console.log(
+        `[settings] backfilled ${Object.keys(missing).length} missing key(s): ${Object.keys(missing).join(", ")}`,
+      );
+      doc = await SettingsModel.findById("default");
+    }
   }
-  cache = doc.toObject ? doc.toObject() as SettingsDoc : (doc as SettingsDoc);
+  const finalObj = (doc && typeof (doc as any).toObject === "function")
+    ? ((doc as any).toObject() as SettingsDoc)
+    : (doc as unknown as SettingsDoc);
+  cache = finalObj;
   return cache;
 };
 
