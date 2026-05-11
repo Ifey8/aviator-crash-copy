@@ -24,7 +24,9 @@ import { CryptoPayPanel } from "./CryptoPayPanel";
  * event fires.
  */
 
-const PRESETS = [100, 500, 1000, 2000, 5000];
+// Same presets for both UPI/Cards and USDT paths — CryptoPayPanel
+// converts to USDT at the locked fxRate when the user picks INR.
+const PRESETS = [100, 500, 1000, 2000, 5000, 10000, 20000, 30000, 50000];
 
 type PayMethod = "fiat" | "crypto";
 type Step = "picker" | "creating" | "pending" | "success" | "failed" | "crypto";
@@ -58,7 +60,6 @@ export const RechargeSheet: React.FC<Props> = ({ open, onClose }) => {
   const [step, setStep] = React.useState<Step>("picker");
   const [amount, setAmount] = React.useState<number>(500);
   const [method, setMethod] = React.useState<PayMethod>("fiat");
-  const [customInput, setCustomInput] = React.useState("");
   const [order, setOrder] = React.useState<OrderData | null>(null);
   const [error, setError] = React.useState<string | null>(null);
   // inrEnabled: backend admin Setting. Default null = still loading; default
@@ -98,7 +99,6 @@ export const RechargeSheet: React.FC<Props> = ({ open, onClose }) => {
       setStep("picker");
       setOrder(null);
       setError(null);
-      setCustomInput("");
     }
   }, [open]);
 
@@ -248,30 +248,12 @@ export const RechargeSheet: React.FC<Props> = ({ open, onClose }) => {
               {PRESETS.map((p) => (
                 <button
                   key={p}
-                  className={`rs-chip ${amount === p && !customInput ? "active" : ""}`}
-                  onClick={() => {
-                    setAmount(p);
-                    setCustomInput("");
-                  }}
+                  className={`rs-chip ${amount === p ? "active" : ""}`}
+                  onClick={() => setAmount(p)}
                 >
                   ₹{p.toLocaleString("en-IN")}
                 </button>
               ))}
-            </div>
-            <div className="rs-custom-row">
-              <span className="rs-rs">₹</span>
-              <input
-                type="number"
-                placeholder="Custom amount"
-                value={customInput}
-                inputMode="numeric"
-                onChange={(e) => {
-                  setCustomInput(e.target.value);
-                  const v = Number(e.target.value);
-                  if (v > 0) setAmount(v);
-                }}
-                className="rs-custom"
-              />
             </div>
             <button className="rs-cta" onClick={handleConfirm}>
               Continue · ₹{amount.toLocaleString("en-IN")}{method === "crypto" ? " · USDT" : ""}
