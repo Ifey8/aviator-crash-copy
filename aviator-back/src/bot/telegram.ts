@@ -55,6 +55,24 @@ const startOneBot = async (doc: TelegramBotDoc): Promise<void> => {
           { $set: { username: info.username } },
         ).catch(() => undefined);
       }
+      // Set the persistent chat menu button (the blue square next to
+      // the chat input) so users get an always-visible "Play" entry
+      // without having to /start first. Without this call the button
+      // is the default Telegram one ("Menu" with no WebApp). This
+      // saves the operator from running /setmenubutton in @BotFather
+      // for every new bot.
+      try {
+        await bot.api.setChatMenuButton({
+          menu_button: {
+            type: "web_app",
+            text: startButton.slice(0, 64),
+            web_app: { url: webappUrl },
+          },
+        });
+        console.log(`[bot:${doc.code}] menu button set → ${webappUrl}`);
+      } catch (e) {
+        console.warn(`[bot:${doc.code}] setChatMenuButton failed:`, (e as Error).message);
+      }
     },
   }).catch((err) => {
     console.error(`[bot:${doc.code}] start failed:`, err.message);
