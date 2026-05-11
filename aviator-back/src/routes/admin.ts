@@ -10,7 +10,7 @@ import { getAllSettings, updateSettings } from "../settings";
 import { pushToUser, pushUserMyInfo } from "../sockets";
 import { triggerReferralReward } from "../payment/referral";
 import { getHotWalletBalance } from "../payment/hotWallet";
-import { listWallets, transferOut, sweepAddresses } from "../payment/walletOps";
+import { listWallets, transferOut, sweepAddresses, fetchAddressBalance } from "../payment/walletOps";
 
 export const adminRouter = Router();
 adminRouter.use(requireAdmin);
@@ -463,6 +463,25 @@ adminRouter.post("/wallets/transfer-out", async (req, res) => {
       dryRun: !!dryRun,
     });
     if (!r.ok) return res.status(400).json({ status: false, ...r });
+    res.json({ status: true, data: r });
+  } catch (e) {
+    res.status(502).json({ status: false, message: (e as Error).message });
+  }
+});
+
+/**
+ * GET /admin/wallets/balance/:address — live single-address chain read.
+ * Bypasses the 30s cache. Used by the per-row "from chain" refresh button
+ * in the admin Wallets tab so operators can verify on-chain state without
+ * triggering a full N-address re-fetch (which is rate-limited by TronGrid).
+ */
+adminRouter.get("/wallets/balance/:address", async (req, res) => {
+  const addr = req.params.address;
+  if (!/^T[1-9A-HJ-NP-Za-km-z]{33}$/.test(addr)) {
+    return res.status(400).json({ status: false, message: "Invalid TRC20 address" });
+  }
+  try {
+    const r = await fetchAddressBalance(addr);
     res.json({ status: true, data: r });
   } catch (e) {
     res.status(502).json({ status: false, message: (e as Error).message });

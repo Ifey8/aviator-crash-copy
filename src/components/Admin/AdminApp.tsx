@@ -779,6 +779,35 @@ const WalletsTab: React.FC = () => {
   // calls anyway — running two parallel sweeps would just double the
   // TronGrid traffic without speeding anything up.
   const [sweepingTarget, setSweepingTarget] = React.useState<string | null>(null);
+  // Per-address "fetching from chain" indicator. Independent from sweep
+  // so the operator can refresh a row's balance even while a sweep runs
+  // on a different address.
+  const [refreshingAddr, setRefreshingAddr] = React.useState<string | null>(null);
+
+  // Refresh ONE address's on-chain balance via the dedicated endpoint
+  // (bypasses the 30s listWallets cache). Patches the row in-place so
+  // we don't re-render the whole table.
+  const refreshOneFromChain = async (address: string) => {
+    setRefreshingAddr(address);
+    try {
+      const r = await api(`/admin/wallets/balance/${address}`);
+      const fresh = r.data;
+      setData((prev) => prev ? {
+        ...prev,
+        wallets: prev.wallets.map((w) =>
+          w.address === address
+            ? { ...w, trxBalance: fresh.trxBalance, usdtBalance: fresh.usdtBalance }
+            : w
+        ),
+        fetchedAt: new Date().toISOString(),
+        cached: false,
+      } : prev);
+    } catch (e) {
+      alert("Chain refresh failed: " + (e as Error).message);
+    } finally {
+      setRefreshingAddr(null);
+    }
+  };
 
   const runSweepCore = async (addresses?: string[], label?: string) => {
     const count = addresses?.length ?? (data?.totals.unsweptOrders || 0);
@@ -925,7 +954,13 @@ const WalletsTab: React.FC = () => {
         </div>
       )}
 
-      {hot && <HotWalletCard hot={hot} />}
+      {hot && (
+        <HotWalletCard
+          hot={hot}
+          refreshing={refreshingAddr === hot.address}
+          onRefreshFromChain={() => refreshOneFromChain(hot.address)}
+        />
+      )}
 
       <h3 style={{ fontSize: 14, margin: "20px 0 8px" }}>Deposit sub-addresses ({deposits.length})</h3>
       <table className="admin-table">
@@ -958,24 +993,34 @@ const WalletsTab: React.FC = () => {
                 <td className="num">{w.unsweptOrderCount}</td>
                 <td className="num">{w.totalUsdtClaimed?.toFixed(2)}</td>
                 <td>
-                  {hasUnswept ? (
+                  <div style={{ display: "flex", gap: 4, justifyContent: "flex-start", flexWrap: "wrap" }}>
                     <button
-                      onClick={() => runSweepOne(w.address)}
-                      disabled={!!sweepingTarget}
-                      title="Sweep just this address"
+                      onClick={() => refreshOneFromChain(w.address)}
+                      disabled={refreshingAddr === w.address || !!sweepingTarget}
+                      title="Refresh this address's balance directly from chain (bypasses 30s cache)"
+                      style={{ padding: "2px 8px", fontSize: 11 }}
                     >
-                      {isBusy ? "Sweeping…" : "Sweep"}
+                      {refreshingAddr === w.address ? "…" : "↻ Chain"}
                     </button>
-                  ) : showForce ? (
-                    <button
-                      onClick={() => forceSweepOne(w.address)}
-                      disabled={!!sweepingTarget}
-                      title="Force sweep — resets DB marker then sweeps"
-                      style={{ background: "rgba(193,34,68,0.18)", color: "#ffb0bc", border: "1px solid rgba(193,34,68,0.4)" }}
-                    >
-                      {isBusy ? "Sweeping…" : "Force"}
-                    </button>
-                  ) : "—"}
+                    {hasUnswept ? (
+                      <button
+                        onClick={() => runSweepOne(w.address)}
+                        disabled={!!sweepingTarget}
+                        title="Sweep just this address"
+                      >
+                        {isBusy ? "Sweeping…" : "Sweep"}
+                      </button>
+                    ) : showForce ? (
+                      <button
+                        onClick={() => forceSweepOne(w.address)}
+                        disabled={!!sweepingTarget}
+                        title="Force sweep — resets DB marker then sweeps"
+                        style={{ background: "rgba(193,34,68,0.18)", color: "#ffb0bc", border: "1px solid rgba(193,34,68,0.4)" }}
+                      >
+                        {isBusy ? "Sweeping…" : "Force"}
+                      </button>
+                    ) : null}
+                  </div>
                 </td>
               </tr>
             );
@@ -999,7 +1044,11 @@ const WalletsTab: React.FC = () => {
  * address. ⚠️ The QR encodes the address only — destination network is
  * still TRON-TRC20, the operator must select that on the sender app.
  */
-const HotWalletCard: React.FC<{ hot: WalletEntry }> = ({ hot }) => {
+const HotWalletCard: React.FC<{
+  hot: WalletEntry;
+  refreshing?: boolean;
+  onRefreshFromChain?: () => void;
+}> = ({ hot, refreshing, onRefreshFromChain }) => {
   const [copied, setCopied] = React.useState(false);
   const [qrOpen, setQrOpen] = React.useState(false);
 
@@ -1056,10 +1105,20 @@ const HotWalletCard: React.FC<{ hot: WalletEntry }> = ({ hot }) => {
             </button>
             <button onClick={() => setQrOpen(true)}>QR</button>
           </div>
-          <div style={{ fontSize: 12, marginTop: 8 }}>
+          <div style={{ fontSize: 12, marginTop: 8, display: "flex", alignItems: "center", gap: 8 }}>
             <strong style={{ color: "#ffc857" }}>{fmtBal(hot.usdtBalance)} USDT</strong>
             {" · "}
             <strong>{fmtBal(hot.trxBalance)} TRX</strong>
+            {onRefreshFromChain && (
+              <button
+                onClick={onRefreshFromChain}
+                disabled={refreshing}
+                title="Refresh hot wallet balance directly from chain"
+                style={{ padding: "2px 8px", fontSize: 11, marginLeft: 8 }}
+              >
+                {refreshing ? "…" : "↻ Chain"}
+              </button>
+            )}
           </div>
           <div style={{ fontSize: 10.5, opacity: 0.55, marginTop: 4 }}>
             Network: TRC20 · Send TRX or USDT (TRC20) only — never ERC20/BEP20

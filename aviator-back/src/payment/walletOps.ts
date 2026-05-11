@@ -243,6 +243,28 @@ export const listWallets = async (useCache = true): Promise<WalletsListResult> =
 };
 
 // ---------------------------------------------------------------------------
+// fetchAddressBalance — single-address live read, bypasses the 30s cache.
+// Used by the admin UI's per-row refresh button.
+// ---------------------------------------------------------------------------
+
+export interface AddressBalance {
+  address: string;
+  trxBalance: number | null;
+  usdtBalance: number | null;
+  fetchedAt: Date;
+}
+
+export const fetchAddressBalance = async (address: string): Promise<AddressBalance> => {
+  let trxBalance: number | null = null;
+  let usdtBalance: number | null = null;
+  try { trxBalance = +(await fetchTrxBalance(address)).toFixed(4); } catch {}
+  try { usdtBalance = +(await fetchUsdtBalance(address)).toFixed(4); } catch {}
+  // Bust the listWallets cache so the next full refresh reflects this read.
+  cached = null;
+  return { address, trxBalance, usdtBalance, fetchedAt: new Date() };
+};
+
+// ---------------------------------------------------------------------------
 // transferOut — outbound from hot wallet
 // ---------------------------------------------------------------------------
 
