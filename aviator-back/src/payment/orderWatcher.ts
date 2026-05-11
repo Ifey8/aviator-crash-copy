@@ -4,6 +4,7 @@ import { getChannelByCode } from "./channels";
 import { pushToUser, pushUserMyInfo } from "../sockets";
 import { engine } from "../game/engine";
 import { triggerReferralReward } from "./referral";
+import { recordPayout } from "./ledger";
 
 /**
  * orderWatcher — backstop poll of pending payin / payout orders.
@@ -132,6 +133,20 @@ const pollPayout = async (order: any): Promise<string> => {
       });
       pushToUser(order.userName, "withdrawalUpdate", { orderId: order.orderId, status: "paid" });
       pushUserMyInfo(order.userName);
+      // Ledger debit on channel (mirror the webhook-path hook)
+      const chCode = (flipped.meta as any)?.channelCode;
+      if (chCode && flipped.method === "bank") {
+        try {
+          await recordPayout({
+            channelCode: chCode,
+            orderId: flipped.orderId,
+            providerRef: flipped.providerRef,
+            grossInr: flipped.grossAmount,
+          });
+        } catch (e) {
+          console.error("[orderWatcher] ledger recordPayout failed:", (e as Error).message);
+        }
+      }
     }
     return `paid (${order.orderId})`;
   }

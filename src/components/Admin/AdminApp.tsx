@@ -443,6 +443,9 @@ const ChannelsTab: React.FC = () => {
   const [editing, setEditing] = React.useState<{ row?: ChannelRow; newProvider?: string } | null>(null);
   const [error, setError] = React.useState<string | null>(null);
   const [loading, setLoading] = React.useState(false);
+  const [balances, setBalances] = React.useState<Record<string, number>>({});
+  const [drillingChannel, setDrillingChannel] = React.useState<string | null>(null);
+  const [adjustingChannel, setAdjustingChannel] = React.useState<string | null>(null);
 
   const load = React.useCallback(async () => {
     setLoading(true);
@@ -454,6 +457,13 @@ const ChannelsTab: React.FC = () => {
       setTypes(t.data || []);
       setRows(r.data || []);
       setError(null);
+      // Fetch balance for each channel in parallel — small N so OK
+      const bals = await Promise.all(
+        (r.data || []).map((row: ChannelRow) =>
+          api(`/admin/channels/${row.code}/balance`).then((rb: any) => [row.code, rb.data?.balanceInr ?? 0] as [string, number]).catch(() => [row.code, 0] as [string, number])
+        ),
+      );
+      setBalances(Object.fromEntries(bals));
     } catch (e) { setError((e as Error).message); }
     finally { setLoading(false); }
   }, [api]);
@@ -511,7 +521,7 @@ const ChannelsTab: React.FC = () => {
         <thead>
           <tr>
             <th>Code</th><th>Name</th><th>Provider</th><th>Country</th>
-            <th>Supports</th><th>Priority</th><th>Enabled</th><th>Actions</th>
+            <th>Supports</th><th className="num">Balance (INR)</th><th className="num">Priority</th><th>Enabled</th><th>Actions</th>
           </tr>
         </thead>
         <tbody>
@@ -525,6 +535,11 @@ const ChannelsTab: React.FC = () => {
                 {r.supports.payin && <span className="tag" style={{ background: "rgba(86,224,154,0.18)", color: "#56e09a", marginRight: 4 }}>payin</span>}
                 {r.supports.payout && <span className="tag" style={{ background: "rgba(255,200,87,0.18)", color: "#ffc857" }}>payout</span>}
               </td>
+              <td className="num">
+                <strong style={{ color: (balances[r.code] || 0) >= 0 ? "#56e09a" : "#ff5468" }}>
+                  ₹{(balances[r.code] ?? 0).toLocaleString("en-IN", { maximumFractionDigits: 2 })}
+                </strong>
+              </td>
               <td className="num">{r.priority}</td>
               <td>
                 <label style={{ display: "inline-flex", alignItems: "center", gap: 4 }}>
@@ -532,16 +547,33 @@ const ChannelsTab: React.FC = () => {
                   {r.enabled ? "on" : "off"}
                 </label>
               </td>
-              <td>
+              <td style={{ whiteSpace: "nowrap" }}>
+                <button onClick={() => setDrillingChannel(r.code)} style={{ marginRight: 4 }} title="View ledger">📒</button>
+                <button onClick={() => setAdjustingChannel(r.code)} style={{ marginRight: 4 }} title="Adjust balance (manual withdraw / credit)">±</button>
                 <button onClick={() => setEditing({ row: r })} style={{ marginRight: 4 }}>Edit</button>
                 <button onClick={() => onTest(r.code)} style={{ marginRight: 4 }}>Test</button>
                 <button onClick={() => onDelete(r.code)}>Delete</button>
               </td>
             </tr>
           ))}
-          {rows.length === 0 && <tr><td colSpan={8} className="empty">No channels configured. Pick a provider type from the dropdown above to add one.</td></tr>}
+          {rows.length === 0 && <tr><td colSpan={9} className="empty">No channels configured. Pick a provider type from the dropdown above to add one.</td></tr>}
         </tbody>
       </table>
+
+      {drillingChannel && (
+        <ChannelLedgerModal
+          channelCode={drillingChannel}
+          onClose={() => setDrillingChannel(null)}
+        />
+      )}
+      {adjustingChannel && (
+        <ChannelAdjustModal
+          channelCode={adjustingChannel}
+          currentBalance={balances[adjustingChannel] || 0}
+          onClose={() => setAdjustingChannel(null)}
+          onSaved={() => { setAdjustingChannel(null); load(); }}
+        />
+      )}
 
       {editing && (
         <ChannelEditModal
@@ -714,6 +746,197 @@ const ChannelEditModal: React.FC<{
         <div className="admin-modal-actions">
           <button onClick={onClose} disabled={busy}>Cancel</button>
           <button className="primary" onClick={save} disabled={busy}>{busy ? "Saving…" : (isNew ? "Create" : "Save")}</button>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+// =========================== Channel ledger / adjust ===========================
+
+interface LedgerRow {
+  _id: string;
+  direction: "credit" | "debit";
+  amountInr: number;
+  category: string;
+  relatedOrderId?: string;
+  note?: string;
+  createdBy?: string;
+  providerRef?: string;
+  meta?: Record<string, unknown>;
+  createdAt: string;
+}
+
+interface ChannelBalanceData {
+  channelCode: string;
+  balanceInr: number;
+  totalIn: number;
+  totalOut: number;
+  byCategory: Record<string, number>;
+  entryCount: number;
+}
+
+const ChannelLedgerModal: React.FC<{ channelCode: string; onClose: () => void }> = ({ channelCode, onClose }) => {
+  const api = useApi();
+  const [rows, setRows] = React.useState<LedgerRow[]>([]);
+  const [balance, setBalance] = React.useState<ChannelBalanceData | null>(null);
+  const [filter, setFilter] = React.useState<{ category: string; direction: string }>({ category: "", direction: "" });
+
+  const load = React.useCallback(async () => {
+    const qs = Object.entries(filter).filter(([, v]) => v).map(([k, v]) => `${k}=${v}`).join("&");
+    const [bal, lg] = await Promise.all([
+      api(`/admin/channels/${channelCode}/balance`),
+      api(`/admin/channels/${channelCode}/ledger${qs ? "?" + qs : ""}`),
+    ]);
+    setBalance(bal.data);
+    setRows(lg.items || []);
+  }, [api, channelCode, filter]);
+
+  React.useEffect(() => { load(); }, [load]);
+
+  const categoryColor = (c: string): string => {
+    if (c === "payin") return "#56e09a";
+    if (c === "payin_fee") return "#ff9933";
+    if (c === "payout") return "#ffc857";
+    if (c === "payout_fee") return "#ff9933";
+    if (c === "manual_credit") return "#56e09a";
+    if (c === "manual_withdraw") return "#ff5468";
+    return "var(--admin-muted)";
+  };
+
+  return (
+    <div className="admin-modal-overlay" onClick={onClose}>
+      <div className="admin-modal" onClick={(e) => e.stopPropagation()} style={{ maxWidth: 760, maxHeight: "90vh", overflow: "auto" }}>
+        <h3>Ledger — {channelCode}</h3>
+        {balance && (
+          <div style={{ background: "rgba(255,200,87,0.06)", padding: 10, borderRadius: 6, marginBottom: 12, fontSize: 12 }}>
+            <div style={{ fontSize: 14 }}>
+              <strong style={{ color: balance.balanceInr >= 0 ? "#56e09a" : "#ff5468" }}>
+                Balance: ₹{balance.balanceInr.toLocaleString("en-IN", { maximumFractionDigits: 2 })}
+              </strong>
+            </div>
+            <div style={{ marginTop: 4 }}>
+              In: ₹{balance.totalIn.toLocaleString("en-IN")} · Out: ₹{balance.totalOut.toLocaleString("en-IN")} · {balance.entryCount} entries
+            </div>
+            <div style={{ marginTop: 4, fontSize: 11, opacity: 0.75 }}>
+              By category: {Object.entries(balance.byCategory).map(([k, v]) => `${k}=₹${Number(v).toLocaleString("en-IN")}`).join(" · ")}
+            </div>
+          </div>
+        )}
+        <div style={{ display: "flex", gap: 8, marginBottom: 8 }}>
+          <select value={filter.category} onChange={(e) => setFilter((f) => ({ ...f, category: e.target.value }))}>
+            <option value="">Any category</option>
+            <option value="payin">payin</option>
+            <option value="payin_fee">payin_fee</option>
+            <option value="payout">payout</option>
+            <option value="payout_fee">payout_fee</option>
+            <option value="manual_credit">manual_credit</option>
+            <option value="manual_withdraw">manual_withdraw</option>
+          </select>
+          <select value={filter.direction} onChange={(e) => setFilter((f) => ({ ...f, direction: e.target.value }))}>
+            <option value="">Any direction</option>
+            <option value="credit">credit (+)</option>
+            <option value="debit">debit (−)</option>
+          </select>
+        </div>
+        <table className="admin-table">
+          <thead>
+            <tr>
+              <th>Time</th><th>Category</th><th className="num">Amount</th>
+              <th>Related</th><th>Note</th>
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map((r) => (
+              <tr key={r._id}>
+                <td className="seed">{new Date(r.createdAt).toLocaleString()}</td>
+                <td>
+                  <span className="tag" style={{ background: "rgba(255,255,255,0.05)", color: categoryColor(r.category), border: `1px solid ${categoryColor(r.category)}33` }}>
+                    {r.category}
+                  </span>
+                </td>
+                <td className="num" style={{ color: r.direction === "credit" ? "#56e09a" : "#ff5468" }}>
+                  {r.direction === "credit" ? "+" : "−"}₹{r.amountInr.toLocaleString("en-IN", { maximumFractionDigits: 2 })}
+                </td>
+                <td className="seed">{r.relatedOrderId ? r.relatedOrderId.slice(0, 12) + "…" : "—"}</td>
+                <td style={{ fontSize: 11 }}>
+                  {r.note}
+                  {r.createdBy && <span style={{ opacity: 0.6 }}> · by {r.createdBy}</span>}
+                </td>
+              </tr>
+            ))}
+            {rows.length === 0 && <tr><td colSpan={5} className="empty">No ledger entries yet</td></tr>}
+          </tbody>
+        </table>
+        <div className="admin-modal-actions"><button onClick={onClose}>Close</button></div>
+      </div>
+    </div>
+  );
+};
+
+const ChannelAdjustModal: React.FC<{
+  channelCode: string;
+  currentBalance: number;
+  onClose: () => void;
+  onSaved: () => void;
+}> = ({ channelCode, currentBalance, onClose, onSaved }) => {
+  const api = useApi();
+  const [direction, setDirection] = React.useState<"credit" | "debit">("debit");
+  const [amount, setAmount] = React.useState("");
+  const [note, setNote] = React.useState("");
+  const [busy, setBusy] = React.useState(false);
+  const [err, setErr] = React.useState<string | null>(null);
+
+  const submit = async () => {
+    setBusy(true); setErr(null);
+    try {
+      await api(`/admin/channels/${channelCode}/adjust`, {
+        method: "POST",
+        body: JSON.stringify({ direction, amountInr: Number(amount), note }),
+      });
+      onSaved();
+    } catch (e) { setErr((e as Error).message); }
+    finally { setBusy(false); }
+  };
+
+  const valid = Number(amount) > 0 && note.trim().length > 0;
+  const projectedBalance = currentBalance + (direction === "credit" ? Number(amount) : -Number(amount));
+
+  return (
+    <div className="admin-modal-overlay" onClick={onClose}>
+      <div className="admin-modal" onClick={(e) => e.stopPropagation()}>
+        <h3>Adjust balance — {channelCode}</h3>
+        <p style={{ fontSize: 11, opacity: 0.7, marginTop: -6 }}>
+          Current balance: ₹{currentBalance.toLocaleString("en-IN", { maximumFractionDigits: 2 })}
+        </p>
+        <label>
+          <span>Type</span>
+          <select value={direction} onChange={(e) => setDirection(e.target.value as any)}>
+            <option value="debit">Withdraw (−) — operator pulled funds out of gateway</option>
+            <option value="credit">Credit (+) — top-up / refund / adjustment</option>
+          </select>
+        </label>
+        <label>
+          <span>Amount (INR)</span>
+          <input type="number" step="0.01" value={amount} onChange={(e) => setAmount(e.target.value.replace(/[^\d.]/g, ""))} placeholder="0.00" />
+        </label>
+        <label>
+          <span>Note (required — reason for the adjustment)</span>
+          <input type="text" value={note} onChange={(e) => setNote(e.target.value)} placeholder="e.g. Withdraw to HDFC settlement A/C 2026-05-12" />
+        </label>
+        {Number(amount) > 0 && (
+          <div style={{ background: "rgba(255,200,87,0.06)", padding: 8, borderRadius: 4, fontSize: 11, margin: "8px 0" }}>
+            Balance after: <strong style={{ color: projectedBalance >= 0 ? "#56e09a" : "#ff5468" }}>
+              ₹{projectedBalance.toLocaleString("en-IN", { maximumFractionDigits: 2 })}
+            </strong>
+          </div>
+        )}
+        {err && <div className="admin-error">⚠ {err}</div>}
+        <div className="admin-modal-actions">
+          <button onClick={onClose} disabled={busy}>Cancel</button>
+          <button className="primary" onClick={submit} disabled={!valid || busy}>
+            {busy ? "Saving…" : `Record ${direction}`}
+          </button>
         </div>
       </div>
     </div>

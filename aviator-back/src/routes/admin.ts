@@ -16,6 +16,8 @@ import { WebhookLogModel } from "../db/models/WebhookLog";
 import { listProviderTypes, getProviderType } from "../payment/catalog";
 import { invalidateChannelCache, listChannelsAdmin, getChannelByCode } from "../payment/channels";
 import { pollOneOrderNow } from "../payment/orderWatcher";
+import { ChannelLedgerModel, computeChannelBalance } from "../db/models/ChannelLedger";
+import { recordManualAdjustment } from "../payment/ledger";
 
 export const adminRouter = Router();
 adminRouter.use(requireAdmin);
@@ -662,6 +664,76 @@ adminRouter.post("/channels/:code/test", async (req, res) => {
       message: "Channel resolves. Real provider ping not yet implemented — try a small dry-run recharge / payout.",
     },
   });
+});
+
+/**
+ * GET /admin/channels/:code/balance — computed channel balance.
+ * Returns the SUM(credit) - SUM(debit) per category breakdown.
+ */
+adminRouter.get("/channels/:code/balance", async (req, res) => {
+  const code = req.params.code;
+  const ch = await PaymentChannelModel.findOne({ code }).lean();
+  if (!ch) return res.status(404).json({ status: false, message: "Channel not found" });
+  const balance = await computeChannelBalance(code);
+  res.json({ status: true, data: balance });
+});
+
+/**
+ * GET /admin/channels/:code/ledger — paginated ledger query.
+ * Filters: from / to (ISO date), category, direction, limit (max 200).
+ */
+adminRouter.get("/channels/:code/ledger", async (req, res) => {
+  const code = req.params.code;
+  const filter: Record<string, unknown> = { channelCode: code };
+  if (req.query.category) filter.category = String(req.query.category);
+  if (req.query.direction) filter.direction = String(req.query.direction);
+  if (req.query.from || req.query.to) {
+    const range: Record<string, Date> = {};
+    if (req.query.from) range.$gte = new Date(String(req.query.from));
+    if (req.query.to) range.$lte = new Date(String(req.query.to));
+    filter.createdAt = range as any;
+  }
+  const limit = Math.min(Number(req.query.limit) || 100, 200);
+  const items = await ChannelLedgerModel.find(filter)
+    .sort({ createdAt: -1 })
+    .limit(limit)
+    .lean();
+  const total = await ChannelLedgerModel.countDocuments(filter);
+  res.json({ status: true, total, items });
+});
+
+/**
+ * POST /admin/channels/:code/adjust — manual ledger entry.
+ * Body: { direction: "credit" | "debit", amountInr, note }
+ * Use cases:
+ *   • "manual_withdraw" — operator pulled funds out of Payme to their bank
+ *   • "manual_credit"   — top-up / refund booked back / opening balance
+ */
+adminRouter.post("/channels/:code/adjust", async (req, res) => {
+  const code = req.params.code;
+  const ch = await PaymentChannelModel.findOne({ code }).lean();
+  if (!ch) return res.status(404).json({ status: false, message: "Channel not found" });
+  const direction = req.body?.direction;
+  const amountInr = Number(req.body?.amountInr);
+  const note = String(req.body?.note || "").slice(0, 256);
+  if (direction !== "credit" && direction !== "debit") {
+    return res.status(400).json({ status: false, message: "direction must be credit or debit" });
+  }
+  if (!isFinite(amountInr) || amountInr <= 0) {
+    return res.status(400).json({ status: false, message: "amountInr must be > 0" });
+  }
+  if (!note.trim()) {
+    return res.status(400).json({ status: false, message: "note required (reason for the adjustment)" });
+  }
+  await recordManualAdjustment({
+    channelCode: code,
+    direction,
+    amountInr: +amountInr.toFixed(2),
+    note,
+    createdBy: req.adminUserName || "admin",
+  });
+  const balance = await computeChannelBalance(code);
+  res.json({ status: true, data: { balance } });
 });
 
 /**

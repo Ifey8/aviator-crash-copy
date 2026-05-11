@@ -10,6 +10,7 @@ import { getProvider, defaultProvider, listProviders } from "../payment";
 import { getChannelByCode, getDefaultChannel } from "../payment/channels";
 import { webhookGuard } from "../payment/webhookLog";
 import { triggerReferralReward } from "../payment/referral";
+import { recordPayin } from "../payment/ledger";
 import { getSetting } from "../settings";
 
 export const rechargeRouter = Router();
@@ -276,6 +277,24 @@ export const markPaidAndCredit = async (
     id: order.providerRef || order.orderId,
     amountInr: order.amount,
   });
+
+  // Channel ledger: record the payin as a credit on the channel's
+  // running balance (minus the gateway's payin fee, recorded
+  // separately). No-op when order didn't come through a channel
+  // (legacy mock recharges via direct provider).
+  const channelCode = (order.meta as any)?.channelCode;
+  if (channelCode) {
+    try {
+      await recordPayin({
+        channelCode,
+        orderId: order.orderId,
+        providerRef: order.providerRef,
+        grossInr: order.amount,
+      });
+    } catch (e) {
+      console.error("[recharge] ledger recordPayin failed:", (e as Error).message);
+    }
+  }
 
   return { ok: true, order };
 };
