@@ -282,7 +282,19 @@ export const markPaidAndCredit = async (
   // running balance (minus the gateway's payin fee, recorded
   // separately). No-op when order didn't come through a channel
   // (legacy mock recharges via direct provider).
-  const channelCode = (order.meta as any)?.channelCode;
+  //
+  // Fallback: if meta.channelCode is missing (e.g. order predates the
+  // channel-routing deploy), try to find a single matching channel by
+  // provider name. This auto-heals any orphan order created during a
+  // partial rollout. If multiple channels match, we leave it alone —
+  // operator should backfill manually via Admin ± Adjust.
+  let channelCode = (order.meta as any)?.channelCode as string | undefined;
+  if (!channelCode && order.provider) {
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    const { PaymentChannelModel } = require("../db/models/PaymentChannel");
+    const candidates = await PaymentChannelModel.find({ provider: order.provider }).select("code country").lean();
+    if (candidates.length === 1) channelCode = candidates[0].code;
+  }
   if (channelCode) {
     try {
       await recordPayin({
