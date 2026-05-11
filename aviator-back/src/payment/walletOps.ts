@@ -108,6 +108,12 @@ const fetchUsdtBalance = async (address: string): Promise<number> => {
   if (!config.tronContract) return 0;
   return withRetry(async () => {
     const tron = buildClient();
+    // TronWeb requires an `owner_address` for constant contract calls
+    // even when read-only. Without a privateKey set, the contract().at()
+    // path fails with "owner_address isn't set". Pin the tron instance
+    // to the address we're querying — view functions don't actually
+    // need a signer, just a non-empty caller.
+    tron.setAddress(address);
     const c = await tron.contract().at(config.tronContract);
     const raw: bigint = await c.balanceOf(address).call();
     return Number(raw) / 1e6;
