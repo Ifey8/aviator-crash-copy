@@ -38,17 +38,23 @@ const POLL_INTERVAL_MS = 20_000;
 let timer: NodeJS.Timeout | null = null;
 let running = false;
 
+const HARD_CUTOFF_MS = 7 * 24 * 60 * 60 * 1000; // 7 days — stop polling entirely
+
 const TIERS = [
-  { untilAgeMs: 2 * 60_000,        intervalMs: 20_000 },     // 0-2 min: every 20s
-  { untilAgeMs: 10 * 60_000,       intervalMs: 60_000 },     // 2-10 min: every 60s
-  { untilAgeMs: 30 * 60_000,       intervalMs: 3 * 60_000 }, // 10-30 min: every 3 min
-  { untilAgeMs: 60 * 60_000,       intervalMs: 10 * 60_000 },// 30-60 min: every 10 min
-  { untilAgeMs: Infinity,          intervalMs: 30 * 60_000 },// >60 min: every 30 min
+  { untilAgeMs: 2 * 60_000,            intervalMs: 20_000 },          // 0-2 min: every 20s
+  { untilAgeMs: 10 * 60_000,           intervalMs: 60_000 },          // 2-10 min: every 60s
+  { untilAgeMs: 30 * 60_000,           intervalMs: 3 * 60_000 },      // 10-30 min: every 3 min
+  { untilAgeMs: 60 * 60_000,           intervalMs: 10 * 60_000 },     // 30-60 min: every 10 min
+  { untilAgeMs: HARD_CUTOFF_MS,        intervalMs: 24 * 60 * 60_000 },// 1h-7d: every 24 h
 ];
 
 const shouldPoll = (createdAt: Date, lastPolledAt?: Date | null): boolean => {
   const ageMs = Date.now() - createdAt.getTime();
-  const tier = TIERS.find((t) => ageMs < t.untilAgeMs) || TIERS[TIERS.length - 1];
+  // Hard stop after 7 days — provider order is effectively dead and
+  // pollers should focus capacity on recent orders.
+  if (ageMs >= HARD_CUTOFF_MS) return false;
+  const tier = TIERS.find((t) => ageMs < t.untilAgeMs);
+  if (!tier) return false;
   if (!lastPolledAt) return true;
   return Date.now() - lastPolledAt.getTime() >= tier.intervalMs;
 };
@@ -149,10 +155,12 @@ const tick = async (): Promise<void> => {
   if (running) return; // skip if previous tick still running
   running = true;
   try {
-    // ── Pending recharge orders (within TTL) ──
+    // ── Pending recharge orders (within TTL + within 7-day poll window) ──
+    const sevenDaysAgo = new Date(Date.now() - HARD_CUTOFF_MS);
     const recharges = await RechargeOrderModel.find({
       status: "pending",
       expiresAt: { $gt: new Date() },
+      createdAt: { $gte: sevenDaysAgo },
     }).limit(50).lean();
 
     for (const o of recharges) {
@@ -163,10 +171,11 @@ const tick = async (): Promise<void> => {
       }
     }
 
-    // ── In-flight withdrawal orders ──
+    // ── In-flight withdrawal orders (within 7-day poll window) ──
     const withdrawals = await WithdrawalOrderModel.find({
       method: "bank",
       status: { $in: ["pending", "processing", "manual_queue"] },
+      createdAt: { $gte: sevenDaysAgo },
     }).limit(50).lean();
 
     for (const o of withdrawals) {
