@@ -68,7 +68,8 @@ export class PaymePayoutProvider implements PayoutProvider {
       merchant_code: merchantCode,
       country_code: country,
       order_no: input.orderId,
-      order_amount: input.grossAmount.toFixed(2),
+      // Payme India requires integer order_amount (same as payin).
+      order_amount: String(Math.round(input.grossAmount)),
       pay_type: "indiaCommon",
       bank_code: bankCode,
       bank_card_no: input.bankAccount.trim(),

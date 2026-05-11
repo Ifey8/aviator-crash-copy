@@ -60,8 +60,11 @@ export class PaymeProvider implements PaymentProvider {
       merchant_code: merchantCode,
       country_code: country,
       order_no: input.orderId,
-      // Payme expects 2-decimal string per the doc example ("100.00")
-      order_amount: input.amount.toFixed(2),
+      // Payme India rejects decimal amounts with "order_amount can only
+      // be an integer". The doc's sort example also uses integer:
+      // "order_amount=50". Send integer-string form (round() so we don't
+      // truncate a fractional rupee like 99.6 → 99).
+      order_amount: String(Math.round(input.amount)),
       pay_type: payType,
       notify_url: input.webhookUrl,
       return_url: input.returnUrl,
