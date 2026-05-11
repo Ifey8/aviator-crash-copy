@@ -12,6 +12,7 @@ import { triggerReferralReward } from "../payment/referral";
 import { getHotWalletBalance } from "../payment/hotWallet";
 import { listWallets, transferOut, sweepAddresses, fetchAddressBalance } from "../payment/walletOps";
 import { PaymentChannelModel } from "../db/models/PaymentChannel";
+import { WebhookLogModel } from "../db/models/WebhookLog";
 import { listProviderTypes, getProviderType } from "../payment/catalog";
 import { invalidateChannelCache, listChannelsAdmin, getChannelByCode } from "../payment/channels";
 
@@ -501,6 +502,7 @@ adminRouter.get("/channels", async (_req, res) => {
       credentials,
       params: paramMap,
       priority: d.priority,
+      callbackIpAllowlist: d.callbackIpAllowlist || "",
       createdAt: d.createdAt,
       updatedAt: d.updatedAt,
     };
@@ -566,6 +568,7 @@ adminRouter.post("/channels", async (req, res) => {
     credentials: credObj,
     params: paramObj,
     priority: typeof priority === "number" ? priority : 100,
+    callbackIpAllowlist: typeof req.body?.callbackIpAllowlist === "string" ? String(req.body.callbackIpAllowlist).slice(0, 512) : "",
   });
   res.json({ status: true, data: { code: doc.code } });
 });
@@ -616,6 +619,9 @@ adminRouter.patch("/channels/:code", async (req, res) => {
     }
   }
   if (typeof priority === "number") doc.priority = priority;
+  if (typeof req.body?.callbackIpAllowlist === "string") {
+    doc.callbackIpAllowlist = String(req.body.callbackIpAllowlist).slice(0, 512);
+  }
   doc.updatedAt = new Date();
   await doc.save();
   invalidateChannelCache(doc.code);
@@ -655,6 +661,43 @@ adminRouter.post("/channels/:code/test", async (req, res) => {
       message: "Channel resolves. Real provider ping not yet implemented — try a small dry-run recharge / payout.",
     },
   });
+});
+
+/**
+ * GET /admin/webhook-logs — query the callback audit trail.
+ *
+ * Filters (all optional):
+ *   channelCode  — exact match
+ *   direction    — "payin" | "payout"
+ *   outcome      — exact match (ok-paid / rejected-sig / ...)
+ *   orderNo      — exact match on the merchant order_no
+ *   platOrderNo  — exact match on the gateway's plat_order_no
+ *   ip           — exact source IP
+ *   from / to    — ISO date range on createdAt
+ *   limit        — default 50, max 200
+ */
+adminRouter.get("/webhook-logs", async (req, res) => {
+  const filter: Record<string, unknown> = {};
+  const q = req.query;
+  if (q.channelCode) filter.channelCode = String(q.channelCode);
+  if (q.direction) filter.direction = String(q.direction);
+  if (q.outcome) filter.outcome = String(q.outcome);
+  if (q.orderNo) filter.orderNo = String(q.orderNo);
+  if (q.platOrderNo) filter.platOrderNo = String(q.platOrderNo);
+  if (q.ip) filter.ip = String(q.ip);
+  if (q.from || q.to) {
+    const range: Record<string, Date> = {};
+    if (q.from) range.$gte = new Date(String(q.from));
+    if (q.to) range.$lte = new Date(String(q.to));
+    filter.createdAt = range as any;
+  }
+  const limit = Math.min(Number(q.limit) || 50, 200);
+  const items = await WebhookLogModel.find(filter)
+    .sort({ createdAt: -1 })
+    .limit(limit)
+    .lean();
+  const total = await WebhookLogModel.countDocuments(filter);
+  res.json({ status: true, total, items });
 });
 
 // ---------- Hot wallet status (USDT liquidity gauge) ----------

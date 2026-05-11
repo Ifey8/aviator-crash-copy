@@ -8,6 +8,7 @@ import { engine } from "../game/engine";
 import { pushToUser, pushUserMyInfo } from "../sockets";
 import { getProvider, defaultProvider, listProviders } from "../payment";
 import { getChannelByCode, getDefaultChannel } from "../payment/channels";
+import { webhookGuard } from "../payment/webhookLog";
 import { triggerReferralReward } from "../payment/referral";
 import { getSetting } from "../settings";
 
@@ -282,48 +283,78 @@ const markPaidAndCredit = async (
 // ---------------------------------------------------------------------------
 rechargeRouter.post("/webhook/:key", async (req: Request, res: Response) => {
   const key = req.params.key;
-  const rawBody = JSON.stringify(req.body);
 
-  // Channel-based routing (preferred)
-  let result: ReturnType<typeof emptyResult> | null = null;
-  let isChannel = false;
+  // Quick existence check — does :key match a channel or a legacy provider?
   const ch = await getChannelByCode(key, { allowDisabled: true });
-  if (ch?.payment) {
-    isChannel = true;
-    result = ch.payment.verifyWebhook(req.headers, rawBody);
-  } else {
-    // Legacy: provider-name routing
-    const provider = getProvider(key);
-    if (!provider) {
-      return res.status(404).json({ status: false, message: "Unknown provider/channel" });
-    }
-    result = provider.verifyWebhook(req.headers, rawBody);
+  const isChannel = !!ch?.payment;
+  const legacy = isChannel ? null : getProvider(key);
+
+  if (!isChannel && !legacy) {
+    return res.status(404).json({ status: false, message: "Unknown provider/channel" });
   }
 
-  if (!result || !result.ok) {
-    return res.status(400).json({ status: false, message: result?.failedReason || "Webhook verification failed" });
-  }
-  if (result.status === "paid") {
-    const r = await markPaidAndCredit(result.providerRef, result.raw);
-    if (isChannel) return res.type("text").send("success");
-    return res.json({ status: r.ok, data: { orderId: r.order?.orderId } });
-  }
-  // Failed — mark order as failed, no credit.
-  const order = await RechargeOrderModel.findOneAndUpdate(
-    { providerRef: result.providerRef, status: "pending" },
-    { $set: { status: "failed", failedReason: result.failedReason || "Provider reported failure" } },
-    { new: true },
+  await webhookGuard(
+    req, res,
+    { channelCode: isChannel ? key : undefined, direction: "payin" },
+    async () => {
+      const rawBody = JSON.stringify(req.body);
+      const result = isChannel
+        ? ch!.payment!.verifyWebhook(req.headers, rawBody)
+        : legacy!.verifyWebhook(req.headers, rawBody);
+
+      const orderNo = String((req.body?.transdata?.order_no || req.body?.order_no || "")).slice(0, 64);
+      const platOrderNo = result.providerRef || "";
+      const orderStatus = String((req.body?.transdata?.order_status || req.body?.order_status || "")).slice(0, 32);
+
+      if (!result.ok) {
+        return {
+          outcome: "rejected-sig" as const,
+          orderNo, platOrderNo, orderStatus,
+          responseStatus: 400,
+          responseBody: JSON.stringify({ status: false, message: result.failedReason || "Webhook verification failed" }),
+          responseContentType: "json" as const,
+          note: result.failedReason,
+        };
+      }
+      if (result.status === "paid") {
+        const r = await markPaidAndCredit(result.providerRef, result.raw);
+        if (!r.ok) {
+          return {
+            outcome: "order-not-found" as const,
+            orderNo, platOrderNo, orderStatus,
+            responseStatus: isChannel ? 200 : 200,
+            responseBody: isChannel ? "success" : JSON.stringify({ status: false, message: r.reason }),
+            responseContentType: isChannel ? "text" as const : "json" as const,
+            note: r.reason,
+          };
+        }
+        return {
+          outcome: "ok-paid" as const,
+          orderNo, platOrderNo, orderStatus,
+          responseStatus: 200,
+          responseBody: isChannel ? "success" : JSON.stringify({ status: true, data: { orderId: r.order?.orderId } }),
+          responseContentType: isChannel ? "text" as const : "json" as const,
+        };
+      }
+      // status === "failed"
+      const order = await RechargeOrderModel.findOneAndUpdate(
+        { providerRef: result.providerRef, status: "pending" },
+        { $set: { status: "failed", failedReason: result.failedReason || "Provider reported failure" } },
+        { new: true },
+      );
+      if (order) {
+        pushToUser(order.userName, "rechargeUpdate", { orderId: order.orderId, status: "failed" });
+      }
+      return {
+        outcome: "ok-failed" as const,
+        orderNo, platOrderNo, orderStatus,
+        responseStatus: 200,
+        responseBody: isChannel ? "success" : JSON.stringify({ status: true }),
+        responseContentType: isChannel ? "text" as const : "json" as const,
+      };
+    },
   );
-  if (order) {
-    pushToUser(order.userName, "rechargeUpdate", { orderId: order.orderId, status: "failed" });
-  }
-  if (isChannel) return res.type("text").send("success");
-  res.json({ status: true });
 });
-
-// Type helper for the verifyWebhook result union (avoids the ReturnType<>
-// noise inline above)
-const emptyResult = () => ({} as ReturnType<NonNullable<ReturnType<typeof getProvider>>["verifyWebhook"]>);
 
 // ---------------------------------------------------------------------------
 // POST /api/recharge/mock-pay/:orderId — DEV-ONLY simulated payment

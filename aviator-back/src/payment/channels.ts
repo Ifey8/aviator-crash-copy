@@ -108,3 +108,24 @@ export const getDefaultChannel = async (
 export const listChannelsAdmin = async (): Promise<PaymentChannelDoc[]> => {
   return PaymentChannelModel.find().sort({ country: 1, priority: -1, createdAt: 1 }).lean<PaymentChannelDoc[]>();
 };
+
+/**
+ * Look up just the IP allowlist + cached existence of a channel.
+ * Used by webhook routes BEFORE sig verification to gate by IP.
+ * Returns null if channel doesn't exist at all.
+ */
+export const getChannelMeta = async (code: string): Promise<{
+  exists: true;
+  enabled: boolean;
+  callbackIpAllowlist: string;
+} | null> => {
+  const doc = await PaymentChannelModel.findOne({ code })
+    .select("enabled callbackIpAllowlist")
+    .lean<{ enabled: boolean; callbackIpAllowlist: string }>();
+  if (!doc) return null;
+  return {
+    exists: true,
+    enabled: doc.enabled,
+    callbackIpAllowlist: doc.callbackIpAllowlist || "",
+  };
+};

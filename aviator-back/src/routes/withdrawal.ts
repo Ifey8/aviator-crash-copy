@@ -13,6 +13,7 @@ import {
   defaultPayoutProvider,
 } from "../payment/payouts";
 import { getChannelByCode, getDefaultChannel } from "../payment/channels";
+import { webhookGuard } from "../payment/webhookLog";
 import { autoBroadcastUsdtWithdrawal } from "../payment/walletOps";
 
 export const withdrawalRouter = Router();
@@ -389,57 +390,95 @@ withdrawalRouter.get("/orders", requireAuth, async (req: Request, res: Response)
  */
 withdrawalRouter.post("/webhook/:key", async (req: Request, res: Response) => {
   const key = req.params.key;
-  const rawBody = JSON.stringify(req.body);
-
-  // Channel lookup first
-  let v;
   const ch = await getChannelByCode(key, { allowDisabled: true });
-  if (ch?.payout) {
-    v = ch.payout.verifyWebhook(req.headers as Record<string, unknown>, rawBody);
-  } else {
-    const provider = getPayoutProvider(key);
-    if (!provider) return res.status(404).json({ status: false, message: "Unknown provider/channel" });
-    v = provider.verifyWebhook(req.headers as Record<string, unknown>, rawBody);
-  }
-  if (!v.ok || !v.providerRef) {
-    return res.status(400).json({ status: false, message: v.failedReason || "verification failed" });
+  const isChannel = !!ch?.payout;
+  const legacy = isChannel ? null : getPayoutProvider(key);
+
+  if (!isChannel && !legacy) {
+    return res.status(404).json({ status: false, message: "Unknown provider/channel" });
   }
 
-  const order = await WithdrawalOrderModel.findOne({ providerRef: v.providerRef });
-  if (!order) return res.status(404).json({ status: false, message: "Order not found for providerRef" });
+  await webhookGuard(
+    req, res,
+    { channelCode: isChannel ? key : undefined, direction: "payout" },
+    async () => {
+      const rawBody = JSON.stringify(req.body);
+      const v = isChannel
+        ? ch!.payout!.verifyWebhook(req.headers as Record<string, unknown>, rawBody)
+        : legacy!.verifyWebhook(req.headers as Record<string, unknown>, rawBody);
 
-  if (v.status === "paid") {
-    const flipped = await WithdrawalOrderModel.findOneAndUpdate(
-      { providerRef: v.providerRef, status: { $in: ["pending", "processing", "manual_queue"] } },
-      { $set: { status: "paid", paidAt: new Date() } },
-      { new: true },
-    );
-    if (flipped) {
-      // Idempotent reward
-      // eslint-disable-next-line @typescript-eslint/no-var-requires
-      const { triggerReferralReward } = require("../payment/referral");
-      await triggerReferralReward(order.userName, {
-        type: "payout",
-        id: order.providerRef || order.orderId,
-        amountInr: order.method === "bank" ? order.grossAmount : order.grossAmount * (order.fxRate || 1),
-      });
-      pushToUser(order.userName, "withdrawalUpdate", { orderId: order.orderId, status: "paid" });
-      pushUserMyInfo(order.userName);
-    }
-  } else if (v.status === "failed") {
-    const flipped = await WithdrawalOrderModel.findOneAndUpdate(
-      { providerRef: v.providerRef, status: { $in: ["pending", "processing", "manual_queue"] } },
-      { $set: { status: "failed", failedAt: new Date(), failedReason: v.failedReason || "Provider reported failure" } },
-      { new: true },
-    );
-    if (flipped) {
-      await engine.refundWithdrawal(order.userName, order.totalDebitInr);
-      pushToUser(order.userName, "withdrawalUpdate", { orderId: order.orderId, status: "failed", failedReason: flipped.failedReason });
-      pushUserMyInfo(order.userName);
-    }
-  }
-  // Payme expects literal "success" string ack
-  res.type("text").send("success");
+      const orderNo = String((req.body?.transdata?.order_no || req.body?.order_no || "")).slice(0, 64);
+      const platOrderNo = v.providerRef || "";
+      const orderStatus = String((req.body?.transdata?.order_status || req.body?.order_status || "")).slice(0, 32);
+
+      if (!v.ok || !v.providerRef) {
+        return {
+          outcome: "rejected-sig" as const,
+          orderNo, platOrderNo, orderStatus,
+          responseStatus: 400,
+          responseBody: JSON.stringify({ status: false, message: v.failedReason || "verification failed" }),
+          responseContentType: "json" as const,
+          note: v.failedReason,
+        };
+      }
+
+      const order = await WithdrawalOrderModel.findOne({ providerRef: v.providerRef });
+      if (!order) {
+        return {
+          outcome: "order-not-found" as const,
+          orderNo, platOrderNo, orderStatus,
+          responseStatus: 404,
+          responseBody: JSON.stringify({ status: false, message: "Order not found for providerRef" }),
+          responseContentType: "json" as const,
+        };
+      }
+
+      if (v.status === "paid") {
+        const flipped = await WithdrawalOrderModel.findOneAndUpdate(
+          { providerRef: v.providerRef, status: { $in: ["pending", "processing", "manual_queue"] } },
+          { $set: { status: "paid", paidAt: new Date() } },
+          { new: true },
+        );
+        if (flipped) {
+          // eslint-disable-next-line @typescript-eslint/no-var-requires
+          const { triggerReferralReward } = require("../payment/referral");
+          await triggerReferralReward(order.userName, {
+            type: "payout",
+            id: order.providerRef || order.orderId,
+            amountInr: order.method === "bank" ? order.grossAmount : order.grossAmount * (order.fxRate || 1),
+          });
+          pushToUser(order.userName, "withdrawalUpdate", { orderId: order.orderId, status: "paid" });
+          pushUserMyInfo(order.userName);
+        }
+        return {
+          outcome: "ok-paid" as const,
+          orderNo, platOrderNo, orderStatus,
+          responseStatus: 200,
+          responseBody: "success",
+          responseContentType: "text" as const,
+        };
+      }
+
+      // failed
+      const flipped = await WithdrawalOrderModel.findOneAndUpdate(
+        { providerRef: v.providerRef, status: { $in: ["pending", "processing", "manual_queue"] } },
+        { $set: { status: "failed", failedAt: new Date(), failedReason: v.failedReason || "Provider reported failure" } },
+        { new: true },
+      );
+      if (flipped) {
+        await engine.refundWithdrawal(order.userName, order.totalDebitInr);
+        pushToUser(order.userName, "withdrawalUpdate", { orderId: order.orderId, status: "failed", failedReason: flipped.failedReason });
+        pushUserMyInfo(order.userName);
+      }
+      return {
+        outcome: "ok-failed" as const,
+        orderNo, platOrderNo, orderStatus,
+        responseStatus: 200,
+        responseBody: "success",
+        responseContentType: "text" as const,
+      };
+    },
+  );
 });
 
 withdrawalRouter.post("/cancel/:orderId", requireAuth, async (req: Request, res: Response) => {

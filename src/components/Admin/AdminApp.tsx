@@ -6,7 +6,7 @@ import "./admin.scss";
 
 const apiBase = config.api.replace(/\/api$/, "/api");
 
-type Tab = "stats" | "users" | "rounds" | "withdrawals" | "wallets" | "channels" | "settings";
+type Tab = "stats" | "users" | "rounds" | "withdrawals" | "wallets" | "channels" | "webhooks" | "settings";
 
 interface Stats {
   engine: { phase: string; multiplier: number; players: number; historyLen: number };
@@ -75,6 +75,7 @@ export const AdminApp: React.FC = () => {
           <button className={tab === "withdrawals" ? "active" : ""} onClick={() => setTab("withdrawals")}>Withdrawals</button>
           <button className={tab === "wallets" ? "active" : ""} onClick={() => setTab("wallets")}>Wallets</button>
           <button className={tab === "channels" ? "active" : ""} onClick={() => setTab("channels")}>Channels</button>
+          <button className={tab === "webhooks" ? "active" : ""} onClick={() => setTab("webhooks")}>Webhooks</button>
           <button className={tab === "settings" ? "active" : ""} onClick={() => setTab("settings")}>Settings</button>
         </nav>
         <div className="admin-user">
@@ -90,6 +91,7 @@ export const AdminApp: React.FC = () => {
         {tab === "withdrawals" && <WithdrawalsTab />}
         {tab === "wallets" && <WalletsTab />}
         {tab === "channels" && <ChannelsTab />}
+        {tab === "webhooks" && <WebhooksTab />}
         {tab === "settings" && <SettingsTab />}
       </main>
     </div>
@@ -429,6 +431,7 @@ interface ChannelRow {
   credentials: Record<string, string>;
   params: Record<string, string>;
   priority: number;
+  callbackIpAllowlist: string;
   createdAt: string;
   updatedAt: string;
 }
@@ -572,6 +575,7 @@ const ChannelEditModal: React.FC<{
   const [supportsPayin, setSupportsPayin] = React.useState(row?.supports.payin ?? !!type?.supports.payin);
   const [supportsPayout, setSupportsPayout] = React.useState(row?.supports.payout ?? !!type?.supports.payout);
   const [priority, setPriority] = React.useState(row?.priority ?? 100);
+  const [ipAllowlist, setIpAllowlist] = React.useState(row?.callbackIpAllowlist ?? "");
   const initCreds: Record<string, string> = React.useMemo(() => {
     const out: Record<string, string> = {};
     type?.credentialFields.forEach((f) => { out[f.key] = row?.credentials[f.key] || ""; });
@@ -594,6 +598,7 @@ const ChannelEditModal: React.FC<{
     try {
       const body: any = {
         name, country, enabled, priority,
+        callbackIpAllowlist: ipAllowlist,
         supports: { payin: supportsPayin, payout: supportsPayout },
         credentials: creds,
         params,
@@ -649,6 +654,18 @@ const ChannelEditModal: React.FC<{
           <span>Priority (higher = preferred)</span>
           <input type="number" value={priority} onChange={(e) => setPriority(Number(e.target.value))} />
         </label>
+        <label>
+          <span>Callback IP allowlist</span>
+          <input
+            type="text"
+            value={ipAllowlist}
+            onChange={(e) => setIpAllowlist(e.target.value)}
+            placeholder="e.g. 16.163.88.85, 54.46.98.55, 10.0.0.0/24"
+          />
+          <span className="admin-settings-hint" style={{ display: "block", fontSize: 10.5, opacity: 0.7 }}>
+            Comma-separated IPs and/or CIDR blocks that may POST webhook callbacks for this channel. Leave empty to skip the IP gate (signature alone authenticates). Strongly recommended to fill with the provider's documented callback IPs.
+          </span>
+        </label>
 
         <h4 style={{ marginTop: 16, marginBottom: 4, fontSize: 12, letterSpacing: "0.08em", textTransform: "uppercase", color: "var(--admin-muted)" }}>Credentials</h4>
         {type.credentialFields.map((f) => (
@@ -699,6 +716,162 @@ const ChannelEditModal: React.FC<{
           <button className="primary" onClick={save} disabled={busy}>{busy ? "Saving…" : (isNew ? "Create" : "Save")}</button>
         </div>
       </div>
+    </div>
+  );
+};
+
+// ============================== Webhook Logs ==============================
+
+interface WebhookLogRow {
+  _id: string;
+  channelCode?: string;
+  direction: "payin" | "payout";
+  ip: string;
+  ipAllowed: boolean;
+  signValid: boolean;
+  outcome: string;
+  orderNo?: string;
+  platOrderNo?: string;
+  orderStatus?: string;
+  rawBody: string;
+  headers: Record<string, string>;
+  responseStatus: number;
+  responseBody: string;
+  note?: string;
+  createdAt: string;
+}
+
+const WebhooksTab: React.FC = () => {
+  const api = useApi();
+  const [rows, setRows] = React.useState<WebhookLogRow[]>([]);
+  const [total, setTotal] = React.useState(0);
+  const [error, setError] = React.useState<string | null>(null);
+  const [filters, setFilters] = React.useState({
+    channelCode: "", direction: "", outcome: "", orderNo: "", platOrderNo: "", ip: "", from: "", to: "",
+  });
+  const [detailRow, setDetailRow] = React.useState<WebhookLogRow | null>(null);
+
+  const load = React.useCallback(async () => {
+    try {
+      const qs = Object.entries(filters)
+        .filter(([, v]) => v)
+        .map(([k, v]) => `${k}=${encodeURIComponent(v)}`)
+        .join("&");
+      const r = await api(`/admin/webhook-logs${qs ? "?" + qs : ""}`);
+      setRows(r.items || []);
+      setTotal(r.total || 0);
+      setError(null);
+    } catch (e) { setError((e as Error).message); }
+  }, [api, filters]);
+
+  React.useEffect(() => { load(); }, [load]);
+
+  const setF = (key: keyof typeof filters, value: string) =>
+    setFilters((f) => ({ ...f, [key]: value }));
+
+  const clearFilters = () => setFilters({ channelCode: "", direction: "", outcome: "", orderNo: "", platOrderNo: "", ip: "", from: "", to: "" });
+
+  const outcomeColor = (o: string): string => {
+    if (o === "ok-paid") return "#56e09a";
+    if (o === "ok-failed") return "#ffb0bc";
+    if (o.startsWith("rejected")) return "#ff5468";
+    if (o === "order-not-found") return "#ffc857";
+    return "var(--admin-muted)";
+  };
+
+  return (
+    <div className="admin-webhooks">
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(140px, 1fr))", gap: 8, marginBottom: 12 }}>
+        <input type="text" placeholder="Channel code" value={filters.channelCode} onChange={(e) => setF("channelCode", e.target.value)} />
+        <select value={filters.direction} onChange={(e) => setF("direction", e.target.value)}>
+          <option value="">Any direction</option>
+          <option value="payin">payin</option>
+          <option value="payout">payout</option>
+        </select>
+        <select value={filters.outcome} onChange={(e) => setF("outcome", e.target.value)}>
+          <option value="">Any outcome</option>
+          <option value="ok-paid">ok-paid</option>
+          <option value="ok-failed">ok-failed</option>
+          <option value="rejected-ip">rejected-ip</option>
+          <option value="rejected-sig">rejected-sig</option>
+          <option value="order-not-found">order-not-found</option>
+          <option value="error">error</option>
+        </select>
+        <input type="text" placeholder="Order no" value={filters.orderNo} onChange={(e) => setF("orderNo", e.target.value)} />
+        <input type="text" placeholder="Plat order no" value={filters.platOrderNo} onChange={(e) => setF("platOrderNo", e.target.value)} />
+        <input type="text" placeholder="Source IP" value={filters.ip} onChange={(e) => setF("ip", e.target.value)} />
+        <input type="datetime-local" value={filters.from} onChange={(e) => setF("from", e.target.value)} title="From" />
+        <input type="datetime-local" value={filters.to} onChange={(e) => setF("to", e.target.value)} title="To" />
+      </div>
+      <div style={{ display: "flex", gap: 8, marginBottom: 12, alignItems: "center" }}>
+        <button onClick={load}>↻ Refresh</button>
+        <button onClick={clearFilters}>Clear filters</button>
+        <span style={{ marginLeft: "auto", fontSize: 11, opacity: 0.6 }}>
+          Showing {rows.length} of {total} logs (90-day TTL)
+        </span>
+      </div>
+
+      {error && <div className="admin-error">⚠ {error}</div>}
+
+      <table className="admin-table">
+        <thead>
+          <tr>
+            <th>Time</th><th>Channel</th><th>Dir</th><th>IP</th>
+            <th>Outcome</th><th>Order</th><th>Status</th><th></th>
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map((r) => (
+            <tr key={r._id}>
+              <td className="seed">{new Date(r.createdAt).toLocaleString()}</td>
+              <td><code style={{ fontSize: 11 }}>{r.channelCode || "—"}</code></td>
+              <td>{r.direction}</td>
+              <td className="seed">
+                {r.ip}
+                {!r.ipAllowed && <span title="IP not on allowlist" style={{ marginLeft: 4, color: "#ff5468" }}>⛔</span>}
+              </td>
+              <td>
+                <span className="tag" style={{ background: "rgba(255,255,255,0.05)", color: outcomeColor(r.outcome), border: `1px solid ${outcomeColor(r.outcome)}33` }}>
+                  {r.outcome}
+                </span>
+                {!r.signValid && <div className="seed" style={{ color: "#ff5468" }}>bad signature</div>}
+              </td>
+              <td className="seed">{r.orderNo || r.platOrderNo || "—"}</td>
+              <td>{r.orderStatus || "—"}</td>
+              <td><button onClick={() => setDetailRow(r)}>View</button></td>
+            </tr>
+          ))}
+          {rows.length === 0 && <tr><td colSpan={8} className="empty">No webhook callbacks logged yet</td></tr>}
+        </tbody>
+      </table>
+
+      {detailRow && (
+        <div className="admin-modal-overlay" onClick={() => setDetailRow(null)}>
+          <div className="admin-modal" onClick={(e) => e.stopPropagation()} style={{ maxWidth: 720 }}>
+            <h3>Webhook detail — {detailRow.outcome}</h3>
+            <div style={{ fontSize: 11, marginBottom: 12 }}>
+              <div>Time:    <code>{new Date(detailRow.createdAt).toISOString()}</code></div>
+              <div>Channel: <code>{detailRow.channelCode || "(legacy provider)"}</code></div>
+              <div>Direction: {detailRow.direction}</div>
+              <div>IP: <code>{detailRow.ip}</code> {detailRow.ipAllowed ? "✓ allowed" : "✗ rejected"}</div>
+              <div>Sig: {detailRow.signValid ? "✓ valid" : "✗ invalid"}</div>
+              <div>Order no: <code>{detailRow.orderNo || "—"}</code></div>
+              <div>Plat order no: <code>{detailRow.platOrderNo || "—"}</code></div>
+              <div>Order status: {detailRow.orderStatus || "—"}</div>
+              {detailRow.note && <div>Note: {detailRow.note}</div>}
+            </div>
+            <h4 style={{ fontSize: 11, opacity: 0.7, margin: "12px 0 4px" }}>RAW BODY</h4>
+            <pre style={{ background: "rgba(255,255,255,0.04)", padding: 8, fontSize: 10.5, maxHeight: 260, overflow: "auto", whiteSpace: "pre-wrap", wordBreak: "break-all" }}>{detailRow.rawBody}</pre>
+            <h4 style={{ fontSize: 11, opacity: 0.7, margin: "12px 0 4px" }}>RESPONSE ({detailRow.responseStatus})</h4>
+            <pre style={{ background: "rgba(255,255,255,0.04)", padding: 8, fontSize: 10.5, maxHeight: 120, overflow: "auto", whiteSpace: "pre-wrap", wordBreak: "break-all" }}>{detailRow.responseBody}</pre>
+            <h4 style={{ fontSize: 11, opacity: 0.7, margin: "12px 0 4px" }}>HEADERS</h4>
+            <pre style={{ background: "rgba(255,255,255,0.04)", padding: 8, fontSize: 10.5, maxHeight: 120, overflow: "auto" }}>{JSON.stringify(detailRow.headers, null, 2)}</pre>
+            <div className="admin-modal-actions">
+              <button onClick={() => setDetailRow(null)}>Close</button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

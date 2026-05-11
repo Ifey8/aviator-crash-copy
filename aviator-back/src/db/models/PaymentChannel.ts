@@ -46,6 +46,13 @@ export interface PaymentChannelDoc {
   params: Record<string, string>;
   /** Higher = preferred when multiple channels match. Default 100. */
   priority: number;
+  /**
+   * Comma-separated list of IPs (and/or CIDRs in the form a.b.c.d/24)
+   * that are accepted as webhook senders. Empty / missing = no IP gate
+   * (legacy mode — relies on the MD5 signature for auth). Strongly
+   * recommended to fill with the provider's documented callback IPs.
+   */
+  callbackIpAllowlist: string;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -66,6 +73,7 @@ const PaymentChannelSchema = new Schema<PaymentChannelDoc>(
     credentials: { type: Map, of: String, default: {} },
     params: { type: Map, of: String, default: {} },
     priority: { type: Number, default: 100 },
+    callbackIpAllowlist: { type: String, default: "" },
     createdAt: { type: Date, default: Date.now },
     updatedAt: { type: Date, default: Date.now },
   },
