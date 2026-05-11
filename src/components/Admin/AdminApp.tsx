@@ -750,7 +750,6 @@ const WalletsTab: React.FC = () => {
   const [error, setError] = React.useState<string | null>(null);
   const [loading, setLoading] = React.useState(false);
   const [transferOpen, setTransferOpen] = React.useState(false);
-  const [sweeping, setSweeping] = React.useState(false);
 
   const load = React.useCallback(async (fresh = false) => {
     setLoading(true);
@@ -767,16 +766,28 @@ const WalletsTab: React.FC = () => {
 
   React.useEffect(() => { load(); }, [load]);
 
-  const runSweep = async () => {
+  // Tracks which sweep operation is in flight:
+  //   • "all" = the global "Run sweep (N)" button
+  //   • "<address>" = a per-row sweep
+  //   • null = idle
+  // Stored as a single value because the sweep route serialises on-chain
+  // calls anyway — running two parallel sweeps would just double the
+  // TronGrid traffic without speeding anything up.
+  const [sweepingTarget, setSweepingTarget] = React.useState<string | null>(null);
+
+  const runSweepCore = async (addresses?: string[], label?: string) => {
+    const count = addresses?.length ?? (data?.totals.unsweptOrders || 0);
     if (!window.confirm(
-      `Sweep ${data?.totals.unsweptOrders || 0} un-swept order(s)? ` +
-      `This sends USDT from sub-addresses to the hot wallet (each takes ~13-30 TRX gas).`,
+      `Sweep ${count} address${count === 1 ? "" : "es"}? ` +
+      `This sends USDT from sub-address${count === 1 ? "" : "es"} to the hot wallet ` +
+      `(each takes ~13-30 TRX gas). The operation can take 15-60 seconds per address ` +
+      `— please don't close this tab while it runs.`,
     )) return;
-    setSweeping(true);
+    setSweepingTarget(label || "all");
     try {
       const r = await api(`/admin/wallets/sweep`, {
         method: "POST",
-        body: JSON.stringify({ dryRun: false }),
+        body: JSON.stringify({ dryRun: false, addresses }),
       });
       const d = r.data;
       alert(
@@ -794,9 +805,12 @@ const WalletsTab: React.FC = () => {
     } catch (e) {
       alert("Sweep failed: " + (e as Error).message);
     } finally {
-      setSweeping(false);
+      setSweepingTarget(null);
     }
   };
+
+  const runSweep = () => runSweepCore(undefined, "all");
+  const runSweepOne = (address: string) => runSweepCore([address], address);
 
   const dryRunSweep = async () => {
     try {
@@ -805,6 +819,10 @@ const WalletsTab: React.FC = () => {
         body: JSON.stringify({ dryRun: true }),
       });
       const d = r.data;
+      if (d.attempted === 0) {
+        alert("Nothing to sweep — no paid+un-swept orders.");
+        return;
+      }
       alert(
         `Sweep DRY-RUN preview:\n` +
         `Would attempt: ${d.attempted} address(es)\n` +
@@ -835,12 +853,15 @@ const WalletsTab: React.FC = () => {
       </section>
 
       <div className="admin-wallets-actions" style={{ display: "flex", gap: 8, marginTop: 12, alignItems: "center", flexWrap: "wrap" }}>
-        <button onClick={() => load(true)} disabled={loading}>↻ Refresh balances</button>
-        <button onClick={dryRunSweep}>Sweep dry-run</button>
-        <button onClick={runSweep} disabled={sweeping || data.totals.unsweptOrders === 0}>
-          {sweeping ? "Sweeping…" : `Run sweep (${data.totals.unsweptOrders})`}
+        <button onClick={() => load(true)} disabled={loading || !!sweepingTarget}>↻ Refresh balances</button>
+        <button onClick={dryRunSweep} disabled={!!sweepingTarget}>Sweep dry-run</button>
+        <button
+          onClick={runSweep}
+          disabled={!!sweepingTarget || data.totals.unsweptOrders === 0}
+        >
+          {sweepingTarget === "all" ? "Sweeping all… (can take 1+ min)" : `Run sweep (${data.totals.unsweptOrders})`}
         </button>
-        <button className="primary" onClick={() => setTransferOpen(true)}>
+        <button className="primary" onClick={() => setTransferOpen(true)} disabled={!!sweepingTarget}>
           Transfer out from hot…
         </button>
         <span style={{ marginLeft: "auto", fontSize: 11, opacity: 0.55 }}>
@@ -848,6 +869,13 @@ const WalletsTab: React.FC = () => {
           {data.cached && " (cached)"}
         </span>
       </div>
+      {sweepingTarget && (
+        <div style={{ marginTop: 8, padding: "8px 10px", background: "rgba(255,200,87,0.08)", border: "1px dashed rgba(255,200,87,0.3)", borderRadius: 6, fontSize: 12 }}>
+          <strong style={{ color: "#ffc857" }}>⏳ Sweeping</strong>{" "}
+          {sweepingTarget === "all" ? "all un-swept addresses" : `${sweepingTarget.slice(0, 12)}…`}
+          — please wait. Each address takes 15-60 seconds (TRX top-up + USDT transfer + chain confirm).
+        </div>
+      )}
 
       {hot && <HotWalletCard hot={hot} />}
 
@@ -858,21 +886,37 @@ const WalletsTab: React.FC = () => {
             <th>Index</th><th>Address</th>
             <th>USDT</th><th>TRX</th>
             <th>Paid</th><th>Un-swept</th><th>Total claimed</th>
+            <th>Action</th>
           </tr>
         </thead>
         <tbody>
-          {deposits.map((w) => (
-            <tr key={w.address} className={w.unsweptOrderCount && w.unsweptOrderCount > 0 ? "row-banned" : ""}>
-              <td>{w.index}</td>
-              <td className="seed">{w.address}</td>
-              <td className="num">{w.usdtBalance.toFixed(4)}</td>
-              <td className="num">{w.trxBalance.toFixed(4)}</td>
-              <td className="num">{w.paidOrderCount}</td>
-              <td className="num">{w.unsweptOrderCount}</td>
-              <td className="num">{w.totalUsdtClaimed?.toFixed(2)}</td>
-            </tr>
-          ))}
-          {deposits.length === 0 && <tr><td colSpan={7} className="empty">No deposit addresses yet</td></tr>}
+          {deposits.map((w) => {
+            const isBusy = sweepingTarget === w.address;
+            const hasUnswept = (w.unsweptOrderCount || 0) > 0;
+            return (
+              <tr key={w.address} className={hasUnswept ? "row-banned" : ""}>
+                <td>{w.index}</td>
+                <td className="seed">{w.address}</td>
+                <td className="num">{w.usdtBalance.toFixed(4)}</td>
+                <td className="num">{w.trxBalance.toFixed(4)}</td>
+                <td className="num">{w.paidOrderCount}</td>
+                <td className="num">{w.unsweptOrderCount}</td>
+                <td className="num">{w.totalUsdtClaimed?.toFixed(2)}</td>
+                <td>
+                  {hasUnswept ? (
+                    <button
+                      onClick={() => runSweepOne(w.address)}
+                      disabled={!!sweepingTarget}
+                      title="Sweep just this address"
+                    >
+                      {isBusy ? "Sweeping…" : "Sweep"}
+                    </button>
+                  ) : "—"}
+                </td>
+              </tr>
+            );
+          })}
+          {deposits.length === 0 && <tr><td colSpan={8} className="empty">No deposit addresses yet</td></tr>}
         </tbody>
       </table>
 
