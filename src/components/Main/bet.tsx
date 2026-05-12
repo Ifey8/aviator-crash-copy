@@ -2,6 +2,7 @@ import React, { useEffect } from "react";
 // import { useCrashContext } from "../context";
 import { toast } from 'react-toastify';
 import Context, { callCashOut } from "../../context";
+import { getPostCashoutBetState } from "./betControl";
 
 interface BetProps {
 	index: 'f' | 's'
@@ -183,7 +184,7 @@ const Bet = ({ index, add, setAdd }: BetProps) => {
 		if (betted) {
 			if (autoCashoutState) {
 				if (cashOut < currentSecondNum) {
-					updateUserBetState({ [`${index}betted`]: false });
+					updateUserBetState(getPostCashoutBetState(index));
 					callCashOut(cashOut, index);
 				}
 			}
@@ -273,7 +274,10 @@ const Bet = ({ index, add, setAdd }: BetProps) => {
 					</div>
 					<div className="buttons-block">
 						{betted ? GameState === "PLAYING" ?
-							<button className="btn-waiting" onClick={() => { callCashOut(currentTarget, index) }}>
+							<button className="btn-waiting" onClick={() => {
+								updateUserBetState(getPostCashoutBetState(index));
+								callCashOut(currentTarget, index);
+							}}>
 								<span>
 									<label>CASHOUT</label>
 									<label className="amount">
