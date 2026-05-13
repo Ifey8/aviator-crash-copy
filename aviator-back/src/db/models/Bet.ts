@@ -21,7 +21,10 @@ const BetSchema = new Schema<BetDoc>({
   cashAmount: { type: Number, default: 0 },
   crashPoint: { type: Number, default: 0 },
   index: { type: String, enum: ["f", "s"], required: true },
-  createdAt: { type: Date, default: Date.now, index: true },
+  createdAt: { type: Date, default: Date.now },
 });
+
+// Auto-delete bets older than 7 days.
+BetSchema.index({ createdAt: 1 }, { expireAfterSeconds: 7 * 24 * 3600 });
 
 export const BetModel = model<BetDoc>("Bet", BetSchema);

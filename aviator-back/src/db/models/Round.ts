@@ -37,7 +37,10 @@ const RoundSchema = new Schema<RoundDoc>({
       index: String,
     },
   ],
-  createdAt: { type: Date, default: Date.now },
+  createdAt: { type: Date, default: Date.now, index: true },
 });
+
+// Auto-delete rounds older than 7 days.
+RoundSchema.index({ createdAt: 1 }, { expireAfterSeconds: 7 * 24 * 3600 });
 
 export const RoundModel = model<RoundDoc>("Round", RoundSchema);
