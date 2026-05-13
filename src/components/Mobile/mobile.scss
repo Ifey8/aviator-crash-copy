@@ -336,20 +336,21 @@
 }
 
 .mobile-header-sound {
-  width: 34px;
-  height: 34px;
-  border-radius: 8px;
-  background: linear-gradient(180deg, rgba(255, 200, 87, 0.10) 0%, rgba(255, 153, 51, 0.04) 100%);
-  border: 1px solid rgba(255, 200, 87, 0.22);
+  width: 30px;
+  height: 30px;
+  border-radius: 7px;
+  background: transparent;
+  border: 1px solid rgba(255, 200, 87, 0.18);
   color: var(--crash-gold);
   display: flex;
   align-items: center;
   justify-content: center;
   cursor: pointer;
+  flex-shrink: 0;
   transition: background 150ms, opacity 150ms;
-  &:active { background: rgba(255, 200, 87, 0.18); }
+  &:active { background: rgba(255, 200, 87, 0.15); }
   &.muted {
-    opacity: 0.5;
+    opacity: 0.45;
     color: var(--crash-text, #fff5dc);
   }
 }
