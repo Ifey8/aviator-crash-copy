@@ -137,6 +137,33 @@ export const risingTick = (multiplier: number) => {
   osc(freq, "sine", 0.03, 0.04);
 };
 
+/**
+ * Coin flight — rapid metallic clinks synced with the CoinFxLayer animation.
+ *   direction="out" → bet placed, coins leave wallet (descending pitch)
+ *   direction="in"  → cashout, coins return to wallet (ascending pitch)
+ * @param count  number of coins (matches visual count)
+ * @param stagger  ms between each coin (matches CoinFxLayer stagger, default 65)
+ */
+export const coinFlight = (
+  direction: "out" | "in",
+  count: number,
+  stagger = 65,
+) => {
+  const ascending = direction === "in";
+  const vol = ascending ? 0.14 : 0.10;
+  for (let i = 0; i < count; i++) {
+    setTimeout(() => {
+      // Metallic clink: short noise + sine ping at varying pitch
+      const pitch = ascending
+        ? 1800 + i * 220          // rising: 1800 → ~3300 Hz
+        : 2600 - i * 180;         // falling: 2600 → ~1700 Hz
+      noiseBurst(0.035, vol * 0.7, 4500 + i * 300);
+      osc(pitch, "sine", 0.07, vol);
+      osc(pitch * 1.5, "sine", 0.04, vol * 0.4, 8); // harmonic shimmer
+    }, i * stagger);
+  }
+};
+
 /** Cashout cha-ching — ascending coin cascade. */
 export const cashout = (big = false) => {
   const vol = big ? 0.25 : 0.15;
