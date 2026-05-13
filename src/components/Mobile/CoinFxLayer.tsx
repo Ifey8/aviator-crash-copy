@@ -1,6 +1,7 @@
 import React from "react";
 import Context from "../../context";
 import { planeTracker } from "./planeTracker";
+import * as Sounds from "./sounds";
 
 /**
  * CoinFxLayer — viewport-fixed gold coin animations that span between the
@@ -114,7 +115,10 @@ export const CoinFxLayer: React.FC = () => {
       if (/bet\s*placed/i.test(msg)) {
         const from = balanceCenter();
         const to = planeCenter();
-        if (from && to) spawn(from, to, COINS_BET);
+        if (from && to) {
+          spawn(from, to, COINS_BET);
+          Sounds.coinFlight("out", COINS_BET);
+        }
         return;
       }
       if (/cashed?\s*out/i.test(msg)) {
@@ -122,7 +126,10 @@ export const CoinFxLayer: React.FC = () => {
         setTimeout(() => {
           const from = planeCenter();
           const to = balanceCenter();
-          if (from && to) spawn(from, to, COINS_CASHOUT);
+          if (from && to) {
+            spawn(from, to, COINS_CASHOUT);
+            Sounds.coinFlight("in", COINS_CASHOUT);
+          }
         }, 850);
       }
     };
