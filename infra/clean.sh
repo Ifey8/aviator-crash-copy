@@ -62,6 +62,17 @@ if [ -d "$NMOD" ]; then
   rm -rf "$NMOD" 2>/dev/null || true
 fi
 
+# ── 清理 Docker 容器日志（占几百 MB 很常见） ──
+log "🗑️  清理 Docker 容器日志..."
+find /var/lib/docker/containers/ -name "*.log" -exec truncate -s 0 {} \; 2>/dev/null || true
+
+# ── 清理 npm 全局缓存 ──
+NPM_CACHE=$(npm cache ls 2>/dev/null | wc -l || echo 0)
+if [ "$NPM_CACHE" -gt 0 ] 2>/dev/null; then
+  log "🗑️  清理 npm cache..."
+  npm cache clean --force 2>/dev/null || true
+fi
+
 # ── 清理系统日志 ──
 log "🗑️  清理系统日志..."
 journalctl --vacuum-size=100M 2>/dev/null || true
@@ -69,6 +80,10 @@ journalctl --vacuum-size=100M 2>/dev/null || true
 # ── 清理 apt 缓存 ──
 apt-get clean 2>/dev/null || true
 apt-get autoremove -y 2>/dev/null || true
+
+# ── 清理 /tmp 里超过 7 天的文件 ──
+log "🗑️  清理 /tmp 旧文件..."
+find /tmp -type f -mtime +7 -delete 2>/dev/null || true
 
 echo ""
 log "📊 清理后磁盘使用:"
