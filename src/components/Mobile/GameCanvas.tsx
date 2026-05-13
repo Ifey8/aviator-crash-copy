@@ -30,7 +30,7 @@ const multiplierAt = (elapsedSec: number): number => {
 };
 
 export const GameCanvas: React.FC = () => {
-  const { GameState, currentNum, time } = React.useContext(Context);
+  const { GameState, currentNum, time, longDisconnect } = React.useContext(Context);
   const wrapRef = React.useRef<HTMLDivElement>(null);
   const canvasRef = React.useRef<HTMLCanvasElement>(null);
   const planeRef = React.useRef<HTMLDivElement>(null);
@@ -42,9 +42,15 @@ export const GameCanvas: React.FC = () => {
   const phaseRef = React.useRef<string>(GameState || "BET");
   const lastCrashRef = React.useRef<number>(1.0);
   const lastPhaseRef = React.useRef<string>(GameState || "BET");
+  // Track last server tick so the RAF loop can freeze when stale (e.g.
+  // phone screen off → resume after 30 min would show a crazy multiplier).
+  const lastTickRef = React.useRef<number>(Date.now());
+  const longDisconnectRef = React.useRef<boolean>(false);
 
   React.useEffect(() => {
     phaseRef.current = GameState;
+    lastTickRef.current = Date.now();
+    longDisconnectRef.current = !!longDisconnect;
     const transition = GameState !== lastPhaseRef.current;
 
     // Re-anchor phase start ONLY on actual phase transitions.
@@ -60,7 +66,7 @@ export const GameCanvas: React.FC = () => {
     if (GameState === "GAMEEND") {
       lastCrashRef.current = Number(currentNum) || lastCrashRef.current;
     }
-  }, [GameState, time, currentNum]);
+  }, [GameState, time, currentNum, longDisconnect]);
 
   // RAF loop
   React.useEffect(() => {
@@ -126,8 +132,14 @@ export const GameCanvas: React.FC = () => {
         H - padBottom - Math.pow(progressOf(m), 1.15) * (H - padBottom - padTop);
 
       if (phase === "PLAYING") {
+        // Guard: if no server tick for >10s (phone screen off, wifi drop)
+        // freeze the multiplier at its last sane value instead of letting
+        // the local polynomial run to absurd numbers.
+        const tickAge = Date.now() - lastTickRef.current;
+        const stale = tickAge > 10_000 || longDisconnectRef.current;
+
         const elapsed = (Date.now() - phaseStartRef.current) / 1000;
-        const m = multiplierAt(elapsed);
+        const m = stale ? multiplierAt((lastTickRef.current - phaseStartRef.current) / 1000) : multiplierAt(elapsed);
         if (liveMultRef.current) liveMultRef.current.textContent = m.toFixed(2);
         if (phaseTextRef.current) phaseTextRef.current.style.opacity = "0";
         if (countdownRef.current) countdownRef.current.style.opacity = "0";

@@ -133,6 +133,7 @@ export interface ContextType extends GameBetLimit, UserStatusType, GameStatusTyp
     platformLoading: boolean;
     msgTab: boolean;
     errorBackend: boolean;
+    longDisconnect: boolean;
     unityState: boolean;
     unityLoading: boolean;
     currentProgress: number;

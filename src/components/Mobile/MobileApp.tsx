@@ -37,7 +37,7 @@ const useTelegramTheme = () => {
 
 export const MobileApp: React.FC = () => {
   useTelegramTheme();
-  const { rechargeState, errorBackend, platformLoading } = React.useContext(Context);
+  const { rechargeState, errorBackend, longDisconnect, platformLoading } = React.useContext(Context);
   const [rechargeOpen, setRechargeOpen] = React.useState(false);
   const [shareOpen, setShareOpen] = React.useState(false);
   const [withdrawOpen, setWithdrawOpen] = React.useState(false);
@@ -104,7 +104,20 @@ export const MobileApp: React.FC = () => {
         </div>
       )}
 
-      {errorBackend && (
+      {longDisconnect && (
+        <div className="disconnect-overlay">
+          <div className="disconnect-content">
+            <div className="disconnect-icon">📡</div>
+            <h3>Network disconnected</h3>
+            <p>Connection lost for too long. Please reconnect to continue playing.</p>
+            <button className="disconnect-reconnect" onClick={() => window.location.reload()}>
+              Reconnect
+            </button>
+          </div>
+        </div>
+      )}
+
+      {errorBackend && !longDisconnect && (
         <div className="connection-toast">⚠ Connection lost — reconnecting…</div>
       )}
 

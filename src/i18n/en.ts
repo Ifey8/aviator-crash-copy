@@ -20,6 +20,8 @@ const en = {
   "cta.cashOut": "CASH OUT",
   "cta.cashedOut": "CASHED OUT",
   "cta.betPlaced": "BET PLACED",
+  "cta.nextBet": "NEXT BET",
+  "cta.queued": "QUEUED ✓",
 
   // ---- AUTO ON pill ----
   "auto.on": "AUTO ON",

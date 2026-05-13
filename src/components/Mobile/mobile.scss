@@ -709,6 +709,21 @@
       0 1px 0 rgba(255,255,255,0.5) inset,
       0 4px 14px rgba(255, 200, 87, 0.5);
   }
+  // Pre-bet: user sets up next round while current round is still playing
+  &.cta-next {
+    background: linear-gradient(180deg, rgba(255, 153, 51, 0.15) 0%, rgba(255, 200, 87, 0.08) 100%);
+    border: 1.5px solid rgba(255, 200, 87, 0.5);
+    color: var(--crash-gold);
+    box-shadow: 0 0 10px rgba(255, 200, 87, 0.15);
+    .cta-line-1 { letter-spacing: 0.12em; }
+  }
+  &.cta-queued {
+    background: rgba(86, 224, 154, 0.12);
+    border: 1.5px solid rgba(86, 224, 154, 0.45);
+    color: #56e09a;
+    cursor: pointer; // tap to cancel
+    .cta-line-1 { letter-spacing: 0.14em; }
+  }
 }
 
 @keyframes cta-pulse {
@@ -1441,6 +1456,62 @@
   border-radius: 999px;
   z-index: 999;
   animation: slide-up 200ms ease;
+}
+
+// ---- Disconnect overlay (after 20s of no connection) ----
+.disconnect-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(10, 14, 29, 0.92);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 10000;
+  backdrop-filter: blur(8px);
+}
+
+.disconnect-content {
+  text-align: center;
+  padding: 32px 24px;
+  max-width: 300px;
+}
+
+.disconnect-icon {
+  font-size: 48px;
+  margin-bottom: 16px;
+  animation: pulse-slow 2s ease-in-out infinite;
+}
+
+.disconnect-content h3 {
+  color: var(--crash-red, #ff5468);
+  font-size: 18px;
+  font-weight: 700;
+  margin: 0 0 8px;
+}
+
+.disconnect-content p {
+  color: var(--text-muted, #8a8fa8);
+  font-size: 13px;
+  line-height: 1.5;
+  margin: 0 0 24px;
+}
+
+.disconnect-reconnect {
+  background: linear-gradient(135deg, var(--crash-saffron, #FF9933), var(--crash-gold, #FFC857));
+  color: #0d1320;
+  border: none;
+  padding: 12px 32px;
+  border-radius: 10px;
+  font-size: 15px;
+  font-weight: 700;
+  cursor: pointer;
+  min-height: 44px;
+  min-width: 160px;
+}
+
+@keyframes pulse-slow {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.6; transform: scale(1.05); }
 }
 
 .mobile-loader {

@@ -1603,7 +1603,7 @@ const WithdrawalsTab: React.FC = () => {
         </thead>
         <tbody>
           {items.map((r) => {
-            const canAct = ["pending", "processing", "manual_queue"].includes(r.status);
+            const canAct = ["pending", "processing", "manual_queue", "review"].includes(r.status);
             return (
               <tr key={r.orderId}>
                 <td>{new Date(r.createdAt).toLocaleString()}</td>

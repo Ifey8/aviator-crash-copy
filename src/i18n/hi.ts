@@ -26,6 +26,8 @@ const hi: Record<I18nKey, string> = {
   "cta.cashOut": "कैश आउट",
   "cta.cashedOut": "कैश आउट हो गया",
   "cta.betPlaced": "बेट लगा",
+  "cta.nextBet": "अगला बेट",
+  "cta.queued": "क्यूड ✓",
 
   // ---- AUTO ON pill ----
   "auto.on": "ऑटो ऑन",

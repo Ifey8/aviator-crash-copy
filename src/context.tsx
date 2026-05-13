@@ -66,6 +66,8 @@ export const Provider = ({ children }: any) => {
   const [msgReceived, setMsgReceived] = React.useState<boolean>(false);
   const [platformLoading, setPlatformLoading] = React.useState<boolean>(false);
   const [errorBackend, setErrorBackend] = React.useState<boolean>(false);
+  const [longDisconnect, setLongDisconnect] = React.useState<boolean>(false);
+  const disconnectTimerRef = React.useRef<ReturnType<typeof setTimeout> | null>(null);
   const [secure, setSecure] = React.useState<boolean>(false);
   const [userSeedText, setUserSeedText] = React.useState<string>("");
   const [globalUserInfo, setGlobalUserInfo] = React.useState<UserType>(init_userInfo);
@@ -171,17 +173,36 @@ export const Provider = ({ children }: any) => {
     socket.on("connect", () => {
       console.log("✅ Connected to backend server");
       setErrorBackend(false);
+      setLongDisconnect(false);
+      if (disconnectTimerRef.current) {
+        clearTimeout(disconnectTimerRef.current);
+        disconnectTimerRef.current = null;
+      }
       socket.emit("enterRoom", { token });
     });
 
     socket.on("disconnect", () => {
       console.log("❌ Disconnected from backend server");
       setErrorBackend(true);
+      // Start 20s countdown — tolerate brief blips, only show full
+      // disconnect overlay after sustained loss of connection.
+      if (!disconnectTimerRef.current) {
+        disconnectTimerRef.current = setTimeout(() => {
+          setLongDisconnect(true);
+          disconnectTimerRef.current = null;
+        }, 20_000);
+      }
     });
 
     socket.on("connect_error", (error) => {
       console.error("🔴 Connection error:", error);
       setErrorBackend(true);
+      if (!disconnectTimerRef.current) {
+        disconnectTimerRef.current = setTimeout(() => {
+          setLongDisconnect(true);
+          disconnectTimerRef.current = null;
+        }, 20_000);
+      }
     });
 
     socket.on("bettedUserInfo", (bettedUsers: BettedUserType[]) => {
@@ -587,6 +608,7 @@ export const Provider = ({ children }: any) => {
         setMsgReceived,
         platformLoading,
         errorBackend,
+        longDisconnect,
         unityState: unity.unityState,
         unityLoading: unity.unityLoading,
         currentProgress: unity.currentProgress,

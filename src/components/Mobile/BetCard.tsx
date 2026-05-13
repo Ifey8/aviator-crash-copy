@@ -23,10 +23,15 @@ export const BetCard: React.FC<Props> = ({ side }) => {
   // Track which quick-amount button was last tapped. Same button = +=,
   // different button = reset to that amount as if first click.
   const [lastQuickClick, setLastQuickClick] = React.useState<number | null>(null);
+  // Pre-bet: queue a bet during PLAYING (after cashout) → auto-fire on
+  // next BET phase. Lets users set up their next wager without waiting.
+  const [pendingBet, setPendingBet] = React.useState<{ amount: number; target: number; auto: boolean } | null>(null);
 
   const betted = side === "f" ? ctx.fbetted : ctx.sbetted;
   const cashouted = sideInfo.cashouted;
   const cashAmount = sideInfo.cashAmount || 0;
+  // After cashout, unlock inputs so the user can configure next bet.
+  const inputLocked = betted && !cashouted;
 
   const minBet = ctx.minBet ?? 1;
   const maxBet = ctx.maxBet ?? 1000;
@@ -82,6 +87,39 @@ export const BetCard: React.FC<Props> = ({ side }) => {
     ctx.updateUserInfo({ [side]: newSide } as any);
   };
 
+  // Queue a bet for the next round (used after cashout during PLAYING).
+  // Server only accepts bets in BET phase — this saves the intent locally
+  // and auto-fires when the phase transitions.
+  const queueBet = () => {
+    const isAuto = mode === "auto";
+    setPendingBet({ amount, target: isAuto ? autoTarget : 2, auto: isAuto });
+  };
+
+  const cancelQueue = () => setPendingBet(null);
+
+  // Auto-fire pending bet when BET phase starts.
+  React.useEffect(() => {
+    if (phase !== "BET" || !pendingBet) return;
+    // Phase just changed to BET and we have a queued bet — place it.
+    const { amount: betAmt, target: tgt, auto: isAuto } = pendingBet;
+    setPendingBet(null);
+    if (betAmt > userInfo.balance) return; // balance insufficient
+
+    const newSide = { ...sideInfo, betAmount: betAmt, target: tgt, auto: isAuto };
+    ctx.update({ userInfo: { ...userInfo, [side]: newSide } });
+    ctx.updateUserInfo({ [side]: newSide } as any);
+
+    const sock = (ctx as any).socket;
+    sock?.emit("playBet", { betAmount: betAmt, target: tgt, type: side, auto: isAuto });
+    ctx.updateUserBetState({ [`${side}betted`]: true } as any);
+  }, [phase]);
+
+  // Clear pending bet when a new round resets the card state (betted goes
+  // false on BET phase via the myInfo handler in context.tsx).
+  React.useEffect(() => {
+    if (!betted && !cashouted) setPendingBet(null);
+  }, [betted, cashouted]);
+
   const autoOn = !!sideInfo.auto;
 
   // ---- CTA selection ----
@@ -107,12 +145,29 @@ export const BetCard: React.FC<Props> = ({ side }) => {
       </button>
     );
   } else if (cashouted) {
-    cta = (
-      <button className="bet-cta cta-won" disabled>
-        <span className="cta-line-1">{t("cta.cashedOut")}</span>
-        <span className="cta-line-2">+{cashAmount.toFixed(2)} INR</span>
-      </button>
-    );
+    if (pendingBet) {
+      // Bet queued for next round — show confirmation with cancel option
+      cta = (
+        <button className="bet-cta cta-queued" onClick={cancelQueue}>
+          <span className="cta-line-1">{t("cta.queued")}</span>
+          <span className="cta-line-2">
+            {pendingBet.amount.toFixed(2)} INR
+            {pendingBet.auto && ` · @${pendingBet.target.toFixed(2)}x`}
+          </span>
+        </button>
+      );
+    } else {
+      // Cashed out — let user prepare next bet
+      cta = (
+        <button className="bet-cta cta-next" onClick={queueBet}>
+          <span className="cta-line-1">{t("cta.nextBet")}</span>
+          <span className="cta-line-2">
+            {amount.toFixed(2)} INR
+            {mode === "auto" && ` · @${autoTarget.toFixed(2)}x`}
+          </span>
+        </button>
+      );
+    }
   } else {
     cta = (
       <button
@@ -135,14 +190,14 @@ export const BetCard: React.FC<Props> = ({ side }) => {
         <button
           className={`tab ${mode === "bet" ? "active" : ""}`}
           onClick={() => setMode("bet")}
-          disabled={betted}
+          disabled={inputLocked}
         >
           {t("bet.tab.bet")}
         </button>
         <button
           className={`tab ${mode === "auto" ? "active" : ""}`}
           onClick={() => setMode("auto")}
-          disabled={betted}
+          disabled={inputLocked}
         >
           {t("bet.tab.auto")}
         </button>
@@ -156,7 +211,7 @@ export const BetCard: React.FC<Props> = ({ side }) => {
           type="button"
           className="step-btn"
           onClick={() => { setSafeAmount(amount - 1); setLastQuickClick(null); }}
-          disabled={betted}
+          disabled={inputLocked}
           aria-label="decrease"
         >
           −
@@ -170,14 +225,14 @@ export const BetCard: React.FC<Props> = ({ side }) => {
             const v = parseFloat(e.target.value.replace(/[^\d.]/g, ""));
             if (!isNaN(v)) { setSafeAmount(v); setLastQuickClick(null); }
           }}
-          disabled={betted}
+          disabled={inputLocked}
           aria-label="bet amount"
         />
         <button
           type="button"
           className="step-btn"
           onClick={() => { setSafeAmount(amount + 1); setLastQuickClick(null); }}
-          disabled={betted}
+          disabled={inputLocked}
           aria-label="increase"
         >
           +
@@ -190,7 +245,7 @@ export const BetCard: React.FC<Props> = ({ side }) => {
             key={v}
             className={`quick-amount-btn ${lastQuickClick === v ? "last" : ""}`}
             onClick={() => onQuickClick(v)}
-            disabled={betted}
+            disabled={inputLocked}
           >
             {v}
           </button>
@@ -204,7 +259,7 @@ export const BetCard: React.FC<Props> = ({ side }) => {
             <button
               className="step-btn"
               onClick={() => setAutoTarget(Math.max(1.01, +(autoTarget - 0.1).toFixed(2)))}
-              disabled={betted}
+              disabled={inputLocked}
               aria-label="decrease target"
             >
               −
@@ -218,13 +273,13 @@ export const BetCard: React.FC<Props> = ({ side }) => {
                 const v = parseFloat(e.target.value.replace(/[^\d.]/g, ""));
                 if (!isNaN(v)) setAutoTarget(Math.max(1.01, v));
               }}
-              disabled={betted}
+              disabled={inputLocked}
               aria-label="auto cashout target"
             />
             <button
               className="step-btn"
               onClick={() => setAutoTarget(+(autoTarget + 0.1).toFixed(2))}
-              disabled={betted}
+              disabled={inputLocked}
               aria-label="increase target"
             >
               +
