@@ -1,6 +1,7 @@
 import React from "react";
 import Context, { callCashOut } from "../../context";
 import { useT } from "../../i18n";
+import * as Sounds from "./sounds";
 
 type Side = "f" | "s";
 
@@ -70,6 +71,7 @@ export const BetCard: React.FC<Props> = ({ side }) => {
 
     const sock = (ctx as any).socket;
     sock?.emit("playBet", { betAmount: amount, target, type: side, auto: isAuto });
+    Sounds.betPlace();
 
     // Optimistic UI flag — server's myBetState/myInfo will confirm.
     ctx.updateUserBetState({ [`${side}betted`]: true } as any);
@@ -77,6 +79,7 @@ export const BetCard: React.FC<Props> = ({ side }) => {
 
   const cashOut = () => {
     callCashOut(Number((ctx.currentTarget as any) || 0), side);
+    Sounds.cashout(true);
   };
 
   const stopAuto = () => {
@@ -189,14 +192,14 @@ export const BetCard: React.FC<Props> = ({ side }) => {
       <div className="bet-card-tabs">
         <button
           className={`tab ${mode === "bet" ? "active" : ""}`}
-          onClick={() => setMode("bet")}
+          onClick={() => { setMode("bet"); Sounds.buttonClick(); }}
           disabled={inputLocked}
         >
           {t("bet.tab.bet")}
         </button>
         <button
           className={`tab ${mode === "auto" ? "active" : ""}`}
-          onClick={() => setMode("auto")}
+          onClick={() => { setMode("auto"); Sounds.buttonClick(); }}
           disabled={inputLocked}
         >
           {t("bet.tab.auto")}

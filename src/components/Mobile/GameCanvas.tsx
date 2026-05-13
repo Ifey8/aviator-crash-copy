@@ -3,6 +3,7 @@ import Context from "../../context";
 import { Plane } from "./Plane";
 import { FxLayer } from "./FxLayer";
 import { planeTracker } from "./planeTracker";
+import * as Sounds from "./sounds";
 
 /**
  * GameCanvas — the centerpiece. Draws:
@@ -46,6 +47,8 @@ export const GameCanvas: React.FC = () => {
   // phone screen off → resume after 30 min would show a crazy multiplier).
   const lastTickRef = React.useRef<number>(Date.now());
   const longDisconnectRef = React.useRef<boolean>(false);
+  const lastMilestoneRef = React.useRef<number>(0);
+  const lastCountdownTickRef = React.useRef<number>(0);
 
   React.useEffect(() => {
     phaseRef.current = GameState;
@@ -61,8 +64,42 @@ export const GameCanvas: React.FC = () => {
       if (GameState === "PLAYING" || GameState === "BET") {
         phaseStartRef.current = Date.now() - (time || 0) * 1000;
       }
+      // ── Sound triggers on phase transitions ──
+      if (GameState === "PLAYING" && lastPhaseRef.current === "BET") {
+        Sounds.takeoff();
+        lastMilestoneRef.current = 0;
+      }
+      if (GameState === "GAMEEND") {
+        Sounds.crash();
+      }
+      if (GameState === "BET") {
+        lastCountdownTickRef.current = 0;
+      }
       lastPhaseRef.current = GameState;
     }
+
+    // Countdown ticks during BET (once per second)
+    if (GameState === "BET" && typeof time === "number") {
+      const sec = Math.floor(time);
+      if (sec > lastCountdownTickRef.current) {
+        lastCountdownTickRef.current = sec;
+        Sounds.countdownTick();
+      }
+    }
+
+    // Milestone dings during PLAYING
+    if (GameState === "PLAYING" && typeof currentNum === "number") {
+      const MILESTONES = [2, 5, 10, 20, 50, 100];
+      const m = Number(currentNum);
+      for (const ms of MILESTONES) {
+        if (m >= ms && lastMilestoneRef.current < ms) {
+          Sounds.milestone(ms);
+          lastMilestoneRef.current = ms;
+          break;
+        }
+      }
+    }
+
     if (GameState === "GAMEEND") {
       lastCrashRef.current = Number(currentNum) || lastCrashRef.current;
     }

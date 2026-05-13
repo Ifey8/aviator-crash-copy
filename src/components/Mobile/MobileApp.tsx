@@ -10,6 +10,7 @@ import { RechargeSheet } from "./RechargeSheet";
 import { ShareSheet } from "./ShareSheet";
 import { WithdrawalSheet } from "./WithdrawalSheet";
 import { AccountSheet } from "./AccountSheet";
+import { initSounds } from "./sounds";
 import "./mobile.scss";
 import "./recharge.scss";
 // luxe.scss is imported from src/app.tsx as the LAST stylesheet so its
@@ -37,6 +38,20 @@ const useTelegramTheme = () => {
 
 export const MobileApp: React.FC = () => {
   useTelegramTheme();
+
+  // Unlock AudioContext + preload MP3 assets on first user tap (browser policy).
+  React.useEffect(() => {
+    let inited = false;
+    const handler = () => {
+      if (inited) return;
+      inited = true;
+      initSounds();
+      window.removeEventListener("pointerdown", handler, true);
+    };
+    window.addEventListener("pointerdown", handler, true);
+    return () => window.removeEventListener("pointerdown", handler, true);
+  }, []);
+
   const { rechargeState, errorBackend, longDisconnect, platformLoading } = React.useContext(Context);
   const [rechargeOpen, setRechargeOpen] = React.useState(false);
   const [shareOpen, setShareOpen] = React.useState(false);

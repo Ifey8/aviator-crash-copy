@@ -335,6 +335,25 @@
   }
 }
 
+.mobile-header-sound {
+  width: 34px;
+  height: 34px;
+  border-radius: 8px;
+  background: linear-gradient(180deg, rgba(255, 200, 87, 0.10) 0%, rgba(255, 153, 51, 0.04) 100%);
+  border: 1px solid rgba(255, 200, 87, 0.22);
+  color: var(--crash-gold);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: background 150ms, opacity 150ms;
+  &:active { background: rgba(255, 200, 87, 0.18); }
+  &.muted {
+    opacity: 0.5;
+    color: var(--crash-text, #fff5dc);
+  }
+}
+
 .mobile-header-menu {
   width: 34px;
   height: 34px;
