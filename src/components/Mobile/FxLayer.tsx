@@ -2,6 +2,7 @@ import React from "react";
 import Context from "../../context";
 import { Parachute, BurstCrash } from "./Effects";
 import { planeTracker } from "./planeTracker";
+import * as Sounds from "./sounds";
 
 /**
  * FxLayer — overlays celebration effects on the game canvas.
@@ -112,6 +113,7 @@ export const FxLayer: React.FC = () => {
           payout: `${(b.cashOutAt || 0).toFixed(2)}x`,
           ttl: 3500,
         });
+        Sounds.otherCashout();
       }
     }
     lastBetsRef.current = bettedUsers.slice();
