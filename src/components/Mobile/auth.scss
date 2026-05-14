@@ -125,6 +125,24 @@
   &:disabled { opacity: 0.6; cursor: not-allowed; }
   &:active:not(:disabled) { transform: scale(0.98); }
 }
+.auth-tg-deeplink {
+  display: block;
+  width: 100%;
+  padding: 14px;
+  margin-bottom: 16px;
+  background: #2aabee;
+  color: #fff;
+  font-size: 15px;
+  font-weight: 700;
+  text-align: center;
+  text-decoration: none;
+  border-radius: 10px;
+  letter-spacing: 0.3px;
+  box-shadow: 0 4px 14px rgba(42, 171, 238, 0.4);
+  border-bottom: 1px solid rgba(255, 200, 87, 0.12);
+  padding-bottom: 16px;
+  &:active { opacity: 0.85; }
+}
 .auth-tg-widget {
   margin-bottom: 16px;
   padding-bottom: 16px;

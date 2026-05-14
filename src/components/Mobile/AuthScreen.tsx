@@ -3,6 +3,8 @@ import { useAuth, TelegramWidgetPayload } from "../../auth/AuthProvider";
 import { Plane } from "./Plane";
 
 const BOT_NAME = "crashaviator2026bot";
+const BOT_LINK = `https://t.me/${BOT_NAME}`;
+const isMobile = /Android|iPhone|iPod|iPad/i.test(navigator.userAgent);
 
 export const AuthScreen: React.FC = () => {
   const { login, loginWithTelegram, loading } = useAuth();
@@ -16,7 +18,10 @@ export const AuthScreen: React.FC = () => {
   const loginWithTelegramRef = React.useRef(loginWithTelegram);
   loginWithTelegramRef.current = loginWithTelegram;
 
+  // Desktop only: inject the Telegram Login Widget script
   React.useEffect(() => {
+    if (isMobile) return;
+
     (window as any).onTelegramAuth = async (user: TelegramWidgetPayload) => {
       const r = await loginWithTelegramRef.current(user);
       if (!r.ok) setError(r.reason);
@@ -56,7 +61,13 @@ export const AuthScreen: React.FC = () => {
           <p className="auth-tag">FESTIVE CRASH GAME</p>
         </div>
 
-        <div id="tg-widget-container" className="auth-tg-widget" />
+        {isMobile ? (
+          <a className="auth-tg-deeplink" href={BOT_LINK}>
+            Open in Telegram
+          </a>
+        ) : (
+          <div id="tg-widget-container" className="auth-tg-widget" />
+        )}
 
         {error && <div className="auth-error">⚠ {error}</div>}
 
