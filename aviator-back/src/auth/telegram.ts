@@ -117,11 +117,7 @@ export const verifyWidgetHash = async (
 
   const tokens: string[] = [];
   try {
-    const promise = TelegramBotModel.find({ enabled: true }).select("token").lean();
-    const bots = await Promise.race([
-      promise,
-      new Promise((_, rej) => setTimeout(() => rej(new Error("DB timeout")), 1000)),
-    ]);
+    const bots = await TelegramBotModel.find({ enabled: true }).select("token").lean();
     for (const b of bots as any[]) {
       if (b?.token) tokens.push(b.token);
     }
