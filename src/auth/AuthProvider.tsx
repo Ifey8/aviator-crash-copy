@@ -12,6 +12,16 @@ export interface AuthUser {
   phone?: string;
 }
 
+export interface TelegramWidgetPayload {
+  id: number;
+  first_name: string;
+  last_name?: string;
+  username?: string;
+  photo_url?: string;
+  auth_date: number;
+  hash: string;
+}
+
 interface AuthValue {
   token: string | null;
   user: AuthUser | null;
@@ -24,6 +34,7 @@ interface AuthValue {
     password: string,
     phone?: string,
   ) => Promise<{ ok: true } | { ok: false; reason: string }>;
+  loginWithTelegram: (user: TelegramWidgetPayload) => Promise<{ ok: true } | { ok: false; reason: string }>;
   logout: () => void;
 }
 
@@ -125,6 +136,22 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     } finally { setLoading(false); }
   };
 
+  const loginWithTelegram: AuthValue["loginWithTelegram"] = async (widgetUser) => {
+    setLoading(true);
+    try {
+      const { sid, ref } = getAttribution();
+      const res = await fetch(`${apiBase}/auth/telegram-widget`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ...widgetUser, sid, ref }),
+      });
+      const body = await res.json();
+      if (!res.ok) return { ok: false, reason: body.message || "Telegram auth failed" };
+      finishAuth(body);
+      return { ok: true };
+    } finally { setLoading(false); }
+  };
+
   const logout = () => {
     localStorage.removeItem(TOKEN_KEY);
     setToken(null);
@@ -134,7 +161,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   return (
-    <Ctx.Provider value={{ token, user, loading, hydrating, login, register, logout }}>
+    <Ctx.Provider value={{ token, user, loading, hydrating, login, register, loginWithTelegram, logout }}>
       {children}
     </Ctx.Provider>
   );
