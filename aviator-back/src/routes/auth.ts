@@ -1,6 +1,6 @@
 import { Router } from "express";
-import { authWithTelegram, authDevGuest } from "../auth/session";
-import { registerWithPassword, loginWithPassword, profileFromUserName } from "../auth/password";
+import { authWithTelegram, authWithTelegramWidget, authDevGuest } from "../auth/session";
+import { loginWithPassword, profileFromUserName } from "../auth/password";
 import { verifyToken } from "../auth/jwt";
 import { config } from "../config";
 import { UserModel } from "../db/models/User";
@@ -33,6 +33,24 @@ authRouter.post("/telegram", async (req, res) => {
   res.json({ status: true, ...result });
 });
 
+authRouter.post("/telegram-widget", async (req, res) => {
+  const { sid, ref, referrer, ...payload } = req.body || {};
+
+  const ipCheck = await checkRegisterIpLimit(req);
+  if (!ipCheck.ok) return sendIpLimitExceeded(res, ipCheck);
+
+  const result = await authWithTelegramWidget(payload, { sid, referrer: ref || referrer });
+  if (!result) {
+    return res.status(401).json({ status: false, message: "Invalid Telegram widget auth" });
+  }
+
+  const u = await UserModel.findOne({ userName: result.userName }).select("createdAt").lean();
+  const isNew = u && Date.now() - new Date(u.createdAt).getTime() < 30_000;
+  if (isNew) await recordRegisterAttempt(req, result.userName, "telegram");
+
+  res.json({ status: true, ...result });
+});
+
 authRouter.post("/guest", async (req, res) => {
   if (!config.allowDevAuth) return res.status(403).json({ status: false, message: "Dev auth disabled" });
   const name: string | undefined = req.body?.name;
@@ -48,24 +66,6 @@ authRouter.post("/guest", async (req, res) => {
 });
 
 // ---------- Username / password ----------
-
-authRouter.post("/register", async (req, res) => {
-  const { userName, password, phone, sid, ref, referrer } = req.body || {};
-
-  const ipCheck = await checkRegisterIpLimit(req);
-  if (!ipCheck.ok) return sendIpLimitExceeded(res, ipCheck);
-
-  const r = await registerWithPassword({
-    userName,
-    password,
-    phone,
-    sid,
-    referrer: ref || referrer,
-  });
-  if (!r.ok) return res.status(400).json({ status: false, message: r.reason });
-  await recordRegisterAttempt(req, r.result.userName, "register");
-  res.json({ status: true, ...r.result });
-});
 
 authRouter.post("/login", async (req, res) => {
   const { userName, password } = req.body || {};

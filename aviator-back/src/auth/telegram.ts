@@ -1,4 +1,4 @@
-import { createHmac } from "crypto";
+import { createHmac, createHash } from "crypto";
 import { config } from "../config";
 import { TelegramBotModel } from "../db/models/TelegramBot";
 
@@ -81,4 +81,71 @@ export const validateInitData = async (
 
   const authDate = Number(params.get("auth_date") || 0);
   return { ok: true, user, authDate, matchedBotCode: matched.code };
+};
+
+export interface TelegramWidgetPayload {
+  id: number;
+  first_name: string;
+  last_name?: string;
+  username?: string;
+  photo_url?: string;
+  auth_date: number;
+  hash: string;
+}
+
+/**
+ * Verify a Telegram Login Widget callback payload.
+ * https://core.telegram.org/widgets/login#checking-authorization
+ *
+ * Differs from initData validation:
+ *   secret_key = SHA256(bot_token)          ← NOT HMAC("WebAppData", token)
+ *   data_check_string = fields sorted alphabetically (excluding hash), "key=value\n..."
+ */
+export const verifyWidgetHash = async (
+  payload: TelegramWidgetPayload,
+): Promise<{ ok: true; user: TelegramUser } | { ok: false; reason: string }> => {
+  if (Date.now() / 1000 - payload.auth_date > 3600) {
+    return { ok: false, reason: "auth_date expired" };
+  }
+
+  const { hash, ...fields } = payload;
+  const dataCheckString = (Object.keys(fields) as (keyof typeof fields)[])
+    .sort()
+    .filter((k) => fields[k] !== undefined)
+    .map((k) => `${k}=${fields[k]}`)
+    .join("\n");
+
+  const tokens: string[] = [];
+  try {
+    const bots = await TelegramBotModel.find({ enabled: true }).select("token").lean();
+    for (const b of bots as any[]) {
+      if (b?.token) tokens.push(b.token);
+    }
+  } catch {
+    // No DB connection (e.g. unit test env) — fall through to env token
+  }
+  if (config.telegramBotToken) tokens.push(config.telegramBotToken);
+
+  if (tokens.length === 0) {
+    return { ok: false, reason: "No bot configured (add one in admin → Bots)" };
+  }
+
+  for (const token of tokens) {
+    const secretKey = createHash("sha256").update(token).digest();
+    const expected = createHmac("sha256", secretKey).update(dataCheckString).digest("hex");
+    if (expected === hash) {
+      return {
+        ok: true,
+        user: {
+          id: payload.id,
+          username: payload.username,
+          first_name: payload.first_name,
+          last_name: payload.last_name,
+          photo_url: payload.photo_url,
+        },
+      };
+    }
+  }
+
+  return { ok: false, reason: "Invalid hash (no bot token matched)" };
 };

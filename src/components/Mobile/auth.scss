@@ -125,6 +125,17 @@
   &:disabled { opacity: 0.6; cursor: not-allowed; }
   &:active:not(:disabled) { transform: scale(0.98); }
 }
+.auth-tg-widget {
+  margin-bottom: 16px;
+  padding-bottom: 16px;
+  border-bottom: 1px solid rgba(255, 200, 87, 0.12);
+  display: flex;
+  justify-content: center;
+  /* Telegram widget button styling override */
+  iframe {
+    max-width: 100%;
+  }
+}
 .auth-footer {
   margin-top: 14px;
   text-align: center;

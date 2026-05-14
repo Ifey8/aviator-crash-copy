@@ -2,7 +2,7 @@ import { config } from "../config";
 import { getSetting } from "../settings";
 import { UserModel } from "../db/models/User";
 import { signToken, verifyToken, AuthPayload } from "./jwt";
-import { validateInitData } from "./telegram";
+import { validateInitData, verifyWidgetHash, TelegramWidgetPayload } from "./telegram";
 
 export interface AuthResult {
   token: string;
@@ -116,6 +116,36 @@ export const authFromToken = async (token: string): Promise<AuthResult | null> =
   if (!payload) return null;
   const user = await UserModel.findOne({ userName: payload.userName });
   if (!user) return null;
+  return {
+    token,
+    userName: user.userName,
+    telegramId: user.telegramId,
+    userType: user.userType,
+    balance: user.balance,
+    avatar: user.avatar,
+  };
+};
+
+export const authWithTelegramWidget = async (
+  payload: TelegramWidgetPayload,
+  attribution?: { sid?: string; referrer?: string },
+): Promise<AuthResult | null> => {
+  const v = await verifyWidgetHash(payload);
+  if (!v.ok) return null;
+  const tg = v.user;
+  const baseName = tg.username || tg.first_name || `tg${tg.id}`;
+  const user = await upsertUser({
+    telegramId: tg.id,
+    userName: baseName,
+    avatar: tg.photo_url ? "av-1.png" : undefined,
+    sid: attribution?.sid,
+    referrer: attribution?.referrer,
+  });
+  const token = signToken({
+    userName: user.userName,
+    telegramId: user.telegramId,
+    userType: user.userType,
+  });
   return {
     token,
     userName: user.userName,
