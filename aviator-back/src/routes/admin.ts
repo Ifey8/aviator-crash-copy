@@ -348,6 +348,49 @@ adminRouter.post("/withdrawals/:orderId/mark-paid", async (req, res) => {
   res.json({ status: true, data: withdrawalForAdmin(flipped) });
 });
 
+/** Admin broadcast: send USDT from hot wallet for a manual_queue order. */
+adminRouter.post("/withdrawals/:orderId/broadcast", async (req, res) => {
+  const { orderId } = req.params;
+  const order = await WithdrawalOrderModel.findOne({ orderId });
+  if (!order) return res.status(404).json({ status: false, message: "Order not found" });
+  if (order.method !== "usdt") {
+    return res.status(400).json({ status: false, message: "Broadcast only applies to USDT withdrawals" });
+  }
+  if (order.status !== "manual_queue") {
+    return res.status(400).json({ status: false, message: `Order is ${order.status}, expected manual_queue` });
+  }
+  if (!order.trc20Address) {
+    return res.status(400).json({ status: false, message: "Order has no TRC20 destination address" });
+  }
+
+  const result = await transferOut({ to: order.trc20Address, amountUsdt: order.grossAmount });
+  if (!result.ok) {
+    return res.status(400).json({ status: false, message: result.reason || "Broadcast failed" });
+  }
+
+  const flipped = await WithdrawalOrderModel.findOneAndUpdate(
+    { orderId, status: "manual_queue" },
+    { $set: { status: "paid", paidAt: new Date(), txHash: result.txHash, failedReason: undefined } },
+    { new: true },
+  );
+  if (!flipped) return res.status(409).json({ status: false, message: "Order state changed concurrently" });
+
+  await triggerReferralReward(order.userName, {
+    type: "payout",
+    id: order.providerRef || order.orderId,
+    amountInr: order.grossAmount,
+  });
+
+  pushToUser(order.userName, "withdrawalUpdate", {
+    orderId: order.orderId,
+    status: "paid",
+    txHash: result.txHash,
+  });
+  pushUserMyInfo(order.userName);
+
+  res.json({ status: true, txHash: result.txHash, data: withdrawalForAdmin(flipped) });
+});
+
 /** Admin force-failure: mark order failed + refund balance. */
 adminRouter.post("/withdrawals/:orderId/mark-failed", async (req, res) => {
   const { orderId } = req.params;

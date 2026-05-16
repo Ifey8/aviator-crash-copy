@@ -1511,9 +1511,13 @@ const WithdrawalsTab: React.FC = () => {
   const markPaid = async (row: WithdrawalRow) => {
     let txHash: string | undefined;
     if (row.method === "usdt") {
-      const inp = window.prompt("TX hash (paste from your wallet, or leave blank if marked outside Tron)?");
-      if (inp === null) return;
-      txHash = inp.trim() || undefined;
+      let inp: string | null = null;
+      while (true) {
+        inp = window.prompt("Paste Tronscan TX hash (required for USDT):");
+        if (inp === null) return; // cancelled
+        if (inp.trim()) { txHash = inp.trim(); break; }
+        alert("TX hash is required for USDT withdrawals. Paste the hash from Tronscan.");
+      }
     } else {
       if (!window.confirm(`Mark ${row.userName}'s ₹${row.grossAmount} bank transfer as PAID?`)) return;
     }
@@ -1537,6 +1541,19 @@ const WithdrawalsTab: React.FC = () => {
         method: "POST",
         body: JSON.stringify({ reason }),
       });
+      load();
+    } catch (e) { alert((e as Error).message); }
+    finally { setBusyOrder(null); }
+  };
+
+  const broadcast = async (row: WithdrawalRow) => {
+    if (!window.confirm(
+      `Broadcast ${row.grossAmount} USDT from hot wallet to ${row.trc20Address}?\nThis will send a real on-chain transaction.`
+    )) return;
+    setBusyOrder(row.orderId);
+    try {
+      const result = await api(`/admin/withdrawals/${row.orderId}/broadcast`, { method: "POST" });
+      alert(`Broadcast success! TX: ${result.txHash}`);
       load();
     } catch (e) { alert((e as Error).message); }
     finally { setBusyOrder(null); }
@@ -1649,6 +1666,16 @@ const WithdrawalsTab: React.FC = () => {
                           title="Approve & send to provider"
                         >
                           Approve
+                        </button>
+                      )}
+                      {r.method === "usdt" && r.status === "manual_queue" && (
+                        <button
+                          onClick={() => broadcast(r)}
+                          disabled={busyOrder === r.orderId}
+                          style={{ marginRight: 4, background: "rgba(86,180,224,0.18)", color: "#56b4e0" }}
+                          title="Send USDT from hot wallet on-chain"
+                        >
+                          Broadcast
                         </button>
                       )}
                       <button
