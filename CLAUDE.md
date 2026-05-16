@@ -241,6 +241,7 @@ Original mascot SVG generated via Claude Design from a custom prompt asking for 
 ## 🚀 Production deployment (easyenglish VPS)
 
 - **Host**: `easyenglish` SSH alias (IP `147.93.152.15`, root login)
+- **Claude SSH**: `claude-ops@147.93.152.15` — key `~/.ssh/easystudy_key` (sudoers 白名單 docker)
 - **Repo on server**: `/opt/aviator` (this same git tree, deployed via git pull)
 - **Domain**: `https://aviator.rummydeatly.com` (Let's Encrypt cert via certbot)
 - **Telegram bot**: `@crashaviator2026bot`
