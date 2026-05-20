@@ -355,6 +355,23 @@
   }
 }
 
+.mobile-header-vocab {
+  width: 30px;
+  height: 30px;
+  border-radius: 7px;
+  background: transparent;
+  border: 1px solid rgba(74, 144, 217, 0.25);
+  color: #4A90D9;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  flex-shrink: 0;
+  margin-left: auto;
+  transition: background 150ms, color 150ms;
+  &:active { background: rgba(74, 144, 217, 0.15); }
+}
+
 .mobile-header-menu {
   width: 34px;
   height: 34px;

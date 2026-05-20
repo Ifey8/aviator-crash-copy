@@ -10,6 +10,7 @@ import { RechargeSheet } from "./RechargeSheet";
 import { ShareSheet } from "./ShareSheet";
 import { WithdrawalSheet } from "./WithdrawalSheet";
 import { AccountSheet } from "./AccountSheet";
+import { VocabSheet } from "./VocabSheet";
 import { initSounds } from "./sounds";
 import "./mobile.scss";
 import "./recharge.scss";
@@ -57,6 +58,7 @@ export const MobileApp: React.FC = () => {
   const [shareOpen, setShareOpen] = React.useState(false);
   const [withdrawOpen, setWithdrawOpen] = React.useState(false);
   const [accountOpen, setAccountOpen] = React.useState(false);
+  const [vocabOpen, setVocabOpen] = React.useState(false);
 
   return (
     <div className="mobile-app">
@@ -70,6 +72,7 @@ export const MobileApp: React.FC = () => {
         onRecharge={() => setRechargeOpen(true)}
         onWithdraw={() => setWithdrawOpen(true)}
         onOpenAccount={() => setAccountOpen(true)}
+        onOpenVocab={() => setVocabOpen(true)}
       />
       <main className="mobile-main">
         <HistoryBar />
@@ -92,6 +95,8 @@ export const MobileApp: React.FC = () => {
       <WithdrawalSheet open={withdrawOpen} onClose={() => setWithdrawOpen(false)} />
 
       <AccountSheet open={accountOpen} onClose={() => setAccountOpen(false)} />
+
+      <VocabSheet open={vocabOpen} onClose={() => setVocabOpen(false)} />
 
       {rechargeState && !shareOpen && !rechargeOpen && (
         <div className="mobile-modal-overlay">
