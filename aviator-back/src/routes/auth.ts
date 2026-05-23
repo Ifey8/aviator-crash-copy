@@ -1,9 +1,11 @@
 import { Router } from "express";
+import { randomBytes } from "crypto";
 import { authWithTelegram, authWithTelegramWidget, authDevGuest } from "../auth/session";
 import { loginWithPassword, profileFromUserName } from "../auth/password";
 import { verifyToken } from "../auth/jwt";
 import { config } from "../config";
 import { UserModel } from "../db/models/User";
+import { LoginRequestModel } from "../db/models/LoginRequest";
 import {
   checkRegisterIpLimit,
   recordRegisterAttempt,
@@ -72,6 +74,34 @@ authRouter.post("/login", async (req, res) => {
   const r = await loginWithPassword({ userName, password });
   if (!r.ok) return res.status(401).json({ status: false, message: r.reason });
   res.json({ status: true, ...r.result });
+});
+
+/**
+ * POST /api/auth/login-request
+ *
+ * Cross-device login step 1: generate a one-time token.
+ * Browser opens t.me/<bot>?start=auth_<token>, then polls /login-poll/<token>.
+ */
+authRouter.post("/login-request", async (_req, res) => {
+  const token = randomBytes(10).toString("hex"); // 20 hex chars
+  await LoginRequestModel.create({ token });
+  res.json({ status: true, token });
+});
+
+/**
+ * GET /api/auth/login-poll/:token
+ *
+ * Cross-device login step 3 (polling): called every ~2s by the browser.
+ * Returns { fulfilled: false } while waiting, { fulfilled: true, jwt } on success.
+ */
+authRouter.get("/login-poll/:token", async (req, res) => {
+  const doc = await LoginRequestModel.findOne({ token: req.params.token }).lean();
+  if (!doc) return res.json({ status: false, message: "Invalid or expired token" });
+  if (doc.expiresAt < new Date()) return res.json({ status: false, message: "Expired" });
+  if (doc.status === "fulfilled" && doc.jwt) {
+    return res.json({ status: true, fulfilled: true, jwt: doc.jwt });
+  }
+  res.json({ status: true, fulfilled: false });
 });
 
 /**

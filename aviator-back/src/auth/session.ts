@@ -111,6 +111,33 @@ export const authDevGuest = async (
   };
 };
 
+/**
+ * Create or retrieve a user from a bot callback context (no initData validation
+ * needed — the callback itself proves the Telegram user identity).
+ * Used by the cross-device login flow (LoginRequest).
+ */
+export const authFromTelegramUser = async (tgUser: {
+  id: number;
+  username?: string;
+  first_name?: string;
+}): Promise<AuthResult> => {
+  const baseName = tgUser.username || tgUser.first_name || `tg${tgUser.id}`;
+  const user = await upsertUser({ telegramId: tgUser.id, userName: baseName });
+  const token = signToken({
+    userName: user.userName,
+    telegramId: user.telegramId,
+    userType: user.userType,
+  });
+  return {
+    token,
+    userName: user.userName,
+    telegramId: user.telegramId,
+    userType: user.userType,
+    balance: user.balance,
+    avatar: user.avatar,
+  };
+};
+
 export const authFromToken = async (token: string): Promise<AuthResult | null> => {
   const payload = verifyToken(token);
   if (!payload) return null;

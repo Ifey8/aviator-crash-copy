@@ -1,6 +1,8 @@
 import { Bot, InlineKeyboard } from "grammy";
 import { config } from "../config";
 import { TelegramBotModel, TelegramBotDoc } from "../db/models/TelegramBot";
+import { LoginRequestModel } from "../db/models/LoginRequest";
+import { authFromTelegramUser } from "../auth/session";
 
 /**
  * Multi-bot starter. Loads all enabled TelegramBot docs and starts each
@@ -37,9 +39,75 @@ const startOneBot = async (doc: TelegramBotDoc): Promise<void> => {
       );
     }
 
+    // ?start=auth_<token> — cross-device login from browser
+    if (param.startsWith("auth_")) {
+      const loginToken = param.slice(5);
+      const kb = new InlineKeyboard()
+        .text("✅ Confirm Login to Aviator", `login_${loginToken}`);
+      return ctx.reply(
+        "Someone is trying to log in to Aviator from a browser.\n\n" +
+        "If that's you, tap the button below to confirm.",
+        { reply_markup: kb },
+      );
+    }
+
+    // ?start=weblogin — user came from the web auth screen
+    if (param === "weblogin") {
+      const kb = new InlineKeyboard().webApp("🔑 Login to Aviator", webappUrl);
+      return ctx.reply(
+        "Tap the button below to log in to Aviator with your Telegram account.",
+        { reply_markup: kb },
+      );
+    }
+
     // Normal start (from affiliate deep link, /start, etc.)
     const kb = new InlineKeyboard().webApp(startButton, webappUrl);
     return ctx.reply(startMessage, { reply_markup: kb });
+  });
+
+  // Cross-device login: user tapped "Confirm Login" inline button
+  bot.on("callback_query:data", async (ctx) => {
+    const data = ctx.callbackQuery.data || "";
+    if (!data.startsWith("login_")) return ctx.answerCallbackQuery();
+
+    const loginToken = data.slice(6);
+    const tgUser = ctx.from;
+    if (!tgUser) return ctx.answerCallbackQuery("Error: no user context.");
+
+    // Validate the pending request
+    const loginReq = await LoginRequestModel.findOne({
+      token: loginToken,
+      status: "pending",
+    }).lean();
+
+    if (!loginReq || loginReq.expiresAt < new Date()) {
+      await ctx.answerCallbackQuery("❌ Login link expired. Try again from the website.");
+      return;
+    }
+
+    try {
+      // Upsert user from Telegram identity + generate JWT
+      const result = await authFromTelegramUser({
+        id: tgUser.id,
+        username: tgUser.username,
+        first_name: tgUser.first_name,
+      });
+
+      // Fulfil the pending login request so the browser poll picks it up
+      await LoginRequestModel.updateOne(
+        { token: loginToken },
+        { status: "fulfilled", jwt: result.token },
+      );
+
+      await ctx.answerCallbackQuery("✅ Logged in!");
+      await ctx.editMessageText(
+        "✅ Logged in as *" + result.userName + "*\\. Return to your browser — it should refresh automatically\\.",
+        { parse_mode: "MarkdownV2" },
+      );
+    } catch (err) {
+      console.error("[bot:login_callback] error:", err);
+      await ctx.answerCallbackQuery("Error — please try again.");
+    }
   });
   bot.command("balance", (ctx) =>
     ctx.reply(
