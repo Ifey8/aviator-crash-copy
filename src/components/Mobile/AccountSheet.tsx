@@ -96,7 +96,7 @@ export const AccountSheet: React.FC<Props> = ({ open, onClose, onOpenAffiliate }
         <div className="account-actions">
           {onOpenAffiliate && (
             <button className="account-link account-affiliate-btn" onClick={onOpenAffiliate}>
-              🤝 Affiliate Dashboard
+              🤝 推廣中心
             </button>
           )}
           {user.isAdmin && (

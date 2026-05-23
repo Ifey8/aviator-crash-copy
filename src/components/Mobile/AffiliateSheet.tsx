@@ -66,9 +66,9 @@ const timeAgo = (iso: string): string => {
 };
 
 const sourceLabel: Record<string, string> = {
-  recharge: "INR recharge",
-  crypto: "Crypto recharge",
-  payout: "Payout",
+  recharge: "INR 充值",
+  crypto: "加密貨幣充值",
+  payout: "提現",
 };
 
 export const AffiliateSheet: React.FC<Props> = ({ open, onClose }) => {
@@ -183,14 +183,14 @@ export const AffiliateSheet: React.FC<Props> = ({ open, onClose }) => {
         <div className="affiliate-header">
           <div className="affiliate-title">
             <span className="affiliate-icon">🤝</span>
-            Affiliate Dashboard
+            推廣中心
           </div>
           <button className="affiliate-close" onClick={onClose} aria-label="Close">✕</button>
         </div>
 
         {/* Referral link */}
         <div className="affiliate-link-block">
-          <div className="affiliate-link-label">Your referral link</div>
+          <div className="affiliate-link-label">你的推廣連結</div>
           <div className="affiliate-link-row">
             <input
               className="share-link-input affiliate-link-input"
@@ -201,19 +201,19 @@ export const AffiliateSheet: React.FC<Props> = ({ open, onClose }) => {
               aria-label="Referral link"
             />
             <button className="share-copy-btn" onClick={copy}>
-              {copied ? "✓" : "Copy"}
+              {copied ? "✓" : "複製"}
             </button>
           </div>
           {stats && (
             <div className="affiliate-reward-note">
-              ₹{fmt(stats.rewardPerEvent)} earned for each friend who recharges
+              每位好友充值，你賺 ₹{fmt(stats.rewardPerEvent)}
             </div>
           )}
         </div>
 
         {/* Stats cards */}
         {loading && !stats && (
-          <div className="affiliate-loading">Loading…</div>
+          <div className="affiliate-loading">載入中…</div>
         )}
         {error && (
           <div className="affiliate-error">{error}</div>
@@ -222,19 +222,19 @@ export const AffiliateSheet: React.FC<Props> = ({ open, onClose }) => {
           <div className="affiliate-stats-grid">
             <div className="affiliate-stat-card">
               <div className="affiliate-stat-value">{stats.totalReferrals}</div>
-              <div className="affiliate-stat-label">Friends referred</div>
+              <div className="affiliate-stat-label">已邀請好友</div>
             </div>
             <div className="affiliate-stat-card earned">
               <div className="affiliate-stat-value">₹{fmt(stats.totalEarned)}</div>
-              <div className="affiliate-stat-label">Total earned</div>
+              <div className="affiliate-stat-label">總收益</div>
             </div>
             <div className="affiliate-stat-card">
               <div className="affiliate-stat-value">{stats.totalRewardEvents}</div>
-              <div className="affiliate-stat-label">Reward events</div>
+              <div className="affiliate-stat-label">獎勵次數</div>
             </div>
             <div className="affiliate-stat-card">
               <div className="affiliate-stat-value">₹{fmt(stats.totalRefereeDeposited)}</div>
-              <div className="affiliate-stat-label">Friends deposited</div>
+              <div className="affiliate-stat-label">好友總充值</div>
             </div>
           </div>
         )}
@@ -245,13 +245,13 @@ export const AffiliateSheet: React.FC<Props> = ({ open, onClose }) => {
             className={`affiliate-tab ${tab === "rewards" ? "active" : ""}`}
             onClick={() => setTab("rewards")}
           >
-            Recent Rewards
+            最近獎勵
           </button>
           <button
             className={`affiliate-tab ${tab === "users" ? "active" : ""}`}
             onClick={() => setTab("users")}
           >
-            My Referrals
+            我的好友
           </button>
         </div>
 
@@ -260,7 +260,7 @@ export const AffiliateSheet: React.FC<Props> = ({ open, onClose }) => {
           {tab === "rewards" && stats && (
             stats.recentRewards.length === 0 ? (
               <div className="affiliate-empty">
-                No rewards yet — share your link to get started!
+                還沒有獎勵記錄 — 分享你的連結開始賺錢！
               </div>
             ) : (
               stats.recentRewards.map((r, i) => (
@@ -268,7 +268,7 @@ export const AffiliateSheet: React.FC<Props> = ({ open, onClose }) => {
                   <div className="affiliate-row-left">
                     <div className="affiliate-row-name">{r.referee}</div>
                     <div className="affiliate-row-meta">
-                      {sourceLabel[r.sourceType] ?? r.sourceType} · ₹{fmt(r.refereeAmount)} deposit
+                      {sourceLabel[r.sourceType] ?? r.sourceType} · ₹{fmt(r.refereeAmount)} 充值
                     </div>
                   </div>
                   <div className="affiliate-row-right">
@@ -282,10 +282,10 @@ export const AffiliateSheet: React.FC<Props> = ({ open, onClose }) => {
 
           {tab === "users" && (
             loading && !users ? (
-              <div className="affiliate-loading">Loading…</div>
+              <div className="affiliate-loading">載入中…</div>
             ) : users && users.length === 0 ? (
               <div className="affiliate-empty">
-                No referrals yet — share your link!
+                還沒有推廣好友 — 分享你的連結！
               </div>
             ) : users ? (
               users.map((u, i) => (
@@ -293,10 +293,10 @@ export const AffiliateSheet: React.FC<Props> = ({ open, onClose }) => {
                   <div className="affiliate-row-left">
                     <div className="affiliate-row-name">{u.userName}</div>
                     <div className="affiliate-row-meta">
-                      Joined {timeAgo(u.joinedAt)}
+                      {timeAgo(u.joinedAt)}加入
                       {u.rewardCount > 0
-                        ? ` · ${u.rewardCount} recharge${u.rewardCount > 1 ? "s" : ""}`
-                        : " · no deposits yet"}
+                        ? ` · 已充值 ${u.rewardCount} 次`
+                        : " · 尚未充值"}
                     </div>
                   </div>
                   <div className="affiliate-row-right">
@@ -307,7 +307,7 @@ export const AffiliateSheet: React.FC<Props> = ({ open, onClose }) => {
                     </div>
                     {u.totalDeposited > 0 && (
                       <div className="affiliate-row-time">
-                        ₹{fmt(u.totalDeposited)} deposited
+                        已充 ₹{fmt(u.totalDeposited)}
                       </div>
                     )}
                   </div>
