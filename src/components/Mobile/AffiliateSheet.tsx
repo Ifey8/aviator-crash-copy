@@ -114,7 +114,7 @@ export const AffiliateSheet: React.FC<Props> = ({ open, onClose }) => {
     setLoading(true);
     setError(null);
     try {
-      const r = await fetch(`${apiBase}/api/affiliate/stats`, {
+      const r = await fetch(`${apiBase}/affiliate/stats`, {
         headers: authHeaders(),
       });
       const j = await r.json();
@@ -132,7 +132,7 @@ export const AffiliateSheet: React.FC<Props> = ({ open, onClose }) => {
     setLoading(true);
     setError(null);
     try {
-      const r = await fetch(`${apiBase}/api/affiliate/referrals`, {
+      const r = await fetch(`${apiBase}/affiliate/referrals`, {
         headers: authHeaders(),
       });
       const j = await r.json();
