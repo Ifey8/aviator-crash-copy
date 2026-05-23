@@ -10,6 +10,7 @@ import { RechargeSheet } from "./RechargeSheet";
 import { ShareSheet } from "./ShareSheet";
 import { WithdrawalSheet } from "./WithdrawalSheet";
 import { AccountSheet } from "./AccountSheet";
+import { AffiliateSheet } from "./AffiliateSheet";
 import { initSounds } from "./sounds";
 import "./mobile.scss";
 import "./recharge.scss";
@@ -57,6 +58,7 @@ export const MobileApp: React.FC = () => {
   const [shareOpen, setShareOpen] = React.useState(false);
   const [withdrawOpen, setWithdrawOpen] = React.useState(false);
   const [accountOpen, setAccountOpen] = React.useState(false);
+  const [affiliateOpen, setAffiliateOpen] = React.useState(false);
 
   return (
     <div className="mobile-app">
@@ -91,7 +93,9 @@ export const MobileApp: React.FC = () => {
 
       <WithdrawalSheet open={withdrawOpen} onClose={() => setWithdrawOpen(false)} />
 
-      <AccountSheet open={accountOpen} onClose={() => setAccountOpen(false)} />
+      <AccountSheet open={accountOpen} onClose={() => setAccountOpen(false)} onOpenAffiliate={() => { setAccountOpen(false); setAffiliateOpen(true); }} />
+
+      <AffiliateSheet open={affiliateOpen} onClose={() => setAffiliateOpen(false)} />
 
       {rechargeState && !shareOpen && !rechargeOpen && (
         <div className="mobile-modal-overlay">

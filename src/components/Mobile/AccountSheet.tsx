@@ -20,9 +20,10 @@ import { useT } from "../../i18n";
 interface Props {
   open: boolean;
   onClose: () => void;
+  onOpenAffiliate?: () => void;
 }
 
-export const AccountSheet: React.FC<Props> = ({ open, onClose }) => {
+export const AccountSheet: React.FC<Props> = ({ open, onClose, onOpenAffiliate }) => {
   const { user, logout } = useAuth();
   const ctx = React.useContext(Context);
   const { t, lang, setLang } = useT();
@@ -93,6 +94,11 @@ export const AccountSheet: React.FC<Props> = ({ open, onClose }) => {
         </div>
 
         <div className="account-actions">
+          {onOpenAffiliate && (
+            <button className="account-link account-affiliate-btn" onClick={onOpenAffiliate}>
+              🤝 Affiliate Dashboard
+            </button>
+          )}
           {user.isAdmin && (
             <a className="account-link" href="/admin">{t("account.adminPanel")}</a>
           )}
