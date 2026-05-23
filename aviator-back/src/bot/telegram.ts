@@ -25,6 +25,19 @@ const startOneBot = async (doc: TelegramBotDoc): Promise<void> => {
   const startButton = (doc.startButtonLabel || "").trim() || DEFAULT_START_BUTTON;
 
   bot.command("start", (ctx) => {
+    const param: string = (ctx.match || "").trim();
+
+    // ?start=weblogin — user came from the web browser's "Log in with Telegram"
+    // button. Show a login-branded CTA instead of the generic game start.
+    if (param === "weblogin") {
+      const kb = new InlineKeyboard().webApp("🔑 Login to Aviator", webappUrl);
+      return ctx.reply(
+        "Tap the button below to log in to Aviator with your Telegram account.",
+        { reply_markup: kb },
+      );
+    }
+
+    // Normal start (from affiliate deep link, /start, etc.)
     const kb = new InlineKeyboard().webApp(startButton, webappUrl);
     return ctx.reply(startMessage, { reply_markup: kb });
   });

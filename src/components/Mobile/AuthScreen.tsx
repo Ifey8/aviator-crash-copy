@@ -35,11 +35,11 @@ export const AuthScreen: React.FC = () => {
       .then((r) => r.json())
       .then((j) => {
         const first = j?.bots?.[0];
-        if (first?.username) setBotLink(`https://t.me/${first.username}`);
+        if (first?.username) setBotLink(`https://t.me/${first.username}?start=weblogin`);
       })
-      .catch(() => setBotLink("https://t.me/eseecrashgamebot"));
+      .catch(() => setBotLink("https://t.me/eseecrashgamebot?start=weblogin"));
     // Also set fallback immediately so the button renders before fetch completes.
-    setBotLink("https://t.me/eseecrashgamebot");
+    setBotLink("https://t.me/eseecrashgamebot?start=weblogin");
   }, []);
 
   const submitPassword = async (e: React.FormEvent) => {
