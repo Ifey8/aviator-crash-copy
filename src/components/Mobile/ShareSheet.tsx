@@ -43,7 +43,7 @@ export const ShareSheet: React.FC<Props> = ({ open, onClose, headline }) => {
     ? `https://t.me/${tgBotUsername}?start=ref_${encodeURIComponent(myName)}`
     : "";
 
-  const shareText = `🛩️ Play Aviator with me — earn ₹100 each time we recharge!\n${tgLink || link}`;
+  const shareText = `🛩️ 來玩 Aviator Crash！用我的連結加入，你充值我賺 ₹100 固定獎勵！\n${tgLink || link}`;
 
   const copy = async () => {
     try {
