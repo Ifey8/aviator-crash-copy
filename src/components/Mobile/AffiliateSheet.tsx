@@ -319,7 +319,7 @@ export const AffiliateSheet: React.FC<Props> = ({ open, onClose }) => {
 
         {/* Promo tip */}
         <div className="affiliate-promo-tip">
-          💡 每帶一個充值好友，你固定賺 ₹100！分享到 Telegram 群組，越多越好
+          💡 Earn a fixed ₹100 for every friend who recharges — share in Telegram groups!
         </div>
       </div>
     </div>
