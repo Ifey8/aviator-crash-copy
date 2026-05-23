@@ -74,6 +74,20 @@ authRouter.post("/login", async (req, res) => {
   res.json({ status: true, ...r.result });
 });
 
+/**
+ * Public: return the first enabled bot's Telegram username + deep link.
+ * Used by the AuthScreen to show the correct "Open in Telegram" link.
+ * No auth required — returns only public info (username, no token).
+ */
+authRouter.get("/bots", async (_req, res) => {
+  const { TelegramBotModel } = await import("../db/models/TelegramBot");
+  const bots = await TelegramBotModel.find({ enabled: true })
+    .select("username code webappUrl -_id")
+    .sort({ createdAt: -1 })
+    .lean();
+  res.json({ status: true, bots });
+});
+
 /** Current user profile from Bearer token — used by frontend after page reload. */
 authRouter.get("/me", async (req, res) => {
   const auth = req.header("authorization") || "";
