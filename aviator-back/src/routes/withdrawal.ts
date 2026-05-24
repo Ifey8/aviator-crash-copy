@@ -100,11 +100,10 @@ withdrawalRouter.get("/quote", requireAuth, async (req: Request, res: Response) 
       minInr: min,
       maxGrossInr: Math.max(0, maxGross),
       usdtInrRate: usdtRate,
-      // Channel availability — frontend hides Bank tab when off so users
-      // don't fill the form just to hit 403. Same setting that gates INR
-      // recharge; flipping it on re-enables both bank withdrawal AND fiat
-      // top-up at the same time.
+      // Channel availability — frontend hides tabs when off so users
+      // don't fill the form just to hit 403.
       bankEnabled: Number(getSetting("inrRechargeEnabled") || 0) === 1,
+      usdtEnabled: Number(getSetting("cryptoWithdrawalEnabled") || 0) === 1,
     },
   });
 });

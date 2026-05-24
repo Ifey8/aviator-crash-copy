@@ -30,6 +30,7 @@ interface QuoteData {
   maxGrossInr: number;
   usdtInrRate: number | null;
   bankEnabled?: boolean;
+  usdtEnabled?: boolean;
 }
 
 interface OrderData {
@@ -94,6 +95,7 @@ export const WithdrawalSheet: React.FC<Props> = ({ open, onClose }) => {
           // Snap selected tab to whichever channel is available so the user
           // doesn't see an empty form for a disabled method.
           if (j.data?.bankEnabled === false) setTab("usdt");
+          else if (j.data?.usdtEnabled === false) setTab("bank");
         } else setError(j.message);
       } catch (e) {
         if (!cancelled) setError((e as Error).message);
@@ -238,16 +240,28 @@ export const WithdrawalSheet: React.FC<Props> = ({ open, onClose }) => {
                   {t("withdrawal.tab.bank")}
                 </button>
               )}
-              <button
-                className={`wd-tab ${tab === "usdt" ? "active" : ""}`}
-                onClick={() => setTab("usdt")}
-              >
-                {t("withdrawal.tab.usdt")}
-              </button>
+              {quote?.usdtEnabled !== false && (
+                <button
+                  className={`wd-tab ${tab === "usdt" ? "active" : ""}`}
+                  onClick={() => setTab("usdt")}
+                >
+                  {t("withdrawal.tab.usdt")}
+                </button>
+              )}
             </div>
-            {quote?.bankEnabled === false && (
+            {quote?.bankEnabled === false && quote?.usdtEnabled !== false && (
               <p className="wd-hint" style={{ marginTop: 0, opacity: 0.75 }}>
                 {t("withdrawal.bankUnavailable")}
+              </p>
+            )}
+            {quote?.usdtEnabled === false && quote?.bankEnabled !== false && (
+              <p className="wd-hint" style={{ marginTop: 0, opacity: 0.75 }}>
+                USDT withdrawal is temporarily unavailable.
+              </p>
+            )}
+            {quote?.bankEnabled === false && quote?.usdtEnabled === false && (
+              <p className="wd-hint" style={{ marginTop: 0, color: "#e57373" }}>
+                All withdrawal methods are temporarily unavailable. Please try again later.
               </p>
             )}
 
