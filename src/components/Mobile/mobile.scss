@@ -1151,6 +1151,13 @@
     &:hover { background: rgba(255, 200, 87, 0.16); }
   }
 
+  .account-withdraw-btn {
+    background: rgba(255, 153, 51, 0.1);
+    border-color: rgba(255, 153, 51, 0.45) !important;
+    color: #ff9933 !important;
+    &:hover { background: rgba(255, 153, 51, 0.2) !important; }
+  }
+
   .account-logout {
     background: transparent;
     border: 1px solid #c12244;
@@ -1360,19 +1367,25 @@
   .wd-status-failed h4 { color: #ffb0bc; }
 }
 
-/* Header withdraw button */
-.mobile-header-withdraw {
-  background: transparent;
-  border: 1px solid rgba(255, 200, 87, 0.5);
-  color: #ffc857;
-  font-weight: 700;
+/* Header share button — red/crimson to draw the eye */
+.mobile-header-share-btn {
+  background: linear-gradient(135deg, #c12244 0%, #e03060 100%);
+  border: none;
+  color: #fff;
+  font-weight: 800;
   font-size: 11px;
-  padding: 5px 9px;
+  padding: 5px 10px;
   border-radius: 999px;
   cursor: pointer;
-  letter-spacing: 0.05em;
+  letter-spacing: 0.04em;
   white-space: nowrap;
-  &:active { transform: scale(0.96); }
+  box-shadow: 0 0 10px rgba(193, 34, 68, 0.55);
+  animation: share-pulse 2.2s ease-in-out infinite;
+  &:active { transform: scale(0.94); }
+}
+@keyframes share-pulse {
+  0%, 100% { box-shadow: 0 0 8px rgba(193, 34, 68, 0.5); }
+  50%       { box-shadow: 0 0 18px rgba(224, 48, 96, 0.85); }
 }
 
 /* -------- Share modal -------- */

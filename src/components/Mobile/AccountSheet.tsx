@@ -21,9 +21,10 @@ interface Props {
   open: boolean;
   onClose: () => void;
   onOpenAffiliate?: () => void;
+  onWithdraw?: () => void;
 }
 
-export const AccountSheet: React.FC<Props> = ({ open, onClose, onOpenAffiliate }) => {
+export const AccountSheet: React.FC<Props> = ({ open, onClose, onOpenAffiliate, onWithdraw }) => {
   const { user, logout } = useAuth();
   const ctx = React.useContext(Context);
   const { t, lang, setLang } = useT();
@@ -94,6 +95,14 @@ export const AccountSheet: React.FC<Props> = ({ open, onClose, onOpenAffiliate }
         </div>
 
         <div className="account-actions">
+          {onWithdraw && (
+            <button
+              className="account-link account-withdraw-btn"
+              onClick={() => { onClose(); onWithdraw(); }}
+            >
+              💸 {t("header.out")}
+            </button>
+          )}
           {onOpenAffiliate && (
             <button className="account-link account-affiliate-btn" onClick={onOpenAffiliate}>
               🤝 Affiliate Dashboard

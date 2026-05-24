@@ -8,6 +8,7 @@ const en = {
   "header.add": "+ ADD",
   "header.offline": "offline",
   "header.out": "⊖ OUT",
+  "header.share": "SHARE & EARN",
 
   // ---- BetCard tabs ----
   "bet.tab.bet": "Bet",

@@ -14,6 +14,7 @@ const hi: Record<I18nKey, string> = {
   "header.add": "+ जोड़ें",
   "header.offline": "ऑफ़लाइन",
   "header.out": "⊖ निकालें",
+  "header.share": "शेयर करें",
 
   // ---- BetCard tabs ----
   "bet.tab.bet": "बेट",

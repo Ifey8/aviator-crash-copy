@@ -70,7 +70,7 @@ export const MobileApp: React.FC = () => {
       <MobileHeader
         onOpenMenu={() => setShareOpen(true)}
         onRecharge={() => setRechargeOpen(true)}
-        onWithdraw={() => setWithdrawOpen(true)}
+        onShare={() => setShareOpen(true)}
         onOpenAccount={() => setAccountOpen(true)}
       />
       <main className="mobile-main">
@@ -93,7 +93,7 @@ export const MobileApp: React.FC = () => {
 
       <WithdrawalSheet open={withdrawOpen} onClose={() => setWithdrawOpen(false)} />
 
-      <AccountSheet open={accountOpen} onClose={() => setAccountOpen(false)} onOpenAffiliate={() => { setAccountOpen(false); setAffiliateOpen(true); }} />
+      <AccountSheet open={accountOpen} onClose={() => setAccountOpen(false)} onOpenAffiliate={() => { setAccountOpen(false); setAffiliateOpen(true); }} onWithdraw={() => { setAccountOpen(false); setWithdrawOpen(true); }} />
 
       <AffiliateSheet open={affiliateOpen} onClose={() => setAffiliateOpen(false)} />
 
