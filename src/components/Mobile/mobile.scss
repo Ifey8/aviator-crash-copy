@@ -1367,21 +1367,23 @@
   .wd-status-failed h4 { color: #ffb0bc; }
 }
 
-/* Header share button — red/crimson to draw the eye */
+/* Header share button — single emoji, red glow to draw the eye */
 .mobile-header-share-btn {
   background: linear-gradient(135deg, #c12244 0%, #e03060 100%);
   border: none;
-  color: #fff;
-  font-weight: 800;
-  font-size: 11px;
-  padding: 5px 10px;
-  border-radius: 999px;
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
   cursor: pointer;
-  letter-spacing: 0.04em;
-  white-space: nowrap;
+  font-size: 16px;
+  line-height: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
   box-shadow: 0 0 10px rgba(193, 34, 68, 0.55);
   animation: share-pulse 2.2s ease-in-out infinite;
-  &:active { transform: scale(0.94); }
+  flex-shrink: 0;
+  &:active { transform: scale(0.90); }
 }
 @keyframes share-pulse {
   0%, 100% { box-shadow: 0 0 8px rgba(193, 34, 68, 0.5); }

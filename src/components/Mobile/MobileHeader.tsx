@@ -48,11 +48,10 @@ const useDisplayBalance = (real: number): number => {
 interface HeaderProps {
   onOpenMenu: () => void;
   onRecharge?: () => void;
-  onShare?: () => void;
   onOpenAccount?: () => void;
 }
 
-export const MobileHeader: React.FC<HeaderProps> = ({ onOpenMenu, onRecharge, onShare, onOpenAccount }) => {
+export const MobileHeader: React.FC<HeaderProps> = ({ onOpenMenu, onRecharge, onOpenAccount }) => {
   const { userInfo, errorBackend } = React.useContext(Context);
   const { t } = useT();
   const balanceServer = Number(userInfo?.balance || 0);
@@ -111,21 +110,8 @@ export const MobileHeader: React.FC<HeaderProps> = ({ onOpenMenu, onRecharge, on
             {t("header.add")}
           </button>
         )}
-        {onShare && (
-          <button
-            className="mobile-header-share-btn"
-            onClick={onShare}
-            aria-label="Share & earn"
-          >
-            🎁 {t("header.share")}
-          </button>
-        )}
-        <button className="mobile-header-menu" onClick={onOpenMenu} aria-label="menu">
-          <svg width="20" height="20" viewBox="0 0 20 20">
-            <circle cx="4" cy="10" r="1.5" fill="currentColor" />
-            <circle cx="10" cy="10" r="1.5" fill="currentColor" />
-            <circle cx="16" cy="10" r="1.5" fill="currentColor" />
-          </svg>
+        <button className="mobile-header-share-btn" onClick={onOpenMenu} aria-label="Share & earn">
+          🎁
         </button>
       </div>
     </header>

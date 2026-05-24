@@ -70,7 +70,6 @@ export const MobileApp: React.FC = () => {
       <MobileHeader
         onOpenMenu={() => setShareOpen(true)}
         onRecharge={() => setRechargeOpen(true)}
-        onShare={() => setShareOpen(true)}
         onOpenAccount={() => setAccountOpen(true)}
       />
       <main className="mobile-main">
