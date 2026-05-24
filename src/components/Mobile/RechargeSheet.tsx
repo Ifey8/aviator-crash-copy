@@ -64,13 +64,14 @@ export const RechargeSheet: React.FC<Props> = ({ open, onClose }) => {
   const [method, setMethod] = React.useState<PayMethod>("fiat");
   const [order, setOrder] = React.useState<OrderData | null>(null);
   const [error, setError] = React.useState<string | null>(null);
-  // inrEnabled: backend admin Setting. Default null = still loading; default
-  // to false when the call fails so we don't show a tab that returns 403.
+  // inrEnabled / usdtEnabled: backend admin Settings. Default null = still loading.
+  // Default to false on error so we don't show a tab that returns 403.
   const [inrEnabled, setInrEnabled] = React.useState<boolean | null>(null);
+  const [usdtEnabled, setUsdtEnabled] = React.useState<boolean | null>(null);
 
   // Fetch channel availability whenever the sheet opens (it can change
-  // mid-session when admin flips the toggle). Once loaded, prefer crypto
-  // automatically if INR is off so the user doesn't see an empty picker.
+  // mid-session when admin flips the toggle). Auto-select the first
+  // available method so the user doesn't see an empty/broken picker.
   React.useEffect(() => {
     if (!open) return;
     let cancelled = false;
@@ -80,12 +81,16 @@ export const RechargeSheet: React.FC<Props> = ({ open, onClose }) => {
         const json = await res.json();
         if (cancelled) return;
         const inr = !!json?.data?.inrEnabled;
+        const usdt = !!json?.data?.usdtEnabled;
         setInrEnabled(inr);
-        if (!inr) setMethod("crypto");
+        setUsdtEnabled(usdt);
+        // Auto-select: prefer crypto if INR is off; fallback to fiat if both crypto off
+        if (!inr && usdt) setMethod("crypto");
+        else if (inr && !usdt) setMethod("fiat");
       } catch {
         if (!cancelled) {
           setInrEnabled(false);
-          setMethod("crypto");
+          setUsdtEnabled(false);
         }
       }
     })();
@@ -231,18 +236,31 @@ export const RechargeSheet: React.FC<Props> = ({ open, onClose }) => {
                   <span className="rs-method-sub">{t("recharge.method.fiat.sub")}</span>
                 </button>
               )}
-              <button
-                type="button"
-                className={`rs-method ${method === "crypto" ? "active" : ""}`}
-                onClick={() => setMethod("crypto")}
-              >
-                <span className="rs-method-name">{t("recharge.method.crypto")}</span>
-                <span className="rs-method-sub">{t("recharge.method.crypto.sub")}</span>
-              </button>
+              {usdtEnabled !== false && (
+                <button
+                  type="button"
+                  className={`rs-method ${method === "crypto" ? "active" : ""}`}
+                  onClick={() => setMethod("crypto")}
+                  disabled={usdtEnabled === null}
+                >
+                  <span className="rs-method-name">{t("recharge.method.crypto")}</span>
+                  <span className="rs-method-sub">{t("recharge.method.crypto.sub")}</span>
+                </button>
+              )}
             </div>
-            {inrEnabled === false && (
+            {inrEnabled === false && usdtEnabled !== false && (
               <p className="rs-fine" style={{ marginTop: -4, opacity: 0.7 }}>
                 {t("recharge.inrUnavailable")}
+              </p>
+            )}
+            {usdtEnabled === false && inrEnabled !== false && (
+              <p className="rs-fine" style={{ marginTop: -4, opacity: 0.7 }}>
+                USDT recharge is temporarily unavailable.
+              </p>
+            )}
+            {inrEnabled === false && usdtEnabled === false && (
+              <p className="rs-fine" style={{ marginTop: -4, color: "#e57373" }}>
+                All recharge methods are temporarily unavailable. Please try again later.
               </p>
             )}
 
