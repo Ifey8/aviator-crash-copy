@@ -146,6 +146,14 @@ withdrawalRouter.post("/create", requireAuth, async (req: Request, res: Response
     });
   }
 
+  // USDT withdrawal gate — admin can disable without a redeploy.
+  if (method === "usdt" && Number(getSetting("cryptoWithdrawalEnabled") || 0) !== 1) {
+    return res.status(403).json({
+      status: false,
+      message: "USDT withdrawals are temporarily unavailable. Please try again later.",
+    });
+  }
+
   const feePct = Number(getSetting("withdrawalFeePct") || 0);
   const minInr = Number(getSetting("withdrawalMinInr") || 0);
 

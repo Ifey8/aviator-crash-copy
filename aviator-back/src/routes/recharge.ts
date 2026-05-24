@@ -22,11 +22,13 @@ export const rechargeRouter = Router();
  * tronNetwork being set.
  */
 rechargeRouter.get("/config", requireAuth, async (_req, res) => {
+  // USDT deposit requires both: TRON env vars configured AND the DB toggle ON.
+  const tronConfigured = !!config.tronNetwork && !!config.tronContract;
   res.json({
     status: true,
     data: {
       inrEnabled: Number(getSetting("inrRechargeEnabled") || 0) === 1,
-      usdtEnabled: !!config.tronNetwork && !!config.tronContract,
+      usdtEnabled: tronConfigured && Number(getSetting("cryptoRechargeEnabled") || 0) === 1,
       minInr: config.rechargeMinAmount,
       maxInr: config.rechargeMaxAmount,
     },

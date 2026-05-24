@@ -372,6 +372,8 @@ interface SettingsData {
   withdrawalReviewNewAccountHours: number;
   registerMaxPerIp24h: number;
   inrRechargeEnabled: number;
+  cryptoRechargeEnabled: number;
+  cryptoWithdrawalEnabled: number;
   usdtAutoPayoutEnabled: number;
   usdtAutoPayoutMaxInr: number;
   updatedAt?: string;
@@ -398,6 +400,8 @@ const SETTINGS_FIELDS: { key: keyof SettingsData; label: string; hint: string; g
   { group: "Anti-abuse", key: "withdrawalReviewNewAccountHours", label: "Review new account (hours)", hint: "If account younger than this and withdrawing → flagged for review. 0 disables." },
   { group: "Anti-abuse", key: "registerMaxPerIp24h", label: "Max registrations / IP / 24h", hint: "Hard cap on new accounts from one IP per day. 3 = real users uneffected, bot farms blocked. 0 disables." },
   { group: "Recharge", key: "inrRechargeEnabled", label: "INR channel enabled (1=on, 0=off)", hint: "Single switch for BOTH INR top-up AND bank withdrawal. Turn ON only AFTER a real payment provider (Razorpay/Cashfree) is wired in for recharge AND a real payout adapter for bank transfer. While OFF, both routes return 403 and the in-app sheets hide the Bank/INR tabs. USDT recharge + USDT withdrawal unaffected." },
+  { group: "Recharge", key: "cryptoRechargeEnabled", label: "USDT deposit enabled (1=on, 0=off)", hint: "Toggle USDT (TRC20) deposits without a redeploy. 1 = users can top up with USDT (requires TRON env vars). 0 = deposit endpoint returns 403 and the USDT tab is hidden in the top-up sheet." },
+  { group: "Recharge", key: "cryptoWithdrawalEnabled", label: "USDT withdrawal enabled (1=on, 0=off)", hint: "Toggle USDT withdrawals independently. 1 = users can request USDT payouts. 0 = USDT withdrawal returns 403. Useful when pausing payouts while the hot wallet is low or during maintenance." },
   { group: "Auto-payout", key: "usdtAutoPayoutEnabled", label: "USDT auto-payout (1=on, 0=off)", hint: "When ON: USDT withdrawals under the cap broadcast to TRON automatically (no admin click). Bank withdrawals always manual. Default OFF — opt in when comfortable." },
   { group: "Auto-payout", key: "usdtAutoPayoutMaxInr", label: "Auto-payout cap (INR)", hint: "USDT withdrawals at or above this stay in 'processing' awaiting admin Approve. Below this and auto-on → instant broadcast. Set 2000-5000 for sensible mid-range automation." },
   // Payme moved to the Channels tab — see admin → Channels.

@@ -30,6 +30,8 @@ type SettingsKey =
   | "withdrawalReviewNewAccountHours"
   | "registerMaxPerIp24h"
   | "inrRechargeEnabled"
+  | "cryptoRechargeEnabled"
+  | "cryptoWithdrawalEnabled"
   | "usdtAutoPayoutEnabled"
   | "usdtAutoPayoutMaxInr";
 // Payme fields removed — they live on PaymentChannel docs now. See
@@ -56,6 +58,8 @@ const defaultsFromEnv = (): Omit<SettingsDoc, "_id" | "updatedAt" | "updatedBy">
   withdrawalReviewNewAccountHours: 24,
   registerMaxPerIp24h: 3,
   inrRechargeEnabled: 0, // OFF — re-enable after a real payment provider is integrated
+  cryptoRechargeEnabled: 1, // ON by default — USDT deposits are live when TRON is configured
+  cryptoWithdrawalEnabled: 1, // ON by default — USDT withdrawals are live
   usdtAutoPayoutEnabled: 0, // OFF by default — operator must explicitly opt in
   usdtAutoPayoutMaxInr: 2000,
 });

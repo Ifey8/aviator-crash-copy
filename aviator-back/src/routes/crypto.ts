@@ -45,6 +45,14 @@ cryptoRouter.post("/create", requireAuth, async (req: Request, res: Response) =>
   const userName = req.authUserName!;
   const amountInr = Number(req.body?.amountInr);
 
+  // Admin toggle gate — operator can disable USDT deposits without a redeploy.
+  if (Number(getSetting("cryptoRechargeEnabled") || 0) !== 1) {
+    return res.status(403).json({
+      status: false,
+      message: "USDT recharge is temporarily unavailable. Please try again later or use INR.",
+    });
+  }
+
   if (!config.tronNetwork || !config.tronContract) {
     return res.status(503).json({
       status: false,

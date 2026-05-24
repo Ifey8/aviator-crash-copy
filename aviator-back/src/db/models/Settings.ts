@@ -72,6 +72,17 @@ export interface SettingsDoc {
    * user with no money flowing in. USDT recharge unaffected.
    */
   inrRechargeEnabled: number;
+  /**
+   * 1 = USDT (crypto) deposit endpoint is live; 0 = blocked.
+   * Default ON when TRON env vars are set — operator can turn OFF without
+   * needing a redeploy (e.g. while switching wallets or pausing deposits).
+   */
+  cryptoRechargeEnabled: number;
+  /**
+   * 1 = USDT withdrawal endpoint is live; 0 = blocked.
+   * Default ON. Turn OFF to pause all USDT payouts without touching INR.
+   */
+  cryptoWithdrawalEnabled: number;
 
   // Payme fields moved to PaymentChannel collection. See payment/channels.ts +
   // payment/migrate.ts (auto-migrates existing Settings values on boot).
@@ -120,6 +131,8 @@ const SettingsSchema = new Schema<SettingsDoc>(
     withdrawalReviewNewAccountHours: { type: Number, required: true, min: 0 },
     registerMaxPerIp24h: { type: Number, required: true, min: 0, max: 100 },
     inrRechargeEnabled: { type: Number, required: true, min: 0, max: 1 },
+    cryptoRechargeEnabled: { type: Number, required: true, min: 0, max: 1 },
+    cryptoWithdrawalEnabled: { type: Number, required: true, min: 0, max: 1 },
     usdtAutoPayoutEnabled: { type: Number, required: true, min: 0, max: 1 },
     usdtAutoPayoutMaxInr: { type: Number, required: true, min: 0 },
     updatedAt: { type: Date, default: Date.now },
