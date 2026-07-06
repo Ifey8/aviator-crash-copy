@@ -6,7 +6,7 @@ services:
     ports:
       # Host port → container port. Override host side via $MONGO_PORT.
       # Container always listens on 27017 internally.
-      - "${MONGO_PORT:-18827}:27017"
+      - "127.0.0.1:${MONGO_PORT:-18827}:27017"
     volumes:
       - mongo_data:/data/db
     healthcheck:
