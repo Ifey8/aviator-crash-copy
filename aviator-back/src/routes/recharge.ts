@@ -12,6 +12,7 @@ import { webhookGuard } from "../payment/webhookLog";
 import { triggerReferralReward } from "../payment/referral";
 import { recordPayin, resolveChannelCodeForOrder } from "../payment/ledger";
 import { getSetting } from "../settings";
+import { enabledEvmChains } from "../payment/evmChains";
 
 export const rechargeRouter = Router();
 
@@ -24,11 +25,13 @@ export const rechargeRouter = Router();
 rechargeRouter.get("/config", requireAuth, async (_req, res) => {
   // USDT deposit requires both: TRON env vars configured AND the DB toggle ON.
   const tronConfigured = !!config.tronNetwork && !!config.tronContract;
+  const evmChains = enabledEvmChains();
   res.json({
     status: true,
     data: {
       inrEnabled: Number(getSetting("inrRechargeEnabled") || 0) === 1,
-      usdtEnabled: tronConfigured && Number(getSetting("cryptoRechargeEnabled") || 0) === 1,
+      usdtEnabled: (tronConfigured || evmChains.length > 0) && Number(getSetting("cryptoRechargeEnabled") || 0) === 1,
+      evmChains: evmChains.map((c) => ({ key: c.key, label: c.label })),
       minInr: config.rechargeMinAmount,
       maxInr: config.rechargeMaxAmount,
     },
