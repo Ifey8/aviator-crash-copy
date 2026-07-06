@@ -17,7 +17,7 @@ import { webhookGuard } from "../payment/webhookLog";
 import { recordPayout, resolveChannelCodeForOrder } from "../payment/ledger";
 import { autoBroadcastUsdtWithdrawal } from "../payment/walletOps";
 import { autoBroadcastUsdtWithdrawalEvm, getEvmHotWalletBalance } from "../payment/evmWalletOps";
-import { getEvmChain, isEvmChain, EvmChainKey } from "../payment/evmChains";
+import { getEvmChain, isEvmChain, enabledEvmChains, EvmChainKey } from "../payment/evmChains";
 
 export const withdrawalRouter = Router();
 
@@ -113,6 +113,7 @@ withdrawalRouter.get("/quote", requireAuth, async (req: Request, res: Response) 
       // don't fill the form just to hit 403.
       bankEnabled: Number(getSetting("inrRechargeEnabled") || 0) === 1,
       usdtEnabled: Number(getSetting("cryptoWithdrawalEnabled") || 0) === 1,
+      evmChains: enabledEvmChains().map((c) => ({ key: c.key, label: c.label })),
     },
   });
 });
