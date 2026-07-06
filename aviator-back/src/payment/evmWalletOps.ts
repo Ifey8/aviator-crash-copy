@@ -233,3 +233,76 @@ export const fetchEvmAddressBalance = async (
   cacheByChain.delete(chainKey);
   return { address, nativeBalance, usdtBalance, fetchedAt: new Date() };
 };
+
+const EVM_ADDR_RE = /^0x[0-9a-fA-F]{40}$/;
+
+export interface EvmTransferOutInput {
+  chainKey: EvmChainKey;
+  to: string;
+  amountUsdt?: number;
+  amountNative?: number;
+  dryRun?: boolean;
+}
+
+export interface EvmTransferOutResult {
+  ok: boolean;
+  dryRun: boolean;
+  reason?: string;
+  txHash?: string;
+  from: string;
+  to: string;
+  amount: number;
+  currency: string;
+  preBalance: { native: number; usdt: number };
+}
+
+/** Manual outbound from the EVM hot wallet — mirrors walletOps.ts's transferOut. */
+export const transferOut = async (input: EvmTransferOutInput): Promise<EvmTransferOutResult> => {
+  const chain = getEvmChain(input.chainKey);
+  const currency = input.amountUsdt ? "USDT" : (chain?.nativeSymbol || "");
+  const fail = (reason: string, from = "", pre = { native: 0, usdt: 0 }): EvmTransferOutResult => ({
+    ok: false, dryRun: !!input.dryRun, reason, from, to: input.to || "",
+    amount: input.amountUsdt ?? input.amountNative ?? 0, currency, preBalance: pre,
+  });
+
+  if (!chain) return fail(`Unknown chain ${input.chainKey}`);
+  if (!input.to || !EVM_ADDR_RE.test(input.to)) return fail("Invalid EVM address (must be 0x + 40 hex chars)");
+  if (!!input.amountUsdt === !!input.amountNative) return fail("Specify exactly one of amountUsdt or amountNative");
+
+  let hot;
+  try {
+    hot = evmHotWallet();
+  } catch (e) {
+    return fail((e as Error).message);
+  }
+  if (input.to.toLowerCase() === hot.address.toLowerCase()) return fail("Destination equals hot wallet — refused", hot.address);
+
+  const provider = getProvider(input.chainKey);
+  const signer = new ethers.Wallet(hot.privateKey, provider);
+  const nativeBal = Number(ethers.formatEther(await provider.getBalance(hot.address)));
+  const c = new ethers.Contract(chain.usdtContract, ERC20_ABI, provider);
+  const usdtBal = Number(ethers.formatUnits(await c.balanceOf(hot.address), chain.usdtDecimals));
+  const pre = { native: +nativeBal.toFixed(6), usdt: +usdtBal.toFixed(6) };
+
+  if (input.amountUsdt) {
+    if (input.amountUsdt > usdtBal) return fail(`Hot wallet has only ${usdtBal} USDT (requested ${input.amountUsdt})`, hot.address, pre);
+    if (nativeBal < chain.gasReserve) {
+      return fail(`Hot wallet has only ${nativeBal.toFixed(4)} ${chain.nativeSymbol} — USDT transfer needs ~${chain.gasReserve} ${chain.nativeSymbol} gas`, hot.address, pre);
+    }
+    if (input.dryRun) return { ok: true, dryRun: true, from: hot.address, to: input.to, amount: input.amountUsdt, currency: "USDT", preBalance: pre };
+    const cSigner = new ethers.Contract(chain.usdtContract, ERC20_ABI, signer);
+    const raw = ethers.parseUnits(input.amountUsdt.toFixed(chain.usdtDecimals), chain.usdtDecimals);
+    const tx = await cSigner.transfer(input.to, raw);
+    const receipt = await tx.wait();
+    return { ok: true, dryRun: false, txHash: receipt?.hash || tx.hash, from: hot.address, to: input.to, amount: input.amountUsdt, currency: "USDT", preBalance: pre };
+  }
+
+  const reserve = chain.gasReserve;
+  if (input.amountNative! + reserve > nativeBal) {
+    return fail(`Refusing — would leave less than ${reserve} ${chain.nativeSymbol} gas reserve. Hot=${nativeBal.toFixed(4)} req=${input.amountNative}`, hot.address, pre);
+  }
+  if (input.dryRun) return { ok: true, dryRun: true, from: hot.address, to: input.to, amount: input.amountNative!, currency: chain.nativeSymbol, preBalance: pre };
+  const tx = await signer.sendTransaction({ to: input.to, value: ethers.parseEther(input.amountNative!.toString()) });
+  const receipt = await tx.wait();
+  return { ok: true, dryRun: false, txHash: receipt?.hash || tx.hash, from: hot.address, to: input.to, amount: input.amountNative!, currency: chain.nativeSymbol, preBalance: pre };
+};
