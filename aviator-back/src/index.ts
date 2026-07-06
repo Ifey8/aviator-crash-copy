@@ -14,6 +14,7 @@ import { cryptoRouter } from "./routes/crypto";
 import { withdrawalRouter } from "./routes/withdrawal";
 import { affiliateRouter } from "./routes/affiliate";
 import { startTronWatcher } from "./payment/providers/tron";
+import { startEvmWatchers } from "./payment/providers/evm";
 import { startTelegramBot } from "./bot/telegram";
 import { loadSettings } from "./settings";
 import { migratePaymeSettingsToChannel } from "./payment/migrate";
@@ -58,6 +59,7 @@ const main = async () => {
   await engine.start();
   await startTelegramBot();
   startTronWatcher();
+  startEvmWatchers();
   startOrderWatcher();
   server.listen(config.port, () => {
     console.log(`[api] listening on :${config.port}`);
