@@ -430,3 +430,87 @@ export const sweepAddresses = async (input: EvmSweepInput): Promise<EvmSweepResu
   cacheByChain.delete(input.chainKey);
   return result;
 };
+
+/**
+ * Fire-and-forget USDT broadcast for an EVM withdrawal order — mirrors
+ * walletOps.ts's autoBroadcastUsdtWithdrawal. Never called for Ethereum
+ * (routes/withdrawal.ts's auto-payout dispatch skips chains where
+ * sweepAllowed=false); this function also re-checks that gate defensively.
+ */
+export const autoBroadcastUsdtWithdrawalEvm = async (orderId: string): Promise<void> => {
+  const order = await WithdrawalOrderModel.findOne({ orderId });
+  if (!order) return;
+  if (order.method !== "usdt" || order.status !== "processing") return;
+  if (!order.payoutAddress || !order.network) return;
+  const chain = getEvmChain(order.network);
+  if (!chain || !chain.sweepAllowed) return;
+
+  let hot;
+  try {
+    hot = evmHotWallet();
+  } catch (e) {
+    console.error("[evm-auto-payout] hot wallet derive failed:", (e as Error).message);
+    return;
+  }
+
+  const provider = getProvider(order.network as EvmChainKey);
+  const c = new ethers.Contract(chain.usdtContract, ERC20_ABI, provider);
+
+  let nativeBal = 0;
+  let usdtBal = 0;
+  try {
+    nativeBal = Number(ethers.formatEther(await provider.getBalance(hot.address)));
+    usdtBal = Number(ethers.formatUnits(await c.balanceOf(hot.address), chain.usdtDecimals));
+  } catch (e) {
+    console.error("[evm-auto-payout] balance fetch failed:", (e as Error).message);
+    return;
+  }
+  if (usdtBal < order.grossAmount || nativeBal < chain.gasReserve) {
+    console.warn(`[evm-auto-payout] order ${orderId} skipped — hot wallet thin (USDT=${usdtBal} ${chain.nativeSymbol}=${nativeBal}, need=${order.grossAmount})`);
+    await WithdrawalOrderModel.updateOne(
+      { orderId, status: "processing" },
+      { $set: { status: "manual_queue", failedReason: `Auto-payout skipped — hot wallet insufficient (USDT=${usdtBal.toFixed(2)})` } },
+    );
+    pushToUser(order.userName, "withdrawalUpdate", { orderId, status: "manual_queue" });
+    return;
+  }
+
+  let txHash: string;
+  try {
+    const signer = new ethers.Wallet(hot.privateKey, provider);
+    const cSigner = new ethers.Contract(chain.usdtContract, ERC20_ABI, signer);
+    const raw = ethers.parseUnits(order.grossAmount.toFixed(chain.usdtDecimals), chain.usdtDecimals);
+    const tx = await cSigner.transfer(order.payoutAddress, raw);
+    const receipt = await tx.wait();
+    txHash = receipt?.hash || tx.hash;
+  } catch (e) {
+    const msg = (e as Error).message;
+    console.error(`[evm-auto-payout] broadcast FAILED for ${orderId}:`, msg);
+    await WithdrawalOrderModel.updateOne(
+      { orderId, status: "processing" },
+      { $set: { status: "manual_queue", failedReason: `Auto-broadcast failed: ${msg.slice(0, 200)}` } },
+    );
+    pushToUser(order.userName, "withdrawalUpdate", { orderId, status: "manual_queue", failedReason: msg.slice(0, 200) });
+    return;
+  }
+
+  const flipped = await WithdrawalOrderModel.findOneAndUpdate(
+    { orderId, status: "processing" },
+    { $set: { status: "paid", paidAt: new Date(), txHash, meta: { ...(order.meta || {}), autoBroadcast: true } } },
+    { new: true },
+  );
+  if (!flipped) {
+    console.warn(`[evm-auto-payout] order ${orderId} status changed during broadcast (tx ${txHash})`);
+    return;
+  }
+
+  await triggerReferralReward(order.userName, {
+    type: "payout",
+    id: order.providerRef || order.orderId,
+    amountInr: order.grossAmount * (order.fxRate || 1),
+  });
+  pushToUser(order.userName, "withdrawalUpdate", { orderId, status: "paid", txHash });
+  pushUserMyInfo(order.userName);
+  cacheByChain.delete(order.network as EvmChainKey);
+  console.log(`[evm-auto-payout] ✓ ${orderId.slice(0, 8)}… sent ${order.grossAmount} USDT on ${order.network}, tx ${txHash.slice(0, 12)}…`);
+};
