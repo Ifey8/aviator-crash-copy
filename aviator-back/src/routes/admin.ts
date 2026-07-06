@@ -11,6 +11,14 @@ import { pushToUser, pushUserMyInfo } from "../sockets";
 import { triggerReferralReward } from "../payment/referral";
 import { getHotWalletBalance } from "../payment/hotWallet";
 import { listWallets, transferOut, sweepAddresses, fetchAddressBalance } from "../payment/walletOps";
+import {
+  listWalletsForChain,
+  transferOut as evmTransferOut,
+  sweepAddresses as evmSweepAddresses,
+  fetchEvmAddressBalance,
+  getEvmHotWalletBalance,
+} from "../payment/evmWalletOps";
+import { getEvmChain, isEvmChain, enabledEvmChains, EvmChainKey } from "../payment/evmChains";
 import { PaymentChannelModel } from "../db/models/PaymentChannel";
 import { WebhookLogModel } from "../db/models/WebhookLog";
 import { listProviderTypes, getProviderType } from "../payment/catalog";
@@ -359,11 +367,17 @@ adminRouter.post("/withdrawals/:orderId/broadcast", async (req, res) => {
   if (order.status !== "manual_queue") {
     return res.status(400).json({ status: false, message: `Order is ${order.status}, expected manual_queue` });
   }
-  if (!order.trc20Address) {
-    return res.status(400).json({ status: false, message: "Order has no TRC20 destination address" });
+
+  const network = order.network || "tron";
+  const isEvm = isEvmChain(network);
+  const destination = isEvm ? order.payoutAddress : order.trc20Address;
+  if (!destination) {
+    return res.status(400).json({ status: false, message: "Order has no destination address" });
   }
 
-  const result = await transferOut({ to: order.trc20Address, amountUsdt: order.grossAmount });
+  const result = isEvm
+    ? await evmTransferOut({ chainKey: network as EvmChainKey, to: destination, amountUsdt: order.grossAmount })
+    : await transferOut({ to: destination, amountUsdt: order.grossAmount });
   if (!result.ok) {
     return res.status(400).json({ status: false, message: result.reason || "Broadcast failed" });
   }
@@ -459,7 +473,9 @@ adminRouter.post("/withdrawals/:orderId/approve-review", async (req, res) => {
   let providerRef: string | undefined = order.providerRef;
   try {
     if (order.method === "usdt") {
-      const hot = await getHotWalletBalance();
+      const network = order.network || "tron";
+      const isEvm = isEvmChain(network);
+      const hot = isEvm ? await getEvmHotWalletBalance(network as EvmChainKey) : await getHotWalletBalance();
       if (!hot || hot.usdtBalance < order.grossAmount) {
         nextStatus = "manual_queue";
       } else {
@@ -468,7 +484,9 @@ adminRouter.post("/withdrawals/:orderId/approve-review", async (req, res) => {
           userName: order.userName,
           method: "usdt",
           grossAmount: order.grossAmount,
-          trc20Address: order.trc20Address,
+          network: isEvm ? network : undefined,
+          trc20Address: isEvm ? undefined : order.trc20Address,
+          payoutAddress: isEvm ? order.payoutAddress : undefined,
         });
         providerRef = r.providerRef;
         nextStatus = r.status;
@@ -1096,6 +1114,83 @@ adminRouter.post("/wallets/sweep", async (req, res) => {
     const r = await sweepAddresses({
       addresses: Array.isArray(addresses) ? addresses : undefined,
       dryRun: !!dryRun,
+    });
+    res.json({ status: true, data: r });
+  } catch (e) {
+    res.status(502).json({ status: false, message: (e as Error).message });
+  }
+});
+
+// ---------- EVM Wallets (Polygon / BSC / Ethereum) ----------
+
+const requireEvmChain = (req: import("express").Request, res: import("express").Response): EvmChainKey | null => {
+  const key = req.params.chain;
+  if (!isEvmChain(key) || !getEvmChain(key)) {
+    res.status(400).json({ status: false, message: `Unknown or unconfigured chain: ${key}` });
+    return null;
+  }
+  return key;
+};
+
+adminRouter.get("/wallets/evm/chains", (_req, res) => {
+  res.json({ status: true, data: enabledEvmChains().map((c) => ({ key: c.key, label: c.label, sweepAllowed: c.sweepAllowed })) });
+});
+
+adminRouter.get("/wallets/evm/:chain", async (req, res) => {
+  const chain = requireEvmChain(req, res);
+  if (!chain) return;
+  const useCache = req.query.fresh !== "1";
+  try {
+    const r = await listWalletsForChain(chain, useCache);
+    res.json({ status: true, data: r });
+  } catch (e) {
+    res.status(502).json({ status: false, message: (e as Error).message });
+  }
+});
+
+adminRouter.get("/wallets/evm/:chain/balance/:address", async (req, res) => {
+  const chain = requireEvmChain(req, res);
+  if (!chain) return;
+  if (!/^0x[0-9a-fA-F]{40}$/.test(req.params.address)) {
+    return res.status(400).json({ status: false, message: "Invalid EVM address" });
+  }
+  try {
+    const r = await fetchEvmAddressBalance(chain, req.params.address);
+    res.json({ status: true, data: r });
+  } catch (e) {
+    res.status(502).json({ status: false, message: (e as Error).message });
+  }
+});
+
+adminRouter.post("/wallets/evm/:chain/transfer-out", async (req, res) => {
+  const chain = requireEvmChain(req, res);
+  if (!chain) return;
+  const { to, amountUsdt, amountNative, dryRun } = req.body || {};
+  try {
+    const r = await evmTransferOut({
+      chainKey: chain,
+      to,
+      amountUsdt: amountUsdt != null ? Number(amountUsdt) : undefined,
+      amountNative: amountNative != null ? Number(amountNative) : undefined,
+      dryRun: !!dryRun,
+    });
+    if (!r.ok) return res.status(400).json({ status: false, ...r });
+    res.json({ status: true, data: r });
+  } catch (e) {
+    res.status(502).json({ status: false, message: (e as Error).message });
+  }
+});
+
+adminRouter.post("/wallets/evm/:chain/sweep", async (req, res) => {
+  const chain = requireEvmChain(req, res);
+  if (!chain) return;
+  const { addresses, dryRun, confirmedGasCost } = req.body || {};
+  try {
+    const r = await evmSweepAddresses({
+      chainKey: chain,
+      addresses: Array.isArray(addresses) ? addresses : undefined,
+      dryRun: !!dryRun,
+      confirmedGasCost: !!confirmedGasCost,
     });
     res.json({ status: true, data: r });
   } catch (e) {
