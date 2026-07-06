@@ -90,7 +90,7 @@ export const AdminApp: React.FC = () => {
         {tab === "users" && <UsersTab />}
         {tab === "rounds" && <RoundsTab />}
         {tab === "withdrawals" && <WithdrawalsTab />}
-        {tab === "wallets" && <WalletsTab />}
+        {tab === "wallets" && <WalletsRoot />}
         {tab === "channels" && <ChannelsTab />}
         {tab === "bots" && <BotsTab />}
         {tab === "webhooks" && <WebhooksTab />}
@@ -2024,6 +2024,177 @@ const WalletsTab: React.FC = () => {
       {transferOpen && (
         <TransferOutModal onClose={() => setTransferOpen(false)} onDone={() => { setTransferOpen(false); load(true); }} hotUsdt={hot?.usdtBalance || 0} hotTrx={hot?.trxBalance || 0} />
       )}
+    </div>
+  );
+};
+
+/**
+ * WalletsRoot — chain switcher above the wallet views. TRON keeps its
+ * original, unmodified WalletsTab; EVM chains render through a new sibling
+ * panel so the existing TRON component (money-handling, well-tested by
+ * hand in production) isn't touched by this addition.
+ */
+const WalletsRoot: React.FC = () => {
+  const api = useApi();
+  const [evmChains, setEvmChains] = React.useState<Array<{ key: string; label: string; sweepAllowed: boolean }>>([]);
+  const [activeChain, setActiveChain] = React.useState<string>("tron");
+
+  React.useEffect(() => {
+    (async () => {
+      try {
+        const r = await api(`/admin/wallets/evm/chains`);
+        setEvmChains(r.data || []);
+      } catch { /* EVM not configured — chain tabs stay TRON-only */ }
+    })();
+  }, [api]);
+
+  return (
+    <div>
+      {evmChains.length > 0 && (
+        <div className="wd-tabs" style={{ marginBottom: 12 }}>
+          <button className={activeChain === "tron" ? "active" : ""} onClick={() => setActiveChain("tron")}>TRON</button>
+          {evmChains.map((c) => (
+            <button key={c.key} className={activeChain === c.key ? "active" : ""} onClick={() => setActiveChain(c.key)}>
+              {c.label}
+            </button>
+          ))}
+        </div>
+      )}
+      {activeChain === "tron" ? <WalletsTab /> : <EvmWalletsPanel chainKey={activeChain} chains={evmChains} />}
+    </div>
+  );
+};
+
+interface EvmWalletEntry {
+  role: "hot" | "deposit";
+  index: number;
+  address: string;
+  nativeBalance: number | null;
+  usdtBalance: number | null;
+  paidOrderCount?: number;
+  unsweptOrderCount?: number;
+  totalUsdtClaimed?: number;
+}
+
+interface EvmWalletsListData {
+  chain: string;
+  contract: string;
+  fetchedAt: string;
+  cached: boolean;
+  wallets: EvmWalletEntry[];
+  totals: { hotNative: number; hotUsdt: number; depositNative: number; depositUsdt: number; unsweptOrders: number };
+}
+
+const EvmWalletsPanel: React.FC<{ chainKey: string; chains: Array<{ key: string; label: string; sweepAllowed: boolean }> }> = ({ chainKey, chains }) => {
+  const api = useApi();
+  const [data, setData] = React.useState<EvmWalletsListData | null>(null);
+  const [error, setError] = React.useState<string | null>(null);
+  const [loading, setLoading] = React.useState(false);
+  const [sweeping, setSweeping] = React.useState(false);
+
+  const meta = chains.find((c) => c.key === chainKey);
+  const nativeSymbol = chainKey === "polygon" ? "MATIC" : chainKey === "bsc" ? "BNB" : "ETH";
+
+  const load = React.useCallback(async (fresh = false) => {
+    setLoading(true);
+    try {
+      const r = await api(`/admin/wallets/evm/${chainKey}${fresh ? "?fresh=1" : ""}`);
+      setData(r.data);
+      setError(null);
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setLoading(false);
+    }
+  }, [api, chainKey]);
+
+  React.useEffect(() => { load(); }, [load]);
+
+  const runSweep = async () => {
+    const count = data?.totals.unsweptOrders || 0;
+    const needsConfirm = meta && !meta.sweepAllowed;
+    if (!window.confirm(
+      needsConfirm
+        ? `${meta?.label} gas fees can exceed a small deposit's value. Sweep ${count} address(es) anyway?`
+        : `Sweep ${count} address(es)? This sends USDT from sub-addresses to the hot wallet (gas paid from hot wallet).`,
+    )) return;
+    setSweeping(true);
+    try {
+      const r = await api(`/admin/wallets/evm/${chainKey}/sweep`, {
+        method: "POST",
+        body: JSON.stringify({ dryRun: false, confirmedGasCost: needsConfirm }),
+      });
+      const d = r.data;
+      alert(`Sweep complete:\nAttempted: ${d.attempted}\nSwept: ${d.swept}\nTotal USDT: ${d.totalUsdt.toFixed(4)}\n\n${d.details.map((x: any) => `${x.address.slice(0, 12)}… ${x.action}${x.error ? ` ERROR: ${x.error}` : ""}`).join("\n")}`);
+      load(true);
+    } catch (e) {
+      alert("Sweep failed: " + (e as Error).message);
+    } finally {
+      setSweeping(false);
+    }
+  };
+
+  if (error && !data) return <div className="admin-error">⚠ {error}</div>;
+  if (!data) return <div className="admin-tab-body">Loading {chainKey} wallets…</div>;
+
+  const hot = data.wallets.find((w) => w.role === "hot");
+  const deposits = data.wallets.filter((w) => w.role === "deposit");
+
+  return (
+    <div className="admin-wallets">
+      <section className="stat-grid">
+        <Stat label="Hot USDT" value={data.totals.hotUsdt.toFixed(2)} accent={data.totals.hotUsdt < 50 ? "warn" : "ok"} />
+        <Stat label={`Hot ${nativeSymbol}`} value={data.totals.hotNative.toFixed(4)} accent={data.totals.hotNative < (meta?.sweepAllowed ? 0.01 : 0.005) ? "warn" : "ok"} />
+        <Stat label="Deposit USDT (un-swept)" value={data.totals.depositUsdt.toFixed(2)} accent={data.totals.depositUsdt > 0 ? "warn" : undefined} />
+        <Stat label="Un-swept orders" value={String(data.totals.unsweptOrders)} accent={data.totals.unsweptOrders > 0 ? "warn" : undefined} />
+      </section>
+
+      <div style={{ display: "flex", gap: 8, marginTop: 12, alignItems: "center", flexWrap: "wrap" }}>
+        <button onClick={() => load(true)} disabled={loading || sweeping}>↻ Refresh balances</button>
+        <button onClick={runSweep} disabled={sweeping || data.totals.unsweptOrders === 0}>
+          {sweeping ? "Sweeping…" : `Run sweep (${data.totals.unsweptOrders})`}
+        </button>
+        {meta && !meta.sweepAllowed && (
+          <span style={{ fontSize: 11, color: "#ffb0bc" }}>⚠ {meta.label} sweep needs gas-cost confirm</span>
+        )}
+      </div>
+
+      {hot && (
+        <div className="admin-wallets-hot" style={{ marginTop: 16 }}>
+          <h3 style={{ fontSize: 14, margin: "0 0 8px" }}>Hot wallet (index {hot.index})</h3>
+          <code style={{ display: "block", fontSize: 11, wordBreak: "break-all", background: "rgba(255,200,87,0.06)", padding: "4px 8px", borderRadius: 4 }}>{hot.address}</code>
+          <div style={{ fontSize: 12, marginTop: 8 }}>
+            <strong style={{ color: "#ffc857" }}>{hot.usdtBalance?.toFixed(4) ?? "⚠ ?"} USDT</strong>
+            {" · "}
+            <strong>{hot.nativeBalance?.toFixed(4) ?? "⚠ ?"} {nativeSymbol}</strong>
+          </div>
+        </div>
+      )}
+
+      <h3 style={{ fontSize: 14, margin: "20px 0 8px" }}>Deposit sub-addresses ({deposits.length})</h3>
+      <table className="admin-table">
+        <thead>
+          <tr>
+            <th>Index</th><th>Address</th>
+            <th className="num">USDT</th><th className="num">{nativeSymbol}</th>
+            <th className="num">Paid</th><th className="num">Un-swept</th><th className="num">Total claimed</th>
+          </tr>
+        </thead>
+        <tbody>
+          {deposits.map((w) => (
+            <tr key={w.address} className={(w.unsweptOrderCount || 0) > 0 ? "row-banned" : ""}>
+              <td>{w.index}</td>
+              <td className="seed">{w.address}</td>
+              <td className="num">{w.usdtBalance == null ? "⚠ ?" : w.usdtBalance.toFixed(4)}</td>
+              <td className="num">{w.nativeBalance == null ? "⚠ ?" : w.nativeBalance.toFixed(4)}</td>
+              <td className="num">{w.paidOrderCount}</td>
+              <td className="num">{w.unsweptOrderCount}</td>
+              <td className="num">{w.totalUsdtClaimed?.toFixed(2)}</td>
+            </tr>
+          ))}
+          {deposits.length === 0 && <tr><td colSpan={7} className="empty">No deposit addresses yet</td></tr>}
+        </tbody>
+      </table>
     </div>
   );
 };

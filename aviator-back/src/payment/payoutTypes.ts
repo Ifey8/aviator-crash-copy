@@ -19,6 +19,9 @@ export interface PayoutCreateInput {
   holderName?: string;
   // USDT
   trc20Address?: string;
+  // EVM USDT (Polygon/BSC/Ethereum)
+  network?: string;
+  payoutAddress?: string;
 }
 
 export interface PayoutCreateResult {

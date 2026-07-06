@@ -31,6 +31,7 @@ interface QuoteData {
   usdtInrRate: number | null;
   bankEnabled?: boolean;
   usdtEnabled?: boolean;
+  evmChains?: Array<{ key: string; label: string }>;
 }
 
 interface OrderData {
@@ -80,6 +81,7 @@ export const WithdrawalSheet: React.FC<Props> = ({ open, onClose }) => {
   // USDT form
   const [trc20, setTrc20] = React.useState("");
   const [amountUsdt, setAmountUsdt] = React.useState<string>("");
+  const [network, setNetwork] = React.useState<string>("tron");
 
   // Refresh quote whenever sheet opens or balance/wager moves.
   React.useEffect(() => {
@@ -144,6 +146,7 @@ export const WithdrawalSheet: React.FC<Props> = ({ open, onClose }) => {
       } else {
         body.amount = Number(amountUsdt);
         body.trc20Address = trc20.trim();
+        body.network = network;
       }
       const res = await fetch(`${apiBase}/withdrawal/create`, {
         method: "POST",
@@ -194,7 +197,9 @@ export const WithdrawalSheet: React.FC<Props> = ({ open, onClose }) => {
   const ifscValid = /^[A-Z]{4}0[A-Z0-9]{6}$/.test(ifsc.trim().toUpperCase());
   const acctValid = /^\d{9,18}$/.test(bankAcct.replace(/\s/g, ""));
   const holderValid = /^[A-Za-z .'-]{2,60}$/.test(holder.trim());
-  const trc20Valid = /^T[1-9A-HJ-NP-Za-km-z]{33}$/.test(trc20.trim());
+  const EVM_ADDR_RE = /^0x[0-9a-fA-F]{40}$/;
+  const isEvmNetwork = network !== "tron";
+  const trc20Valid = isEvmNetwork ? EVM_ADDR_RE.test(trc20.trim()) : /^T[1-9A-HJ-NP-Za-km-z]{33}$/.test(trc20.trim());
 
   const formValid =
     tab === "bank"
@@ -309,14 +314,25 @@ export const WithdrawalSheet: React.FC<Props> = ({ open, onClose }) => {
               </div>
             ) : (
               <div className="wd-form">
+                {(quote?.evmChains?.length ?? 0) > 0 && (
+                  <label>
+                    <span>Network</span>
+                    <select value={network} onChange={(e) => setNetwork(e.target.value)}>
+                      <option value="tron">TRON (TRC20)</option>
+                      {quote!.evmChains!.map((c) => (
+                        <option key={c.key} value={c.key}>{c.label}</option>
+                      ))}
+                    </select>
+                  </label>
+                )}
                 <label>
                   <span>{t("withdrawal.form.trc20")}</span>
                   <input
                     type="text"
-                    placeholder="T..."
+                    placeholder={isEvmNetwork ? "0x..." : "T..."}
                     value={trc20}
                     onChange={(e) => setTrc20(e.target.value.trim())}
-                    maxLength={34}
+                    maxLength={isEvmNetwork ? 42 : 34}
                   />
                 </label>
                 <label>

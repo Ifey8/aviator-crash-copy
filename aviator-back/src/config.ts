@@ -55,6 +55,21 @@ export const config = {
   /** Used when CoinGecko is unreachable. Manually adjust as needed. */
   usdtInrRateFallback: num(process.env.USDT_INR_RATE, 83),
 
+  // -------- Crypto (EVM chains — Polygon / BSC / Ethereum) --------
+  /** Comma-separated chains to enable, e.g. "polygon,bsc". Empty = EVM deposits/withdrawals disabled. */
+  evmChainsEnabled: process.env.EVM_CHAINS_ENABLED || "",
+  evmRpcPolygon: process.env.EVM_RPC_POLYGON || "https://polygon-rpc.com",
+  evmRpcBsc: process.env.EVM_RPC_BSC || "https://bsc-dataseed.binance.org",
+  evmRpcEthereum: process.env.EVM_RPC_ETHEREUM || "https://eth.llamarpc.com",
+  /** Well-known mainnet USDT contracts — override only for testnets/custom deployments. */
+  evmUsdtContractPolygon: process.env.EVM_USDT_CONTRACT_POLYGON || "0xc2132D05D31c914a87C6611C10748AEb04B58e8",
+  evmUsdtContractBsc: process.env.EVM_USDT_CONTRACT_BSC || "0x55d398326f99059fF775485246999027B3197955",
+  evmUsdtContractEthereum: process.env.EVM_USDT_CONTRACT_ETHEREUM || "0xdAC17F958D2ee523a2206206994597C13D831ec7",
+  /** Min native-gas-token balance to keep in a deposit address (sweeper tops up to this). */
+  cryptoSweepGasReservePolygon: num(process.env.CRYPTO_SWEEP_GAS_RESERVE_POLYGON, 0.5),
+  cryptoSweepGasReserveBsc: num(process.env.CRYPTO_SWEEP_GAS_RESERVE_BSC, 0.01),
+  cryptoSweepGasReserveEthereum: num(process.env.CRYPTO_SWEEP_GAS_RESERVE_ETHEREUM, 0.02),
+
   // Production-safe default: dev guest auto-creation is OFF unless explicitly
   // enabled. Setting this to true allows any tokenless socket connection to
   // spawn a fresh User doc with initialBalance — useful for local dev, a

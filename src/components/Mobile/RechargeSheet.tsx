@@ -68,6 +68,8 @@ export const RechargeSheet: React.FC<Props> = ({ open, onClose }) => {
   // Default to false on error so we don't show a tab that returns 403.
   const [inrEnabled, setInrEnabled] = React.useState<boolean | null>(null);
   const [usdtEnabled, setUsdtEnabled] = React.useState<boolean | null>(null);
+  const [evmChains, setEvmChains] = React.useState<Array<{ key: string; label: string }>>([]);
+  const [network, setNetwork] = React.useState<string>("tron");
 
   // Fetch channel availability whenever the sheet opens (it can change
   // mid-session when admin flips the toggle). Auto-select the first
@@ -84,6 +86,7 @@ export const RechargeSheet: React.FC<Props> = ({ open, onClose }) => {
         const usdt = !!json?.data?.usdtEnabled;
         setInrEnabled(inr);
         setUsdtEnabled(usdt);
+        setEvmChains(Array.isArray(json?.data?.evmChains) ? json.data.evmChains : []);
         // Auto-select: prefer crypto if INR is off; fallback to fiat if both crypto off
         if (!inr && usdt) setMethod("crypto");
         else if (inr && !usdt) setMethod("fiat");
@@ -286,11 +289,35 @@ export const RechargeSheet: React.FC<Props> = ({ open, onClose }) => {
         )}
 
         {step === "crypto" && (
-          <CryptoPayPanel
-            amountInr={amount}
-            onDone={onClose}
-            onRetry={() => setStep("picker")}
-          />
+          <div className="rs-crypto-chain-wrap">
+            {evmChains.length > 0 && (
+              <div className="rs-method-tabs" style={{ marginBottom: 10 }}>
+                <button
+                  type="button"
+                  className={`rs-method ${network === "tron" ? "active" : ""}`}
+                  onClick={() => setNetwork("tron")}
+                >
+                  <span className="rs-method-name">TRON</span>
+                </button>
+                {evmChains.map((c) => (
+                  <button
+                    key={c.key}
+                    type="button"
+                    className={`rs-method ${network === c.key ? "active" : ""}`}
+                    onClick={() => setNetwork(c.key)}
+                  >
+                    <span className="rs-method-name">{c.label}</span>
+                  </button>
+                ))}
+              </div>
+            )}
+            <CryptoPayPanel
+              amountInr={amount}
+              network={network}
+              onDone={onClose}
+              onRetry={() => setStep("picker")}
+            />
+          </div>
         )}
 
         {step === "creating" && (

@@ -41,6 +41,8 @@ interface CryptoOrder {
 interface Props {
   /** Last INR amount picked in the parent picker — converted to USDT here. */
   amountInr: number;
+  /** "tron" or an EVM chain key ("polygon"|"bsc"|"ethereum"). */
+  network: string;
   /** Closes the whole sheet. */
   onDone: () => void;
   /** Triggers the parent to go back to picker step. */
@@ -57,7 +59,7 @@ const authHeaders = (): Record<string, string> => {
 
 type Step = "creating" | "pending" | "success" | "failed";
 
-export const CryptoPayPanel: React.FC<Props> = ({ amountInr, onDone, onRetry }) => {
+export const CryptoPayPanel: React.FC<Props> = ({ amountInr, network, onDone, onRetry }) => {
   const ctx = React.useContext(Context);
   const sock = (ctx as any).socket;
 
@@ -74,7 +76,7 @@ export const CryptoPayPanel: React.FC<Props> = ({ amountInr, onDone, onRetry }) 
         const res = await fetch(`${apiBase}/crypto/create`, {
           method: "POST",
           headers: { "Content-Type": "application/json", ...authHeaders() },
-          body: JSON.stringify({ amountInr }),
+          body: JSON.stringify({ amountInr, network: network === "tron" ? undefined : network }),
         });
         const json = await res.json();
         if (cancelled) return;
@@ -95,7 +97,7 @@ export const CryptoPayPanel: React.FC<Props> = ({ amountInr, onDone, onRetry }) 
     return () => {
       cancelled = true;
     };
-  }, [amountInr]);
+  }, [amountInr, network]);
 
   // 2) Socket push from backend (instant on tx match)
   React.useEffect(() => {
@@ -240,7 +242,7 @@ export const CryptoPayPanel: React.FC<Props> = ({ amountInr, onDone, onRetry }) 
   // User can pay ANY amount; we credit actual_received × locked rate.
   return (
     <div className="cp-pending">
-      <div className="cp-network-badge">{order.network.toUpperCase()} · USDT-TRC20</div>
+      <div className="cp-network-badge">{order.network.toUpperCase()} · USDT</div>
       <h3 className="rs-title">Send USDT to deposit address</h3>
 
       <div className="cp-amount-row">
@@ -299,7 +301,7 @@ export const CryptoPayPanel: React.FC<Props> = ({ amountInr, onDone, onRetry }) 
       />
 
       <p className="cp-warn">
-        ⚠ Send <b>USDT (TRC-20)</b> over the {order.network === "shasta" ? "Shasta testnet" : "TRON network"} ONLY.
+        ⚠ Send <b>USDT</b> over the <b>{order.network}</b> network ONLY.
         This address is unique to your order — any USDT amount ≥ <b>{(order.minUsdt ?? 10)} USDT</b> credits
         you the equivalent INR at <b>{order.fxRate.toFixed(2)}</b>. Network transactions are final.
       </p>

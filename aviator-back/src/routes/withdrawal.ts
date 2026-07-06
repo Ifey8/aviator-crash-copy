@@ -16,6 +16,8 @@ import { getChannelByCode, getDefaultChannel } from "../payment/channels";
 import { webhookGuard } from "../payment/webhookLog";
 import { recordPayout, resolveChannelCodeForOrder } from "../payment/ledger";
 import { autoBroadcastUsdtWithdrawal } from "../payment/walletOps";
+import { autoBroadcastUsdtWithdrawalEvm, getEvmHotWalletBalance } from "../payment/evmWalletOps";
+import { getEvmChain, isEvmChain, enabledEvmChains, EvmChainKey } from "../payment/evmChains";
 
 export const withdrawalRouter = Router();
 
@@ -38,8 +40,15 @@ const validateBank = (b: { bankAccount?: string; ifsc?: string; holderName?: str
   return null;
 };
 
-const validateUsdt = (u: { trc20Address?: string }): string | null => {
+const EVM_ADDR_RE = /^0x[0-9a-fA-F]{40}$/;
+
+const validateUsdt = (u: { trc20Address?: string; network?: string }): string | null => {
+  const network = (u.network || "tron").trim();
   const a = (u.trc20Address || "").trim();
+  if (isEvmChain(network)) {
+    if (!EVM_ADDR_RE.test(a)) return "Invalid address (must be 0x + 40 hex chars)";
+    return null;
+  }
   if (!TRC20_RE.test(a)) return "Invalid TRC20 address (must start with T, 34 chars)";
   return null;
 };
@@ -104,6 +113,7 @@ withdrawalRouter.get("/quote", requireAuth, async (req: Request, res: Response) 
       // don't fill the form just to hit 403.
       bankEnabled: Number(getSetting("inrRechargeEnabled") || 0) === 1,
       usdtEnabled: Number(getSetting("cryptoWithdrawalEnabled") || 0) === 1,
+      evmChains: enabledEvmChains().map((c) => ({ key: c.key, label: c.label })),
     },
   });
 });
@@ -128,6 +138,7 @@ withdrawalRouter.post("/create", requireAuth, async (req: Request, res: Response
   const userName = req.authUserName!;
   const method: string = req.body?.method;
   const amount = Number(req.body?.amount);
+  const network: string = (req.body?.network || "tron").trim();
 
   if (!["bank", "usdt"].includes(method)) {
     return res.status(400).json({ status: false, message: "method must be 'bank' or 'usdt'" });
@@ -289,19 +300,39 @@ withdrawalRouter.post("/create", requireAuth, async (req: Request, res: Response
     initialStatus = "review";
   } else try {
     if (method === "usdt") {
-      const hot = await getHotWalletBalance();
-      if (!hot || hot.usdtBalance < amount) {
-        initialStatus = "manual_queue";
+      const isEvm = isEvmChain(network);
+      if (isEvm) {
+        const chain = getEvmChain(network);
+        const hot = chain ? await getEvmHotWalletBalance(network as EvmChainKey) : null;
+        if (!hot || hot.usdtBalance < amount) {
+          initialStatus = "manual_queue";
+        } else {
+          const r = await provider!.createPayout({
+            orderId,
+            userName,
+            method: "usdt",
+            grossAmount: amount,
+            network,
+            payoutAddress: req.body.trc20Address.trim(),
+          });
+          providerRef = r.providerRef;
+          initialStatus = r.status;
+        }
       } else {
-        const r = await provider!.createPayout({
-          orderId,
-          userName,
-          method: "usdt",
-          grossAmount: amount, // usdt
-          trc20Address: req.body.trc20Address.trim(),
-        });
-        providerRef = r.providerRef;
-        initialStatus = r.status;
+        const hot = await getHotWalletBalance();
+        if (!hot || hot.usdtBalance < amount) {
+          initialStatus = "manual_queue";
+        } else {
+          const r = await provider!.createPayout({
+            orderId,
+            userName,
+            method: "usdt",
+            grossAmount: amount,
+            trc20Address: req.body.trc20Address.trim(),
+          });
+          providerRef = r.providerRef;
+          initialStatus = r.status;
+        }
       }
     } else {
       const r = await provider!.createPayout({
@@ -335,7 +366,9 @@ withdrawalRouter.post("/create", requireAuth, async (req: Request, res: Response
     bankAccount: method === "bank" ? String(req.body.bankAccount).replace(/\s/g, "") : undefined,
     ifsc: method === "bank" ? String(req.body.ifsc).trim().toUpperCase() : undefined,
     holderName: method === "bank" ? String(req.body.holderName).trim() : undefined,
-    trc20Address: method === "usdt" ? String(req.body.trc20Address).trim() : undefined,
+    trc20Address: method === "usdt" && !isEvmChain(network) ? String(req.body.trc20Address).trim() : undefined,
+    network: method === "usdt" ? network : undefined,
+    payoutAddress: method === "usdt" && isEvmChain(network) ? String(req.body.trc20Address).trim() : undefined,
     fxRate,
     status: initialStatus,
     provider: providerName,
@@ -366,10 +399,14 @@ withdrawalRouter.post("/create", requireAuth, async (req: Request, res: Response
     const maxInr = Number(getSetting("usdtAutoPayoutMaxInr") || 0);
     const orderInr = grossInr; // already INR equivalent of the USDT amount
     const underCap = maxInr === 0 || orderInr < maxInr;
-    if (autoOn && underCap) {
+    const chain = doc.network ? getEvmChain(doc.network) : undefined;
+    // Ethereum (sweepAllowed=false) never auto-broadcasts, regardless of the global toggle.
+    const autoAllowedForChain = !chain || chain.sweepAllowed;
+    if (autoOn && underCap && autoAllowedForChain) {
       // Don't await — user already has their HTTP response; broadcast
       // fires in background and pushes withdrawalUpdate via socket.
-      autoBroadcastUsdtWithdrawal(doc.orderId).catch((e) => {
+      const broadcaster = chain ? () => autoBroadcastUsdtWithdrawalEvm(doc.orderId) : () => autoBroadcastUsdtWithdrawal(doc.orderId);
+      broadcaster().catch((e) => {
         console.error(`[auto-payout] order ${doc.orderId} threw:`, e);
       });
     }
