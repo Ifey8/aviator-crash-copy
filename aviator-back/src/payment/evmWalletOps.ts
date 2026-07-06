@@ -306,3 +306,127 @@ export const transferOut = async (input: EvmTransferOutInput): Promise<EvmTransf
   const receipt = await tx.wait();
   return { ok: true, dryRun: false, txHash: receipt?.hash || tx.hash, from: hot.address, to: input.to, amount: input.amountNative!, currency: chain.nativeSymbol, preBalance: pre };
 };
+
+export interface EvmSweepInput {
+  chainKey: EvmChainKey;
+  addresses?: string[];
+  dryRun?: boolean;
+  /** Required truthy to sweep a chain with sweepAllowed=false (Ethereum). */
+  confirmedGasCost?: boolean;
+}
+
+export interface EvmSweepResult {
+  ok: boolean;
+  dryRun: boolean;
+  attempted: number;
+  swept: number;
+  totalUsdt: number;
+  details: Array<{
+    address: string;
+    derivIndex: number;
+    onChainUsdt: number;
+    onChainNative: number;
+    orderIds: string[];
+    action: "swept" | "no-balance" | "error" | "refused-gas-cost";
+    txHash?: string;
+    error?: string;
+  }>;
+}
+
+/** Sweep paid+un-swept EVM deposit addresses → hot wallet. Mirrors walletOps.ts's sweepAddresses. */
+export const sweepAddresses = async (input: EvmSweepInput): Promise<EvmSweepResult> => {
+  const dryRun = !!input.dryRun;
+  const chain = getEvmChain(input.chainKey);
+  const empty: EvmSweepResult = { ok: false, dryRun, attempted: 0, swept: 0, totalUsdt: 0, details: [] };
+  if (!chain) return empty;
+  if (!chain.sweepAllowed && !input.confirmedGasCost) {
+    return {
+      ...empty,
+      details: [{
+        address: "", derivIndex: -1, onChainUsdt: 0, onChainNative: 0, orderIds: [],
+        action: "refused-gas-cost",
+        error: `${chain.label} sweep requires confirmedGasCost:true — gas can exceed the deposit's value`,
+      }],
+    };
+  }
+  if (!config.cryptoMasterMnemonic) return empty;
+
+  const hot = evmHotWallet();
+  const filter: Record<string, unknown> = { status: "paid", sweptAt: null, network: input.chainKey, contractAddress: chain.usdtContract };
+  if (input.addresses?.length) filter.depositAddress = { $in: input.addresses };
+
+  const grouped = await CryptoOrderModel.aggregate<{ _id: string; derivIndex: number; orderIds: string[] }>([
+    { $match: filter },
+    { $group: { _id: "$depositAddress", derivIndex: { $first: "$derivIndex" }, orderIds: { $push: "$orderId" } } },
+  ]);
+
+  const result: EvmSweepResult = { ok: true, dryRun, attempted: grouped.length, swept: 0, totalUsdt: 0, details: [] };
+  if (grouped.length === 0) return result;
+
+  const provider = getProvider(input.chainKey);
+  const hotSigner = new ethers.Wallet(hot.privateKey, provider);
+
+  for (const grp of grouped) {
+    const acct = deriveEvmAccount(grp.derivIndex);
+    if (acct.address.toLowerCase() !== grp._id.toLowerCase()) {
+      result.details.push({ address: grp._id, derivIndex: grp.derivIndex, onChainUsdt: 0, onChainNative: 0, orderIds: grp.orderIds, action: "error", error: `derivIndex mismatch — expected ${grp._id} got ${acct.address}` });
+      continue;
+    }
+
+    let onChainUsdt = 0;
+    let onChainNative = 0;
+    let balRaw: bigint = 0n;
+    let balanceCheckFailed = false;
+    try {
+      const c = new ethers.Contract(chain.usdtContract, ERC20_ABI, provider);
+      balRaw = await withRetry<bigint>(() => c.balanceOf(acct.address), `sweep.balanceOf ${acct.address.slice(0, 8)}`);
+      onChainUsdt = Number(ethers.formatUnits(balRaw, chain.usdtDecimals));
+      const nativeRaw = await withRetry<bigint>(() => provider.getBalance(acct.address), `sweep.native ${acct.address.slice(0, 8)}`);
+      onChainNative = Number(ethers.formatEther(nativeRaw));
+    } catch (e) {
+      balanceCheckFailed = true;
+      console.error(`[evm-sweep] balance check failed for ${acct.address}:`, (e as Error).message);
+    }
+    if (balanceCheckFailed) {
+      result.details.push({ address: acct.address, derivIndex: acct.index, onChainUsdt: 0, onChainNative: 0, orderIds: grp.orderIds, action: "error", error: "Could not read balance after 3 retries — RPC unreachable. Order NOT marked swept." });
+      continue;
+    }
+    if (onChainUsdt <= 0) {
+      result.details.push({ address: acct.address, derivIndex: acct.index, onChainUsdt, onChainNative, orderIds: grp.orderIds, action: "no-balance" });
+      if (!dryRun) {
+        await CryptoOrderModel.updateMany({ orderId: { $in: grp.orderIds } }, { $set: { sweptAt: new Date(), sweptTxHash: "no-balance" } });
+      }
+      continue;
+    }
+    if (onChainNative < chain.gasReserve) {
+      const need = chain.gasReserve - onChainNative;
+      if (!dryRun) {
+        const tx = await hotSigner.sendTransaction({ to: acct.address, value: ethers.parseEther(need.toFixed(18)) });
+        await tx.wait();
+        await new Promise((r) => setTimeout(r, 2000));
+      }
+    }
+    if (dryRun) {
+      result.details.push({ address: acct.address, derivIndex: acct.index, onChainUsdt, onChainNative, orderIds: grp.orderIds, action: "swept" });
+      result.totalUsdt += onChainUsdt;
+      result.swept++;
+      continue;
+    }
+    try {
+      const acctSigner = new ethers.Wallet(acct.privateKey, provider);
+      const cSigner = new ethers.Contract(chain.usdtContract, ERC20_ABI, acctSigner);
+      const tx = await cSigner.transfer(hot.address, balRaw);
+      const receipt = await tx.wait();
+      const txHash = receipt?.hash || tx.hash;
+      await CryptoOrderModel.updateMany({ orderId: { $in: grp.orderIds } }, { $set: { sweptAt: new Date(), sweptTxHash: txHash } });
+      result.details.push({ address: acct.address, derivIndex: acct.index, onChainUsdt, onChainNative, orderIds: grp.orderIds, action: "swept", txHash });
+      result.totalUsdt += onChainUsdt;
+      result.swept++;
+    } catch (e) {
+      result.details.push({ address: acct.address, derivIndex: acct.index, onChainUsdt, onChainNative, orderIds: grp.orderIds, action: "error", error: (e as Error).message });
+    }
+  }
+
+  cacheByChain.delete(input.chainKey);
+  return result;
+};
