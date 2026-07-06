@@ -299,25 +299,19 @@ export const RechargeSheet: React.FC<Props> = ({ open, onClose }) => {
         {step === "crypto" && (
           <div className="rs-crypto-chain-wrap">
             {evmChains.length > 0 && (
-              <div className="rs-method-tabs" style={{ marginBottom: 10 }}>
-                <button
-                  type="button"
-                  className={`rs-method ${network === "tron" ? "active" : ""}`}
-                  onClick={() => { setNetwork("tron"); setChainPicked(true); }}
+              <label className="rs-network-label">
+                <span>Network</span>
+                <select
+                  className="rs-network-select"
+                  value={network}
+                  onChange={(e) => setNetwork(e.target.value)}
                 >
-                  <span className="rs-method-name">TRON</span>
-                </button>
-                {evmChains.map((c) => (
-                  <button
-                    key={c.key}
-                    type="button"
-                    className={`rs-method ${network === c.key ? "active" : ""}`}
-                    onClick={() => { setNetwork(c.key); setChainPicked(true); }}
-                  >
-                    <span className="rs-method-name">{c.label}</span>
-                  </button>
-                ))}
-              </div>
+                  <option value="tron">TRON (TRC20)</option>
+                  {evmChains.map((c) => (
+                    <option key={c.key} value={c.key}>{c.label}</option>
+                  ))}
+                </select>
+              </label>
             )}
             {chainPicked ? (
               <CryptoPayPanel
@@ -327,9 +321,9 @@ export const RechargeSheet: React.FC<Props> = ({ open, onClose }) => {
                 onRetry={() => setStep("picker")}
               />
             ) : (
-              <p className="rs-fine" style={{ textAlign: "center", marginTop: 8 }}>
-                Select a network above to generate your deposit address.
-              </p>
+              <button className="rs-cta" onClick={() => setChainPicked(true)}>
+                Generate deposit address
+              </button>
             )}
           </div>
         )}

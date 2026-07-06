@@ -1278,6 +1278,31 @@
           border-color: #ffc857;
         }
       }
+      select {
+        background: rgba(255, 245, 220, 0.06);
+        border: 1px solid var(--border);
+        color: #fff5dc;
+        border-radius: 7px;
+        padding: 8px 32px 8px 10px;
+        font-family: inherit;
+        font-size: 13px;
+        font-weight: 600;
+        cursor: pointer;
+        appearance: none;
+        -webkit-appearance: none;
+        background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='14' height='9' viewBox='0 0 14 9'%3E%3Cpath d='M1 1l6 6 6-6' fill='none' stroke='%23ffc857' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+        background-repeat: no-repeat;
+        background-position: right 10px center;
+        background-size: 13px 8px;
+        &:focus {
+          outline: none;
+          border-color: #ffc857;
+        }
+        option {
+          background: #1a0710;
+          color: #fff5dc;
+        }
+      }
     }
     .wd-rate-note {
       font-size: 10.5px;
