@@ -51,6 +51,10 @@ export interface WithdrawalOrderDoc {
 
   // USDT method only:
   trc20Address?: string;
+  /** Chain for USDT withdrawals: "tron" (default, backward-compat) | "polygon" | "bsc" | "ethereum". */
+  network?: string;
+  /** Generic destination address for EVM withdrawals (0x...). TRON withdrawals keep using trc20Address. */
+  payoutAddress?: string;
   /** USDT/INR rate locked at creation; used to compute totalDebitInr. */
   fxRate?: number;
   /** TX hash once broadcast (USDT only). */
@@ -89,6 +93,8 @@ const WithdrawalOrderSchema = new Schema<WithdrawalOrderDoc>({
   holderName: { type: String },
 
   trc20Address: { type: String, index: true, sparse: true },
+  network: { type: String, default: "tron" },
+  payoutAddress: { type: String, index: true, sparse: true },
   fxRate: { type: Number },
   txHash: { type: String, index: true, sparse: true },
 
