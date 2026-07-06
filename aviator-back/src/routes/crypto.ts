@@ -6,6 +6,8 @@ import { config } from "../config";
 import { getUsdtInrRate } from "../payment/pricer";
 import { pushToUser } from "../sockets";
 import { allocateAddress } from "../payment/wallet";
+import { allocateEvmAddress } from "../payment/evmWallet";
+import { getEvmChain, isEvmChain, enabledEvmChains } from "../payment/evmChains";
 import { getSetting } from "../settings";
 
 export const cryptoRouter = Router();
@@ -53,17 +55,40 @@ cryptoRouter.post("/create", requireAuth, async (req: Request, res: Response) =>
     });
   }
 
-  if (!config.tronNetwork || !config.tronContract) {
-    return res.status(503).json({
-      status: false,
-      message: "Crypto recharge not configured. Set TRON_NETWORK + TRON_USDT_CONTRACT.",
-    });
-  }
-  if (!config.cryptoMasterMnemonic) {
-    return res.status(503).json({
-      status: false,
-      message: "Master wallet not configured. Generate via `node dist/tools/gen-master-seed.js`.",
-    });
+  const network: string = (req.body?.network || config.tronNetwork || "").trim();
+  const isEvm = isEvmChain(network);
+
+  let contractAddress: string;
+  if (isEvm) {
+    const chain = getEvmChain(network);
+    const enabled = enabledEvmChains().some((c) => c.key === network);
+    if (!chain || !enabled) {
+      return res.status(503).json({
+        status: false,
+        message: `${network} deposits are not enabled.`,
+      });
+    }
+    if (!config.cryptoMasterMnemonic) {
+      return res.status(503).json({
+        status: false,
+        message: "Master wallet not configured. Generate via `node dist/tools/gen-master-seed.js`.",
+      });
+    }
+    contractAddress = chain.usdtContract;
+  } else {
+    if (!config.tronNetwork || !config.tronContract) {
+      return res.status(503).json({
+        status: false,
+        message: "Crypto recharge not configured. Set TRON_NETWORK + TRON_USDT_CONTRACT.",
+      });
+    }
+    if (!config.cryptoMasterMnemonic) {
+      return res.status(503).json({
+        status: false,
+        message: "Master wallet not configured. Generate via `node dist/tools/gen-master-seed.js`.",
+      });
+    }
+    contractAddress = config.tronContract;
   }
 
   if (!amountInr || amountInr <= 0) {
@@ -101,7 +126,7 @@ cryptoRouter.post("/create", requireAuth, async (req: Request, res: Response) =>
   // Allocate (or recycle) a deposit address. Recycles if a past order's
   // cooldown has elapsed; otherwise derives a fresh index. Hugely cuts
   // sweep gas over time vs allocating a brand-new address every order.
-  const acct = await allocateAddress();
+  const acct = isEvm ? await allocateEvmAddress(network) : await allocateAddress();
 
   const orderId = randomUUID();
   const expiresAt = new Date(Date.now() + config.cryptoOrderTtlMs);
@@ -113,10 +138,10 @@ cryptoRouter.post("/create", requireAuth, async (req: Request, res: Response) =>
     amountInr: +(amountUsdt * quote.rate).toFixed(2),
     fxRate: quote.rate,
     fxRateAt: quote.fetchedAt,
-    network: config.tronNetwork,
+    network: isEvm ? network : config.tronNetwork,
     depositAddress: acct.address,
     derivIndex: acct.index,
-    contractAddress: config.tronContract,
+    contractAddress,
     status: "pending",
     expiresAt,
     meta: { rateSource: quote.source, derivPath: acct.path },
