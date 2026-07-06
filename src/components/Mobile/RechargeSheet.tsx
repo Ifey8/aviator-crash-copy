@@ -69,7 +69,13 @@ export const RechargeSheet: React.FC<Props> = ({ open, onClose }) => {
   const [inrEnabled, setInrEnabled] = React.useState<boolean | null>(null);
   const [usdtEnabled, setUsdtEnabled] = React.useState<boolean | null>(null);
   const [evmChains, setEvmChains] = React.useState<Array<{ key: string; label: string }>>([]);
-  const [network, setNetwork] = React.useState<string>("tron");
+  // BSC is the recommended default (cheapest gas) — pre-highlighted, but no
+  // deposit address is generated until the user explicitly picks a chain
+  // (see chainPicked below). Previously this auto-generated a TRON address
+  // on mount, which churned out an unused pending order every time a user
+  // merely opened the USDT tab.
+  const [network, setNetwork] = React.useState<string>("bsc");
+  const [chainPicked, setChainPicked] = React.useState(false);
 
   // Fetch channel availability whenever the sheet opens (it can change
   // mid-session when admin flips the toggle). Auto-select the first
@@ -109,6 +115,7 @@ export const RechargeSheet: React.FC<Props> = ({ open, onClose }) => {
       setStep("picker");
       setOrder(null);
       setError(null);
+      setChainPicked(false);
     }
   }, [open]);
 
@@ -162,6 +169,7 @@ export const RechargeSheet: React.FC<Props> = ({ open, onClose }) => {
       // Crypto path is handled by CryptoPayPanel as a separate step.
       // It owns its own create/poll/socket logic since the flow differs
       // (no payment URL to open — user transfers from their own wallet).
+      setChainPicked(false);
       setStep("crypto");
       return;
     }
@@ -295,7 +303,7 @@ export const RechargeSheet: React.FC<Props> = ({ open, onClose }) => {
                 <button
                   type="button"
                   className={`rs-method ${network === "tron" ? "active" : ""}`}
-                  onClick={() => setNetwork("tron")}
+                  onClick={() => { setNetwork("tron"); setChainPicked(true); }}
                 >
                   <span className="rs-method-name">TRON</span>
                 </button>
@@ -304,19 +312,25 @@ export const RechargeSheet: React.FC<Props> = ({ open, onClose }) => {
                     key={c.key}
                     type="button"
                     className={`rs-method ${network === c.key ? "active" : ""}`}
-                    onClick={() => setNetwork(c.key)}
+                    onClick={() => { setNetwork(c.key); setChainPicked(true); }}
                   >
                     <span className="rs-method-name">{c.label}</span>
                   </button>
                 ))}
               </div>
             )}
-            <CryptoPayPanel
-              amountInr={amount}
-              network={network}
-              onDone={onClose}
-              onRetry={() => setStep("picker")}
-            />
+            {chainPicked ? (
+              <CryptoPayPanel
+                amountInr={amount}
+                network={network}
+                onDone={onClose}
+                onRetry={() => setStep("picker")}
+              />
+            ) : (
+              <p className="rs-fine" style={{ textAlign: "center", marginTop: 8 }}>
+                Select a network above to generate your deposit address.
+              </p>
+            )}
           </div>
         )}
 
