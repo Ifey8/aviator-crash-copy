@@ -1,6 +1,5 @@
 import React from "react";
 import { QRCodeSVG } from "qrcode.react";
-import { useAuth } from "../../auth/AuthProvider";
 import { config } from "../../config";
 import "./admin.scss";
 
@@ -41,28 +40,99 @@ interface RoundRow {
   createdAt: string;
 }
 
+// Admin session is separate from the game session: its token is issued only by
+// /auth/admin-login (password + Google Authenticator) and is the only kind
+// the server's requireAdmin accepts.
+const ADMIN_TOKEN_KEY = "aviator_admin_token";
+const ADMIN_USER_KEY = "aviator_admin_user";
+const readLs = (k: string): string | null => {
+  try { return localStorage.getItem(k); } catch { return null; }
+};
+const adminLogout = () => {
+  try { localStorage.removeItem(ADMIN_TOKEN_KEY); localStorage.removeItem(ADMIN_USER_KEY); } catch {}
+  window.location.reload();
+};
+
 const useApi = () => {
-  const { token, logout } = useAuth();
   return React.useCallback(
     async (path: string, init: RequestInit = {}) => {
       const headers: Record<string, string> = {
         "Content-Type": "application/json",
         ...(init.headers as Record<string, string> | undefined),
       };
+      const token = readLs(ADMIN_TOKEN_KEY);
       if (token) headers.authorization = `Bearer ${token}`;
       const res = await fetch(`${apiBase}${path}`, { ...init, headers });
-      if (res.status === 401) { logout(); throw new Error("unauthorised"); }
+      if (res.status === 401) { adminLogout(); throw new Error("unauthorised"); }
       const body = await res.json();
       if (!res.ok) throw new Error(body.message || `HTTP ${res.status}`);
       return body;
     },
-    [token, logout],
+    [],
+  );
+};
+
+const AdminLogin: React.FC = () => {
+  const [userName, setUserName] = React.useState("");
+  const [password, setPassword] = React.useState("");
+  const [code, setCode] = React.useState("");
+  const [error, setError] = React.useState<string | null>(null);
+  const [loading, setLoading] = React.useState(false);
+
+  const submit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setLoading(true);
+    setError(null);
+    try {
+      const res = await fetch(`${apiBase}/auth/admin-login`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ userName, password, code }),
+      });
+      const body = await res.json();
+      if (!res.ok) throw new Error(body.message || "Login failed");
+      localStorage.setItem(ADMIN_TOKEN_KEY, body.token);
+      localStorage.setItem(ADMIN_USER_KEY, body.userName);
+      window.location.reload();
+    } catch (err: any) {
+      setError(err.message);
+      setLoading(false);
+    }
+  };
+
+  return (
+    <div className="auth-screen">
+      <div className="auth-card">
+        <h2 style={{ margin: "0 0 16px", textAlign: "center" }}>⚙️ Admin sign in</h2>
+        {error && <div className="auth-error">⚠ {error}</div>}
+        <form className="auth-form" onSubmit={submit}>
+          <label className="auth-field">
+            <span>Username</span>
+            <input type="text" autoComplete="username" value={userName}
+              onChange={(e) => setUserName(e.target.value)} required autoFocus />
+          </label>
+          <label className="auth-field">
+            <span>Password</span>
+            <input type="password" autoComplete="current-password" value={password}
+              onChange={(e) => setPassword(e.target.value)} required />
+          </label>
+          <label className="auth-field">
+            <span>Google Authenticator code</span>
+            <input type="text" inputMode="numeric" autoComplete="one-time-code" pattern="\d{6}"
+              maxLength={6} value={code} onChange={(e) => setCode(e.target.value.replace(/\D/g, ""))} required />
+          </label>
+          <button className="auth-submit" type="submit" disabled={loading}>
+            {loading ? "…" : "SIGN IN"}
+          </button>
+        </form>
+      </div>
+    </div>
   );
 };
 
 export const AdminApp: React.FC = () => {
-  const { user, logout } = useAuth();
   const [tab, setTab] = React.useState<Tab>("stats");
+  if (!readLs(ADMIN_TOKEN_KEY)) return <AdminLogin />;
 
   return (
     <div className="admin-app">
@@ -80,8 +150,8 @@ export const AdminApp: React.FC = () => {
           <button className={tab === "settings" ? "active" : ""} onClick={() => setTab("settings")}>Settings</button>
         </nav>
         <div className="admin-user">
-          <span>{user?.userName}</span>
-          <button onClick={logout}>Sign out</button>
+          <span>{readLs(ADMIN_USER_KEY)}</span>
+          <button onClick={adminLogout}>Sign out</button>
         </div>
       </header>
 

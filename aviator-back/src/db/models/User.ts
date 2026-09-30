@@ -16,6 +16,9 @@ export interface UserDoc extends Document {
 
   // Admin role gates the /api/admin/* routes (Sprint 2).
   isAdmin: boolean;
+  // Admin 2FA (Google Authenticator). Admin panel login requires it.
+  totpSecret?: string;
+  totpLastStep?: number;
 
   // Soft-delete / banning so admin can disable an account without
   // dropping rows.
@@ -56,6 +59,8 @@ const UserSchema = new Schema<UserDoc>({
   email: { type: String, index: true, sparse: true },
 
   isAdmin: { type: Boolean, default: false, index: true },
+  totpSecret: { type: String, select: false },
+  totpLastStep: { type: Number, select: false },
 
   banned: { type: Boolean, default: false, index: true },
   bannedReason: { type: String },

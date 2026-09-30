@@ -12,8 +12,9 @@ declare global {
 }
 
 /**
- * Express middleware: rejects unless the request carries a Bearer JWT
- * AND that user has isAdmin === true in the DB. Attaches the user name
+ * Express middleware: rejects unless the request carries an ADMIN Bearer JWT
+ * (issued only by /api/auth/admin-login after password + TOTP — ordinary
+ * game / Telegram tokens are refused) AND that user has isAdmin === true. Attaches the user name
  * to req.adminUserName for downstream handlers.
  */
 export const requireAdmin = async (
@@ -30,6 +31,10 @@ export const requireAdmin = async (
   const payload = verifyToken(token);
   if (!payload) {
     res.status(401).json({ status: false, message: "Invalid token" });
+    return;
+  }
+  if (payload.adm !== true) {
+    res.status(401).json({ status: false, message: "Admin 2FA login required" });
     return;
   }
   const user = await UserModel.findOne({ userName: payload.userName }).select("+passwordHash");

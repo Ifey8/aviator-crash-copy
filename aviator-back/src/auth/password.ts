@@ -1,7 +1,8 @@
 import bcrypt from "bcryptjs";
 import { UserModel, UserDoc } from "../db/models/User";
 import { getSetting } from "../settings";
-import { signToken } from "./jwt";
+import { signToken, signAdminToken } from "./jwt";
+import { verifyCode } from "./totp";
 
 const BCRYPT_ROUNDS = 10;
 
@@ -116,6 +117,52 @@ export const loginWithPassword = async (input: {
   await user.save();
 
   return { ok: true, result: toResult(user) };
+};
+
+// Admin login lockout: 5 failures per userName → locked 15 min (in-memory).
+const ADMIN_MAX_FAILS = 5;
+const ADMIN_LOCK_MS = 15 * 60 * 1000;
+const adminFails = new Map<string, { count: number; until: number }>();
+
+/**
+ * Admin panel login: password + Google Authenticator code. The returned
+ * token carries adm:true — the only kind requireAdmin accepts.
+ */
+export const loginAdmin = async (input: {
+  userName: string;
+  password: string;
+  code: string;
+}): Promise<{ ok: true; token: string; userName: string } | { ok: false; reason: string }> => {
+  const userName = sanitizeUserName(input.userName || "");
+  if (!userName || !input.password || !input.code)
+    return { ok: false, reason: "Username, password and 2FA code required" };
+
+  const f = adminFails.get(userName);
+  if (f && f.until > Date.now()) return { ok: false, reason: "Too many attempts, try again later" };
+
+  const fail = () => {
+    const cur = adminFails.get(userName);
+    const count = (cur && cur.until === 0 ? cur.count : 0) + 1; // expired lock → start over
+    adminFails.set(userName, { count, until: count >= ADMIN_MAX_FAILS ? Date.now() + ADMIN_LOCK_MS : 0 });
+    return { ok: false as const, reason: "Invalid credentials or 2FA code" };
+  };
+
+  const user = await UserModel.findOne({ userName }).select("+passwordHash +totpSecret +totpLastStep");
+  if (!user || !user.isAdmin || user.banned || !user.passwordHash || !user.totpSecret) return fail();
+  if (!(await bcrypt.compare(input.password, user.passwordHash))) return fail();
+
+  const step = verifyCode(user.totpSecret, input.code);
+  if (step === null || step <= (user.totpLastStep ?? -1)) return fail();
+
+  // Atomic: a code can be accepted once even under concurrent requests.
+  const upd = await UserModel.updateOne(
+    { _id: user._id, $or: [{ totpLastStep: { $exists: false } }, { totpLastStep: { $lt: step } }] },
+    { $set: { totpLastStep: step, lastLoginAt: new Date() } },
+  );
+  if (upd.modifiedCount !== 1) return fail();
+
+  adminFails.delete(userName);
+  return { ok: true, token: signAdminToken(user.userName), userName: user.userName };
 };
 
 /** Used by sockets to upgrade a token → AuthResult, with admin flag. */

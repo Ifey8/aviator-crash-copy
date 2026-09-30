@@ -1,7 +1,7 @@
 import { Router } from "express";
 import { randomBytes } from "crypto";
 import { authWithTelegram, authWithTelegramWidget, authDevGuest } from "../auth/session";
-import { loginWithPassword, profileFromUserName } from "../auth/password";
+import { loginWithPassword, loginAdmin, profileFromUserName } from "../auth/password";
 import { verifyToken } from "../auth/jwt";
 import { config } from "../config";
 import { UserModel } from "../db/models/User";
@@ -74,6 +74,14 @@ authRouter.post("/login", async (req, res) => {
   const r = await loginWithPassword({ userName, password });
   if (!r.ok) return res.status(401).json({ status: false, message: r.reason });
   res.json({ status: true, ...r.result });
+});
+
+// Admin panel: password + Google Authenticator. Only source of admin tokens.
+authRouter.post("/admin-login", async (req, res) => {
+  const { userName, password, code } = req.body || {};
+  const r = await loginAdmin({ userName, password, code });
+  if (!r.ok) return res.status(401).json({ status: false, message: r.reason });
+  res.json({ status: true, token: r.token, userName: r.userName });
 });
 
 /**
