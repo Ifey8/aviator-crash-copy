@@ -460,6 +460,8 @@ npm test                    # 36 tests, 5 suites, ~110s
 - **Initial balance was bypassing admin Settings**: `auth/password.ts` used `config.initialBalance` (env, default 1000) instead of `getSetting("initialBalance")`. Admin's value had no effect for password-registered users, so anyone could spam-register for free credits even after operator changed it. Fixed `7d6430b`. Telegram + dev-guest paths were already correct.
 - **`registerLimit` middleware needs `app.set("trust proxy", true)`** — otherwise `req.ip` returns the loopback when running behind nginx, defeating the per-IP cap.
 - **`update.sh` working-tree gotcha**: if `.env` is being un-tracked by an incoming commit AND the working tree has local edits, `git pull` refuses. The script's autostash doesn't catch this case (it stashes modifications, but the conflict is "file is being removed from index while working tree differs"). One-time recovery: `cp .env /tmp/x && git checkout .env && git pull && cp /tmp/x .env`.
+- **🚨 CRA content-hash JS bundle mismatch → blank page**: CRA generates content-hashed bundles (e.g. `main.272b0f60.js`). If `index.html` and `static/js/` are deployed from different builds, the browser gets a 404 for the JS → white screen. **Symptoms**: site returns HTTP 200 but page is blank, browser console shows 404 for `main.{hash}.js`. **Diagnosis**: `curl https://aviator.rummydeatly.com/ | grep -o 'main\.[a-f0-9]*\.js'` vs `ls /opt/aviator/build/static/js/` — hashes must match. **Fix**: SCP the specific file directly (`scp build/static/js/main.{HASH}.js claude-ops@server:/home/claude-ops/`) → verify MD5 (`md5sum`) → docker alpine copy into `/opt/aviator/build/static/js/` replacing the wrong file. **Prevention**: always deploy `index.html` + `static/` from the SAME build run; never mix artifacts from different builds.
+- **🚨 `config.api` already includes `/api` prefix**: `config.ts` exports `api: \`\${REACT_APP_API_URL}/api\``. Any fetch using `\`\${config.api}/api/...\`` double-prefixes → 404. Always write `\`\${config.api}/affiliate/stats\`` (no extra `/api`). Affected `AffiliateSheet.tsx` — fixed in commit `b507df6`.
 
 ---
 
@@ -493,7 +495,11 @@ b12d8f8  Anti-abuse: lock referral reward + per-IP register limit + withdrawal r
 33802e2  Add transfer-out CLI: hot wallet → personal/external TRC20 address
 e4020e1  Admin Wallets tab: derived sub-addresses + hot wallet + manual transfer
 ec99769  Hot wallet: copy button + QR code (Binance-scannable)
-641dd46  USDT auto-payout: opt-in + amount cap + manual_queue fallback  ← latest
+641dd46  USDT auto-payout: opt-in + amount cap + manual_queue fallback
+07faebb  doc: Telegram cross-device login pattern (TELEGRAM_CROSSDEVICE_LOGIN.md)
+b507df6  Fix AffiliateSheet double /api prefix → Network error; update promo text to English
+c1aa7d1  Revert Chinese text → English (AffiliateSheet / ShareSheet / AccountSheet)
+a241e7b  Fix remaining Chinese promo tip in AffiliateSheet  ← latest
 ```
 
 ### Day-end summary (2026-05-10)
